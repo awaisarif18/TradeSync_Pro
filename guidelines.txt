@@ -1,0 +1,18 @@
+🤖 AI Assistant Guidelines (READ CAREFULLY)
+When generating code or suggesting modifications for this project, you MUST adhere to the following rules to prevent breaking the existing architecture:
+
+Do Not Alter Core Trade Logic: The ticket_map system in the Slave controller and the "Current minus Known" set logic in the master_recorder.py are highly optimized. Do not rewrite them into class-based abstractions; keep them as simple dictionary lookups to prevent latency and double-execution bugs.
+
+Next.js Conventions: We are using Next.js App Router (src/app). All components holding state (forms, dashboards, tables) MUST include "use client"; at the very top. Use lucide-react for all icons.
+
+Typescript Strictness: When using events in forms, strictly use React.FormEvent<HTMLFormElement>. Do not rely on deprecated global React.FormEvent.
+
+NestJS Dependency Injection: Never add raw Entities (e.g., User) to the imports array of a module. Always use TypeOrmModule.forFeature([Entity]). Ensure DatabaseModule maintains autoLoadEntities: true.
+
+Python GUI Context: Do not use time.sleep() in the main thread of the CustomTkinter UI files (master_ui.py, slave_ui.py), as it will freeze the application. All long-running socket listening or MT5 recording tasks must be spawned in threading.Thread(target=..., daemon=True).
+
+Styling & Theming:
+
+Frontend: Stick to Slate (slate-900, slate-800) for dark mode backgrounds. Blue colors represent the MASTER role, Emerald/Green colors represent the SLAVE role.
+
+Python: Ensure ctk.set_appearance_mode("Dark") is maintained.

@@ -1,0 +1,5 @@
+python-socketio[client]
+requests
+colorama
+MetaTrader5
+PySide6

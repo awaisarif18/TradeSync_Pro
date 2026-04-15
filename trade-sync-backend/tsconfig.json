@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "target": "ES2022",
+    "sourceMap": true,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true,
+    
+    // Interop
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolvePackageJsonExports": true,
+
+    // Decorators (Required for NestJS)
+    "emitDecoratorMetadata": true,
+    "experimentalDecorators": true,
+
+    // Strictness: RELAXED for easier coding
+    "strict": false,                 // Turns off the strict family
+    "noImplicitAny": false,          // Allows 'any' without errors
+    "strictNullChecks": true,        // Keep this ON (saves you from "undefined is not a function")
+    "skipLibCheck": true,            // Speeds up compile time
+    "forceConsistentCasingInFileNames": true
+  }
+}
