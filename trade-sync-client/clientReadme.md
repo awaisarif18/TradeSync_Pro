@@ -78,6 +78,9 @@ trade-sync-client/
 │  └─ ui_controllers/
 │     ├─ master_controller.py               # Master orchestration logic
 │     └─ slave_controller.py                # Slave orchestration logic
+├─ data/
+│  ├─ __init__.py                           # Package marker
+│  └─ broker_symbols.py                     # Broker preset symbol name mappings
 ├─ models/
 │  ├─ __init__.py                           # Re-export model classes
 │  ├─ app_state.py                          # Shared mutable UI/controller state
@@ -85,8 +88,11 @@ trade-sync-client/
 ├─ views/
 │  ├─ qt/
 │  │  ├─ master_window.py                   # PySide6 Master desktop UI
-│  │  ├─ slave_window.py                    # PySide6 Slave desktop UI
-│  │  └─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
+│  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (4-tab Bloomberg theme)
+│  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
+│  │  ├─ symbol_map_panel.py                # SymbolMapPanel QWidget (dual broker presets)
+│  │  ├─ risk_panel.py                      # RiskPanel QWidget (equity + limits + loss + whitelist)
+│  │  └─ trades_panel.py                    # TradesPanel QWidget (open + closed trade tables)
 └─ __pycache__/ + nested __pycache__/       # Compiled Python bytecode
 ```
 
@@ -215,16 +221,58 @@ Implication:
   - `socket_connected`
   - `is_running`
 - slave controls:
-  - `risk_multiplier` (default `1.0`)
-  - `symbol_map` dict
+  - `risk_multiplier` (float, default `1.0`) — lot size multiplier for MULTIPLIER copy mode
+  - `symbol_map` (dict, default `{}`) — master→slave symbol translation
+- risk management settings:
+  - `max_lot_size` (float, default `0.0` = disabled) — cap on computed copy volume
+  - `max_concurrent_trades` (int, default `0` = disabled) — max simultaneous copied positions
+  - `daily_loss_limit` (float, default `0.0` = disabled) — auto-pause threshold
+  - `daily_pnl` (float, default `0.0`) — accumulated PnL from CLOSE signals today
+  - `copying_paused_by_loss` (bool, default `False`) — set when daily loss limit hit
+  - `symbol_whitelist` (list, default `[]`) — slave-side symbol copy filter
+- copy mode settings:
+  - `copy_mode` (str, default `'MULTIPLIER'`) — `'MULTIPLIER'` or `'FIXED_LOT'`
+  - `fixed_lot_size` (float, default `0.01`) — used when `copy_mode == 'FIXED_LOT'`
+  - `reverse_copy` (bool, default `False`) — flip BUY↔SELL before execution
+  - `slippage_points` (int, default `10`) — deviation in points for MT5 orders
+  - `unmapped_symbol_behavior` (str, default `'IGNORE'`) — `'IGNORE'` or `'COPY_AS_IS'`
+- equity protection:
+  - `equity_floor` (float, default `0.0` = disabled) — block OPEN if MT5 equity < this value
+- session tracking:
+  - `session_start_time` (str, default `''`) — `HH:MM:SS` when listening started
+  - `session_pnl` (float, default `0.0`) — PnL since session start
+  - `open_trades` (list, default `[]`) — dicts of currently open copied trades
+  - `closed_trades` (list, default `[]`) — dicts of closed trades this session (max 50)
 - log buffer (`logs`, capped to 50 entries)
 
-Method:
+Methods:
 
 - `add_log(message)`
   - prefixes timestamp `[HH:MM:SS]`
   - appends to log list
   - trims buffer to max 50 entries
+
+- `reset_daily_stats()`
+  - resets `daily_pnl` to `0.0`
+  - sets `copying_paused_by_loss` to `False`
+  - logs reset event to both AppState and terminal
+
+- `start_session()`
+  - sets `session_start_time` to current `HH:MM:SS`
+  - resets `session_pnl`, `open_trades`, `closed_trades`
+  - logs `[SESSION] Session started at ...`
+  - called by `toggle_listening()` when listening starts
+
+- `add_open_trade(master_ticket, slave_ticket, symbol, action, volume)`
+  - appends trade dict to `open_trades` with `open_time` timestamp
+  - called after successful OPEN execution in `on_trade_signal()`
+
+- `close_trade_record(master_ticket, pnl)`
+  - moves matching trade from `open_trades` to `closed_trades`
+  - adds `pnl` and `close_time` fields
+  - accumulates `session_pnl`
+  - caps `closed_trades` at 50 entries (drops oldest)
+  - called after successful CLOSE execution in `on_trade_signal()`
 
 ## `models/trade_signal.py`
 
@@ -489,21 +537,33 @@ Flow:
 Core copy engine:
 
 1. return early if not listening
-2. parse event + ticket + symbol
-3. apply symbol mapping policy:
+2. risk guard block (Guards -1 through 1 — see §11.1)
+3. parse event + ticket + symbol
+4. apply symbol mapping policy:
 	- if map dict is empty → copy all
-	- if map exists and symbol not present → ignore signal
-4. OPEN handling:
-	- apply risk multiplier to volume
+	- if map exists and symbol present → translate
+	- if map exists and symbol NOT present:
+	  - `unmapped_symbol_behavior == 'COPY_AS_IS'` → use master symbol
+	  - `unmapped_symbol_behavior == 'IGNORE'` → ignore signal
+5. Guard 2 (symbol whitelist)
+6. OPEN handling:
+	- copy mode volume calculation (MULTIPLIER or FIXED_LOT)
 	- enforce minimum volume `0.01`
-	- execute trade
+	- Guard 3 (max lot size cap)
+	- reverse copy (flip BUY↔SELL if enabled)
+	- execute trade with slippage
 	- if retcode `10009` success:
 	  - save `ticket_map[master_ticket] = slave_order`
-5. CLOSE handling:
+	  - record open trade in session tracking
+7. CLOSE handling:
 	- lookup mapped slave ticket
 	- close trade
-	- if retcode `10009` remove ticket mapping
-6. push UI log updates
+	- if retcode `10009`:
+	  - remove ticket mapping
+	  - accumulate daily PnL
+	  - record closed trade in session tracking
+	  - check daily loss limit auto-pause
+8. push UI log updates (single `update_ui()` at method end)
 
 ---
 
@@ -544,11 +604,14 @@ Methods:
 
 Class: `SlaveWindow(QMainWindow)`
 
+Design: Bloomberg Terminal-inspired minimal dark theme.
+Palette: `#0a0a0a` background, `#1a1a1a` surfaces, `#2a2a2a` borders, `#00d4aa` accent, `#ff4444` errors.
+
 Flow:
 1. Login screen rendered via `QStackedWidget`.
 2. Credentials extracted (strictly using Email as the identifier).
 3. Cloud verify + MT5 connect.
-4. Dashboard rendered with active controls for risk math, symbol mapping, and the listening socket.
+4. Dashboard rendered as a 4-tab `QTabWidget`.
 
 Key widgets and controls:
 - **Login entries:**
@@ -556,23 +619,97 @@ Key widgets and controls:
   - MT5 Password (`QLineEdit`, masked)
   - Server string (`QLineEdit`)
   - Broker dropdown (`QComboBox`: `XM`, `Vantage`, `Exness`)
-  - “TSP Registered Email” input (`QLineEdit`)
-- **Dashboard:**
-  - Risk multiplier (`QDoubleSpinBox`, range `0.1` to `5.0`)
-  - Mapping add form (Master Sym + Slave Sym `QLineEdit`s + `QPushButton`)
-  - Mapping list (`QListWidget`, supports double-click item removal)
-  - START/STOP listening button (`QPushButton`)
-  - Log textbox (`QTextEdit`, read-only)
+  - "TSP Registered Email" input (`QLineEdit`)
+- **Dashboard (Tab 1: COPY):**
+  - Status bar: connection dot (teal/red), session timer, session P&L
+  - Copy Mode groupbox: Multiplier/Fixed Lot radio buttons with stacked spinboxes
+  - Reverse Copy checkbox, Slippage spinbox
+  - START/STOP COPYING button (teal border when active)
+  - Event Log (`QTextEdit`, color-coded HTML output)
+- **Dashboard (Tab 2: SYMBOLS):**
+  - `SymbolMapPanel` with dual broker preset (master's broker + your broker)
+  - Unmapped symbol behavior dropdown (ignore vs copy-as-is)
+- **Dashboard (Tab 3: RISK):**
+  - `RiskPanel` with equity protection, lot cap, concurrent cap, daily loss protection, symbol whitelist
+- **Dashboard (Tab 4: TRADES):**
+  - `TradesPanel` with session summary, open positions table, session history table
 
 Methods:
 - `build_login_screen()` / `build_dashboard_screen()`: UI layout generation.
 - `on_login_submit()`: Extracts text and triggers `SlaveController.login_mt5()`.
-- `on_add_map()`: Extracts map inputs, passes to controller, clears inputs, and refreshes the list widget.
-- `on_remove_map(item)`: Triggered by double-click; parses the list item string and tells the controller to delete the mapping.
-- `refresh_map_list()`: Re-renders the `QListWidget` from the controller's `symbol_map` dictionary.
 - `on_risk_changed(value)`: Directly mutates `controller.state.risk_multiplier`.
-- `on_toggle_listen()`: Flips controller listening state.
-- `update_ui()`: Thread-safe `@Slot()` that refreshes logs, status labels, and blocks circular signals when updating the risk spinbox from background state changes.
+- `on_toggle_listen()`: Flips controller listening state, updates button text/style.
+- `_on_copy_mode_changed(id)`: Switches copy mode and stacked spinbox.
+- `_on_fixed_lot_changed(value)`: Mutates `state.fixed_lot_size`.
+- `_on_reverse_changed(checked)`: Mutates `state.reverse_copy`.
+- `_on_slippage_changed(value)`: Mutates `state.slippage_points`.
+- `_update_session_clock()`: QTimer-driven 1s updates for elapsed time.
+- `update_ui()`: Thread-safe `@Slot()` that refreshes connection dot, session PnL, color-coded HTML logs, `RiskPanel.refresh_display()`, and `TradesPanel.refresh_display()`.
+
+Log color coding in `update_ui()` HTML rendering:
+- `[RISK]` lines → `#ff9900` (orange)
+- `OPEN SUCCESS` → `#00d4aa` (teal)
+- `CLOSE SUCCESS` → `#888888` (gray)
+- `DAILY LOSS` / `FAILED` → `#ff4444` (red)
+- `[SESSION]` → `#00d4aa` (teal)
+- Normal lines → `#666666` (muted)
+
+## 11.1) Risk Management System
+
+`SlaveController.on_trade_signal()` executes 5 risk guards before trade execution:
+
+1. **Guard -1 — Equity Floor:** If `equity_floor > 0`, calls `mt5.account_info()`. If `account.equity < equity_floor`, OPEN is blocked. Prefix `[RISK]`, color `Fore.RED`.
+2. **Guard 0 — Daily Loss Pause:** If `copying_paused_by_loss` is `True`, all OPEN signals are blocked. User must reset via Risk tab.
+3. **Guard 1 — Max Concurrent Trades:** If `len(ticket_map) >= max_concurrent_trades`, OPEN is blocked.
+4. **Guard 2 — Symbol Whitelist:** After symbol mapping, if `symbol_whitelist` is non-empty and `slave_symbol` is not in the list, OPEN is skipped.
+5. **Guard 3 — Max Lot Size Cap:** After volume calculation, if `new_vol > max_lot_size`, volume is clamped.
+
+After a successful CLOSE, PnL from the signal is accumulated into `daily_pnl`. If `daily_pnl <= -daily_loss_limit`, `copying_paused_by_loss` is set to `True`.
+
+All risk events are logged to terminal with `colorama` colors (`Fore.YELLOW` for warnings, `Fore.RED` for blocks, `Fore.CYAN` for info) and prefixed with `[RISK]`.
+
+## 11.2) Copy Modes
+
+Two copy modes control how volume is calculated in `on_trade_signal()` OPEN handling:
+
+- **MULTIPLIER** (default): `copy_volume = master_volume × risk_multiplier`. Multiplier is configurable from `0.01` to `10.0` in the COPY tab.
+- **FIXED_LOT**: `copy_volume = fixed_lot_size` regardless of master volume. Fixed lot is configurable from `0.01` to `100.0` in the COPY tab.
+
+In both modes, volume is floored at `0.01` and optionally clamped by `max_lot_size` (Guard 3).
+
+Additional copy features:
+- **Reverse Copy**: When `reverse_copy == True`, BUY signals are executed as SELL and vice versa. Logged as `[COPY] Reverse copy: BUY -> SELL`.
+- **Slippage**: `slippage_points` is passed as the `deviation` parameter to `MT5Adapter.execute_trade()`. Default `10` points.
+
+## 11.3) Session Tracking
+
+`AppState` tracks trade activity per listening session:
+
+- `start_session()` is called when `toggle_listening()` starts. Resets `session_pnl`, `open_trades`, `closed_trades`, and records `session_start_time`.
+- `add_open_trade()` is called after each successful OPEN. Appends a dict `{master_ticket, slave_ticket, symbol, action, volume, open_time}` to `open_trades`.
+- `close_trade_record()` is called after each successful CLOSE. Moves the trade from `open_trades` to `closed_trades`, adds `pnl` and `close_time`, and accumulates `session_pnl`.
+- When listening stops, `toggle_listening()` logs `[SESSION] Ended. Session PnL: $X.XX`.
+
+`views/qt/trades_panel.py` (`TradesPanel`) displays:
+- Session summary bar: open count, closed count, session P&L, elapsed time
+- Open positions table: TICKET, SYMBOL, ACTION (color-coded), VOLUME, OPENED
+- Session history table: same columns + P&L (teal/red) + CLOSED time
+- `refresh_display()` is called by `SlaveWindow.update_ui()` on every UI sync
+
+## 11.4) Symbol Mapping System
+
+`data/broker_symbols.py` contains `BROKER_PRESETS` — a dict of broker names to symbol translation dicts. Supported brokers: Vantage, XM, Exness, IC Markets, Pepperstone.
+
+`views/qt/symbol_map_panel.py` (`SymbolMapPanel`) provides:
+- Dual broker dropdown: "Master's broker" + "Your broker" for cross-broker preset loading
+- When "Load Preset Mappings" clicked: iterates `BROKER_PRESETS[master_broker]` keys, looks up corresponding slave symbol from `BROKER_PRESETS[my_broker]`, and adds to `symbol_map` if not already present
+- Input row for manual master→slave symbol entry
+- `QTableWidget` showing all active mappings with per-row Remove buttons
+- Unmapped symbol behavior dropdown:
+  - `Ignore (skip trade)` → `state.unmapped_symbol_behavior = 'IGNORE'` (default)
+  - `Copy as-is (same name)` → `state.unmapped_symbol_behavior = 'COPY_AS_IS'`
+
+This solves the problem of different MT5 brokers using completely different symbol names (e.g., Vantage: `XAUUSD` vs XM: `GOLD` vs Exness: `XAUUSDm`). The underlying `AppState.symbol_map` dict structure is unchanged, so `on_trade_signal()` logic remains compatible.
 
 
 ## 12) End-to-End Communication Contracts

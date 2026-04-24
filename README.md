@@ -12,6 +12,19 @@ Implemented:
 2. Structured trace_id logging across master, backend, and slave paths
 3. Client reconnect and health-state behavior with auto re-registration
 
+Phase 7.1: Slave UI Overhaul + Advanced Copy Features (COMPLETED)
+1. Bloomberg Terminal-inspired minimal dark theme across all slave panels
+2. 4-tab layout: COPY / SYMBOLS / RISK / TRADES
+3. Fixed Lot copy mode alongside existing Multiplier mode
+4. Reverse Copy: auto-flips BUY/SELL direction
+5. Slippage control: configurable deviation points passed to MT5 orders
+6. Equity Protection: account equity floor guard before each OPEN
+7. Dual broker symbol preset: Master broker + Your broker → auto-fills table
+8. Unmapped symbol behavior: configurable (ignore vs copy-as-is)
+9. TradesPanel: live open positions table + session history table
+10. Session tracking: session PnL, elapsed time, trade count
+11. Connection status indicator with live dot
+
 Deferred:
 1. High-Value Product Features
 2. Backend/Frontend/Python feature-track expansions
@@ -49,9 +62,12 @@ The system is distributed across three distinct environments:
 * **Role:** The Copier.
 * **Authentication:** Matches Master's dynamic login architecture, attaching to specific terminal paths based on user input.
 * **Workflow:** Listens to the `trade_execution` WebSocket event.
-* **Symbol Mapping:** Before execution, checks the local `symbol_map`. If a map exists (e.g., `GOLD` -> `XAUUSD`), it translates the master's symbol to the local symbol. Unmapped symbols are ignored to prevent errors.
-* **Risk Math:** Multiplies the incoming `volume` by the user's defined `risk_multiplier` (e.g., 0.5x, 2.0x).
+* **Symbol Mapping:** Before execution, checks the local `symbol_map`. If a map exists (e.g., `GOLD` -> `XAUUSD`), it translates the master's symbol to the local symbol. Unmapped symbols are either ignored or passed through as-is, configurable via `unmapped_symbol_behavior`. Dual broker preset loading allows cross-referencing master broker and slave broker symbol naming conventions.
+* **Copy Modes:** Two volume calculation modes — MULTIPLIER (master volume × multiplier) and FIXED_LOT (fixed lot regardless of master volume). Both enforce minimum lot 0.01 and optional max lot cap.
+* **Reverse Copy:** Optionally flips BUY→SELL and SELL→BUY before execution.
+* **Risk Guards:** Five-guard chain runs before each OPEN: equity floor check, daily loss pause, concurrent trade cap, symbol whitelist, and lot size clamping.
 * **Ticket Mapping (Crucial):** When a trade opens, the Slave records the Master's Ticket Number and maps it to the newly generated Slave MT5 Ticket Number. When a `CLOSE` signal arrives for the Master Ticket, the Slave looks up the corresponding Slave Ticket and executes a close request (incorporating `type_time` and `type_filling` policies).
+* **Session Tracking:** Tracks open/closed trades per listening session with PnL accumulation. TradesPanel displays live positions and session history.
 
 ---
 
@@ -115,6 +131,13 @@ The system is distributed across three distinct environments:
     * Frontend: Rebuilt MasterDashboard with overview and profile setup tabs, recent trades, and profile preview
     * Frontend: Added public TopTradersSection on the landing page and enriched marketplace cards with profile identity data
     * Contract Matrix and backend/frontend READMEs updated for all Phase 7 routes and fields
+* **Phase 8: Slave Risk Management + Symbol Map Enhancement (COMPLETED - April 2026)**
+    * 4 risk guards in on_trade_signal(): loss pause, concurrent cap, whitelist, lot cap
+    * Colorama-colored terminal logging for all risk events
+    * RiskPanel QWidget (views/qt/risk_panel.py): daily PnL tracker, auto-pause
+    * SymbolMapPanel QWidget (views/qt/symbol_map_panel.py): table view with broker presets
+    * Broker preset mappings for Vantage, XM, Exness, IC Markets, Pepperstone
+    * Slave dashboard now has 3 tabs: Copy Settings, Symbol Map, Risk Management
 
 ---
 

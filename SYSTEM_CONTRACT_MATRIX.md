@@ -212,6 +212,12 @@ Breaking impact warning:
 | Symbol map | Python AppState.symbol_map | Slave UI add/remove map actions | SlaveController.on_trade_signal |
 | Ticket map | Python SlaveController.ticket_map | OPEN/CLOSE signal handling | Slave close execution logic |
 | Trade lifecycle logs | Backend DB + Python logs | TradeGateway/TradeService + controllers | Admin/dashboard APIs + UI logs |
+| Risk settings state | Python AppState | RiskPanel UI ↔ SlaveController guards | on_trade_signal() execution path |
+| Daily PnL tracker | Python AppState.daily_pnl | SlaveController CLOSE handler | RiskPanel display, loss limit trigger |
+| Copy mode settings | Python AppState (copy_mode, fixed_lot_size, reverse_copy, slippage_points) | Copy Mode UI in slave window Tab 1 | on_trade_signal() volume + action calculation |
+| Session tracking | Python AppState (session_pnl, open_trades, closed_trades) | SlaveController toggle_listening + on_trade_signal | TradesPanel display |
+| Equity protection | Python AppState.equity_floor | RiskPanel equity section | Guard -1 in on_trade_signal() |
+| Unmapped symbol behavior | Python AppState.unmapped_symbol_behavior | SymbolMapPanel dropdown | on_trade_signal() symbol mapping logic |
 
 ---
 

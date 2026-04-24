@@ -7,7 +7,8 @@ class MT5Adapter:
         self.broker_paths = {
             "XM": r"C:\Program Files\XM Global MT5\terminal64.exe",
             "Vantage": r"C:\Program Files\Vantage International MT5\terminal64.exe",
-            "Exness": r"C:\Program Files\Exness MetaTrader 5\terminal64.exe"
+            "Exness": r"C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe",
+            "Exness Slave": r"C:\MT5_Exness_Slave\terminal64.exe"
         }
 
     def connect(self, broker_name, login, password, server):
@@ -37,7 +38,7 @@ class MT5Adapter:
             error = mt5.last_error()
             return False, f"Auth Failed: {error}"
         
-    def execute_trade(self, symbol, action, volume):
+    def execute_trade(self, symbol, action, volume, deviation: int = 10):
         if not self.connected: return None
         
         # Ensure symbol is selected in Market Watch
@@ -56,6 +57,7 @@ class MT5Adapter:
             "volume": float(volume),
             "type": order_type,
             "price": price,
+            "deviation": deviation,
             "magic": 234000,
             "comment": "TradeSync Copy",
             "type_time": mt5.ORDER_TIME_GTC,

@@ -34,7 +34,7 @@ class MasterWindow(QMainWindow):
         layout = QFormLayout(widget)
 
         self.broker_combo = QComboBox()
-        self.broker_combo.addItems(["Vantage", "XM", "Exness", "Auto-Detect"])
+        self.broker_combo.addItems(["Vantage", "XM", "Exness", "Exness Slave", "Auto-Detect"])
 
         self.mt5_login_input = QLineEdit()
         self.mt5_password_input = QLineEdit()
