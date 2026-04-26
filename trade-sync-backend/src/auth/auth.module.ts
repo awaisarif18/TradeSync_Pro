@@ -9,5 +9,6 @@ import { TradeLog } from '../database/tradelog.entity';
   imports: [TypeOrmModule.forFeature([User, TradeLog])],
   providers: [AuthService],
   controllers: [AuthController],
+  exports: [AuthService],
 })
 export class AuthModule {}

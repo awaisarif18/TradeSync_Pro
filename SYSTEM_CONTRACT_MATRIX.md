@@ -33,6 +33,9 @@ Implemented stabilization notes:
 1. `trace_id` is now propagated as an optional cross-layer field for observability.
 2. Required payload keys remain unchanged and still mandatory.
 3. Client reconnect flow now re-emits `register_node` on reconnect.
+4. `/auth/verify-node` now returns `id` for direct master/slave user resolution.
+5. `TradeLogs.slaveId` supports per-subscriber copied count and P&L once new rows are tagged.
+6. `node_registered` confirms socket room assignment back to the registering client.
 
 ---
 
@@ -71,11 +74,11 @@ Rules:
 | /auth/users | GET | AuthController.getAllUsers | Frontend admin page | none | user[] (selected fields only) | Frontend uses for admin table |
 | /auth/users/:id/license | POST | AuthController.generateLicense | Frontend admin page | none | { message, licenseKey } | Valid only for MASTER role |
 | /auth/users/:id/toggle-status | PATCH | AuthController.toggleStatus | Frontend admin page | none | { message, isActive } | ADMIN cannot be disabled |
-| /auth/verify-node | POST | AuthController.verifyNode | Python Master/Slave controllers | { role, identifier, trace_id? } | { message, role, fullName, trace_id? } | Pre-flight gate before MT5 operations |
+| /auth/verify-node | POST | AuthController.verifyNode | Python Master/Slave controllers | { role, identifier, trace_id? } | { message, role, fullName, id, trace_id? } | Pre-flight gate before MT5 operations |
 | /auth/masters | GET | AuthController.getActiveMasters | Frontend SlaveDashboard | none | active master[] | Marketplace source |
 | /auth/users/:id/subscribe | PATCH | AuthController.updateSubscription | Frontend SlaveDashboard | { masterId: string|null } | { message, subscribedToId } | null means unsubscribe |
 | /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend SlaveDashboard (MasterProfileCard) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount } | Returns aggregate stats and public profile fields for one active master. Added Phase 6. |
-| /auth/masters/:masterId/subscribers | GET | AuthController.getMasterSubscribers | Python MasterController.fetch_subscribers | none | { id, fullName, email, isActive, totalCopied, totalPnL }[] | Returns all slaves subscribed to a master with trade summary. Phase 8. |
+| /auth/masters/:masterId/subscribers | GET | AuthController.getMasterSubscribers | Python MasterController.fetch_subscribers | none | { id, fullName, email, isActive, totalCopied, totalPnL }[] | Returns per-slave trade summary using TradeLogs.slaveId. Historical records show 0 until slaveId is populated. |
 | /auth/masters/:id/profile | PATCH | AuthController.updateMasterProfile | Frontend MasterProfileSetup | { bio?, tradingPlatform?, instruments?, strategyDescription?, riskLevel?, typicalHoldTime? } | updated user object | Master self-updates trading identity. Added Phase 7. |
 | /auth/masters/:id/dashboard | GET | AuthController.getMasterDashboard | Frontend MasterDashboard | none | { profile, recentTrades, subscriberCount, openTrades, totalSignalsSent } | Master's own dashboard data. Added Phase 7. |
 | /auth/top-masters | GET | AuthController.getTopMasters | Frontend TopTradersSection (landing page) | none | enriched master array (max 3) | Public endpoint. Top 3 most active masters. Added Phase 7. |
@@ -108,6 +111,7 @@ Compatibility recommendation:
 | Event Name | Direction | Producer | Consumer | Purpose |
 |---|---|---|---|---|
 | register_node | client -> backend | Python Master/Slave nodes | Backend TradeGateway | Role + identifier registration and room join |
+| node_registered | backend -> client | Backend TradeGateway | Python SocketManager | Confirms successful room join after register_node |
 | test_signal | client -> backend | Python Master node (MasterRecorder) | Backend TradeGateway | Raw trade lifecycle signal ingestion |
 | trade_execution | backend -> clients | Backend TradeGateway | Python Slave + Frontend LiveTradeTable | Fanout execution signal stream |
 | subscriber_update | backend -> master client | Backend TradeGateway | Python SubscribersPanel via MasterController | Notifies master when a subscribed slave connects or disconnects |
@@ -120,6 +124,17 @@ Compatibility recommendation:
 {
   "role": "MASTER | SLAVE",
   "identifier": "string"
+}
+```
+
+#### node_registered payload
+
+```json
+{
+  "success": true,
+  "role": "MASTER | SLAVE",
+  "room": "room_master_<id>",
+  "timestamp": "ISO string"
 }
 ```
 
@@ -164,6 +179,9 @@ Consumer-required keys (must remain stable):
 Optional compatibility key:
 - trace_id (for observability only)
 
+Note:
+- Backend tags TradeLogs.slaveId when exactly one slave is in the room.
+
 #### subscriber_update payload
 
 ```json
@@ -202,6 +220,7 @@ Breaking impact warning:
 | Slave Subscription | Users.subscribedToId | Redux and marketplace UI state | backend uses it for room join |
 | Active Status | Users.isActive | admin toggle UI | verify-node gate blocks disabled nodes |
 | Trade Ticket (master) | master_ticket | live table display | ticket_map key for copy/close symmetry |
+| Slave Trade ID | TradeLogs.slaveId | not used | recorded by TradeGateway on slave copy confirmation |
 | Trade Volume | volume | live table display | risk multiplier input for execution |
 | PnL | pnl | optionally displayable | currently generated by MasterRecorder on CLOSE |
 | Bio | Users.bio | MasterProfileSetup, MasterProfileCard, TopTradersSection | optionally displayed in marketplace cards |

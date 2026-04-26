@@ -9,53 +9,23 @@ import { Repository } from 'typeorm';
 import { User } from '../database/user.entity';
 import { TradeLog } from '../database/tradelog.entity';
 import type { MasterHistoryEntry } from '../trade/trade.service';
-
-interface MasterProfile {
-  id: string;
-  fullName: string;
-  createdAt: Date;
-  totalTrades: number;
-  closedTrades: number;
-  winRate: number;
-  totalPnL: number;
-  avgVolume: number;
-  bio: string | null;
-  tradingPlatform: string | null;
-  instruments: string | null;
-  strategyDescription: string | null;
-  riskLevel: string | null;
-  typicalHoldTime: string | null;
-  subscriberCount: number;
-}
-
-export interface UpdateMasterProfileDto {
-  bio?: string;
-  tradingPlatform?: string;
-  instruments?: string;
-  strategyDescription?: string;
-  riskLevel?: string;
-  typicalHoldTime?: string;
-}
+import type {
+  MasterProfileResponse,
+  SubscriberSummary,
+  UpdateMasterProfileDto,
+  VerifyNodeResponse,
+} from './dto/auth.dto';
 
 export interface MasterDashboardData {
-  profile: MasterProfile;
+  profile: MasterProfileResponse;
   recentTrades: MasterHistoryEntry[];
   subscriberCount: number;
   openTrades: number;
   totalSignalsSent: number;
 }
 
-export interface TopMasterProfile extends MasterProfile {
+export interface TopMasterProfile extends MasterProfileResponse {
   openTrades: number;
-}
-
-interface MasterSubscriber {
-  id: string;
-  fullName: string;
-  email: string;
-  isActive: boolean;
-  totalCopied: number;
-  totalPnL: number;
 }
 
 @Injectable()
@@ -246,7 +216,11 @@ export class AuthService {
   }
 
   // --- NODE VERIFICATION (PYTHON CLIENT) ---
-  async verifyNode(role: string, identifier: string, traceId?: string) {
+  async verifyNode(
+    role: string,
+    identifier: string,
+    traceId?: string,
+  ): Promise<VerifyNodeResponse> {
     const resolvedTraceId = traceId || randomUUID();
     console.log('[AuthService]', {
       message: 'verify_node_called',
@@ -305,6 +279,7 @@ export class AuthService {
         trace_id: resolvedTraceId,
         role: user.role,
         fullName: user.fullName,
+        id: user.id,
       };
     } catch (error) {
       console.error('[AuthService]', {
@@ -314,6 +289,15 @@ export class AuthService {
       });
       throw error;
     }
+  }
+
+  async getSlaveIdByEmail(email: string): Promise<string | null> {
+    const user = await this.userRepository.findOne({
+      where: { email, role: 'SLAVE' },
+      select: ['id'],
+    });
+
+    return user?.id ?? null;
   }
 
   // --- MARKETPLACE METHODS ---
@@ -327,7 +311,7 @@ export class AuthService {
     });
   }
 
-  async getMasterProfile(masterId: string): Promise<MasterProfile> {
+  async getMasterProfile(masterId: string): Promise<MasterProfileResponse> {
     const master = await this.userRepository.findOne({
       where: { id: masterId, role: 'MASTER', isActive: true },
       select: [
@@ -400,36 +384,37 @@ export class AuthService {
     };
   }
 
-  async getMasterSubscribers(masterId: string): Promise<MasterSubscriber[]> {
+  async getMasterSubscribers(masterId: string): Promise<SubscriberSummary[]> {
     const subscribers = await this.userRepository.find({
       where: { subscribedToId: masterId, role: 'SLAVE' },
       select: ['id', 'fullName', 'email', 'isActive'],
       order: { createdAt: 'DESC' },
     });
 
-    const totalCopied = await this.tradeLogRepository.count({
-      where: { masterId },
-    });
+    return await Promise.all(
+      subscribers.map(async (subscriber) => {
+        const tradeRows = await this.tradeLogRepository.find({
+          where: { masterId, slaveId: subscriber.id },
+          select: ['pnl', 'status'],
+        });
 
-    const closedTradeRows = await this.tradeLogRepository.find({
-      where: { masterId, status: 'CLOSED' },
-      select: ['pnl'],
-    });
+        const totalPnL = Number(
+          tradeRows
+            .filter((row) => row.status === 'CLOSED')
+            .reduce((acc, row) => acc + (row.pnl ?? 0), 0)
+            .toFixed(2),
+        );
 
-    const totalPnL = Number(
-      closedTradeRows
-        .reduce((acc, row) => acc + (row.pnl ?? 0), 0)
-        .toFixed(2),
+        return {
+          id: subscriber.id,
+          fullName: subscriber.fullName,
+          email: subscriber.email,
+          isActive: subscriber.isActive,
+          totalCopied: tradeRows.length,
+          totalPnL,
+        };
+      }),
     );
-
-    return subscribers.map((subscriber) => ({
-      id: subscriber.id,
-      fullName: subscriber.fullName,
-      email: subscriber.email,
-      isActive: subscriber.isActive,
-      totalCopied,
-      totalPnL,
-    }));
   }
 
   async updateMasterProfile(

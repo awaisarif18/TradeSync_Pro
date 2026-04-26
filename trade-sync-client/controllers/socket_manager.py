@@ -15,6 +15,7 @@ class SocketManager:
         self.node_role = node_role
         self.node_identifier = node_identifier
         self.health_callback = health_callback
+        self.state = None
         self.is_connected = False
         self._registered_events = set()
         self._reconnect_attempts = 0
@@ -22,6 +23,7 @@ class SocketManager:
         # Standard connection and health events
         self.sio.on('connect', self.on_connect)
         self.sio.on('disconnect', self.on_disconnect)
+        self.sio.on('node_registered', self.on_node_registered)
 
     def _set_health(self, health_state):
         if self.health_callback:
@@ -82,6 +84,21 @@ class SocketManager:
             reconnect_attempt=self._reconnect_attempts,
             health_state="RECONNECTING",
         )
+
+    def on_node_registered(self, data):
+        success = data.get('success', False)
+        role = data.get('role', '')
+        room = data.get('room', '')
+        if success:
+            msg = f"[SOCKET] Registered as {role} in room: {room}"
+            print(Fore.CYAN + msg + Style.RESET_ALL)
+        else:
+            error = data.get('error', 'Unknown error')
+            msg = f"[SOCKET] Registration FAILED: {error}"
+            print(Fore.RED + msg + Style.RESET_ALL)
+
+        if self.state:
+            self.state.add_log(msg)
 
     def emit_signal(self, signal_dict):
         signal_dict = {

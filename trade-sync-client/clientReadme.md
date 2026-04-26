@@ -83,7 +83,10 @@ trade-sync-client/
 │  └─ broker_symbols.py                     # Broker preset symbol name mappings
 ├─ models/
 │  ├─ __init__.py                           # Re-export model classes
-│  ├─ app_state.py                          # Shared mutable UI/controller state
+│  ├─ app_state.py                          # Composed AppState facade
+│  ├─ base_state.py                         # Shared fields (logs, health, connection)
+│  ├─ master_state.py                       # Master-only fields and methods
+│  ├─ slave_state.py                        # Slave-only fields and methods
 │  └─ trade_signal.py                       # Lightweight trade DTO helper
 ├─ views/
 │  ├─ qt/
@@ -213,45 +216,7 @@ Implication:
 
 ## `models/app_state.py`
 
-`AppState` stores mutable runtime state for both roles:
-
-- MT5 credentials/path placeholders
-- role (`MASTER` / `SLAVE`)
-- flags:
-  - `mt5_connected`
-  - `socket_connected`
-  - `is_running`
-- slave controls:
-  - `risk_multiplier` (float, default `1.0`) — lot size multiplier for MULTIPLIER copy mode
-  - `symbol_map` (dict, default `{}`) — master→slave symbol translation
-- risk management settings:
-  - `max_lot_size` (float, default `0.0` = disabled) — cap on computed copy volume
-  - `max_concurrent_trades` (int, default `0` = disabled) — max simultaneous copied positions
-  - `daily_loss_limit` (float, default `0.0` = disabled) — auto-pause threshold
-  - `daily_pnl` (float, default `0.0`) — accumulated PnL from CLOSE signals today
-  - `copying_paused_by_loss` (bool, default `False`) — set when daily loss limit hit
-  - `symbol_whitelist` (list, default `[]`) — slave-side symbol copy filter
-- copy mode settings:
-  - `copy_mode` (str, default `'MULTIPLIER'`) — `'MULTIPLIER'` or `'FIXED_LOT'`
-  - `fixed_lot_size` (float, default `0.01`) — used when `copy_mode == 'FIXED_LOT'`
-  - `reverse_copy` (bool, default `False`) — flip BUY↔SELL before execution
-  - `slippage_points` (int, default `10`) — deviation in points for MT5 orders
-  - `unmapped_symbol_behavior` (str, default `'IGNORE'`) — `'IGNORE'` or `'COPY_AS_IS'`
-- equity protection:
-  - `equity_floor` (float, default `0.0` = disabled) — block OPEN if MT5 equity < this value
-- session tracking:
-  - `session_start_time` (str, default `''`) — `HH:MM:SS` when listening started
-  - `session_pnl` (float, default `0.0`) — PnL since session start
-  - `open_trades` (list, default `[]`) — dicts of currently open copied trades
-  - `closed_trades` (list, default `[]`) — dicts of closed trades this session (max 50)
-- master subscriber state:
-  - `subscribers` (list, default `[]`) — rows loaded from `GET /auth/masters/:id/subscribers`
-  - `subscriber_online_status` (dict, default `{}`) — `{ email: bool }` from `subscriber_update`
-  - `master_user_id` (str, default `''`) — resolved after master verification for subscriber/profile API calls
-- master session stats:
-  - `signals_sent` (int, default `0`) — increments when a master `test_signal` is emitted
-  - `session_start_time_master` (str, default `''`) — `HH:MM:SS` when broadcasting starts
-- log buffer (`logs`, capped to 50 entries)
+AppState composes BaseState, MasterState, and SlaveState via multiple inheritance. All external code imports AppState as before. BaseState: shared fields. MasterState: master-only. SlaveState: slave-only.
 
 Methods:
 
@@ -380,13 +345,20 @@ Methods:
 2. `on_connect()`
 	- logs session id (`self.sio.sid`)
 
-3. `emit_signal(signal_dict)`
+3. `on_node_registered(data)`
+	- handles `node_registered` event confirming successful room registration
+	- logs successful registration or room-assignment failure
+
+4. `emit_signal(signal_dict)`
 	- emits socket event `test_signal`
 
 Socket events used by wider system:
 
 - outbound: `test_signal`
 - inbound configured by controllers: `trade_execution`, `connect`
+- inbound handled directly: `node_registered`
+
+SocketManager now handles node_registered event confirming successful room registration.
 
 ---
 

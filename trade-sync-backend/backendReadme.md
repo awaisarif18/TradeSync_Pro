@@ -81,6 +81,8 @@ trade-sync-backend/
 │  ├─ auth/
 │  │  ├─ auth.module.ts        # Auth module + repository registration
 │  │  ├─ auth.controller.ts    # REST routes under /auth
+│  │  ├─ dto/
+│  │  │  └─ auth.dto.ts        # Auth response interfaces and profile update DTO
 │  │  └─ auth.service.ts       # Auth business logic + admin + marketplace
 │  ├─ trade/
 │  │  ├─ trade.module.ts       # Trade module + providers
@@ -198,6 +200,7 @@ Columns:
 
 - `id: uuid` (PK)
 - `masterId: string`
+- `slaveId (nullable string): UUID of the slave who copied this trade. Added in Phase 9. Null for historical records.`
 - `masterName: string`
 - `symbol: string`
 - `action: string`
@@ -212,6 +215,11 @@ Phase 6 Note on pnl and closedAt:
 - The `pnl` field is set when a CLOSE event is handled in `trade.gateway.ts` via `handleTestSignal`
 - The `closedAt` timestamp is also recorded on CLOSE events (Phase 6 implementation)
 - This allows the PnLChart and TradeHistoryModal components to display cumulative performance and trade lifecycle data
+
+Phase 9 Note on slaveId:
+- The `slaveId` field is nullable for historical rows.
+- New OPEN rows are tagged with `slaveId` only when exactly one subscribed slave is connected in the master's room.
+- `GET /auth/masters/:masterId/subscribers` uses `TradeLogs.slaveId` for per-subscriber copied count and P&L.
 
 ---
 
@@ -324,6 +332,7 @@ Base route prefix: `/auth`
 	- SLAVE lookup: `email + role=SLAVE`
 	- Requires `isActive=true`
 	- Returns `{ message: 'Node Verified', role, fullName }`
+	- Response now includes id field for direct master_user_id resolution.
 
 7. `getActiveMasters()`
 	- Filters `role=MASTER` + `isActive=true`
@@ -519,6 +528,13 @@ This creates a room-based fanout model where each master has an isolated channel
 5. Master Python app receives the event and updates `AppState.subscriber_online_status`
 6. `SubscribersPanel.refresh_display()` shows `● LIVE` next to that subscriber
 
+### H) Socket Registration Acknowledgement
+
+1. Client emits `register_node`
+2. Gateway processes room join
+3. Gateway emits `node_registered` back to that socket
+4. Client `SocketManager` logs confirmation or failure
+
 ---
 
 ## 9) Routing and API Surface (Complete)
@@ -552,7 +568,15 @@ This creates a room-based fanout model where each master has an isolated channel
   - `register_node`
   - `test_signal`
 - Outgoing from server:
+  - `node_registered`
   - `trade_execution`
+
+Phase 9 documented surfaces:
+- `/auth/verify-node` returns `id` for direct `master_user_id` resolution.
+- `/auth/masters/:masterId/subscribers` returns per-slave stats using `TradeLogs.slaveId`.
+- `TradeLogs.slaveId` stores the copied slave UUID when the gateway can identify exactly one slave in the room.
+- `node_registered` confirms room assignment back to the registering socket.
+- `src/auth/dto/auth.dto.ts` contains typed response interfaces for Phase 6-8 auth/profile/subscriber endpoints.
 
 ---
 

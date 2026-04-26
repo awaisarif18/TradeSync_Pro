@@ -180,14 +180,6 @@ class SubscribersPanel(QWidget):
         self.table_subscribers.setAlternatingRowColors(False)
         table_layout.addWidget(self.table_subscribers)
 
-        self.lbl_tracking_note = QLabel(
-            "Per-subscriber P&L tracking requires extended trade logging"
-        )
-        self.lbl_tracking_note.setStyleSheet(
-            "color: #333333; font-size: 8pt; font-style: italic;"
-        )
-        table_layout.addWidget(self.lbl_tracking_note)
-
         root_layout.addWidget(table_group)
 
         # ── Section 3: Activity Log ─────────────────────────────
@@ -270,15 +262,17 @@ class SubscribersPanel(QWidget):
                 status_item.setFont(QFont('Segoe UI', 9, QFont.Weight.Bold))
             self.table_subscribers.setItem(i, 3, status_item)
 
-            copied_item = QTableWidgetItem("—")
+            copied_item = QTableWidgetItem(str(sub.get('totalCopied', 0)))
             copied_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             copied_item.setForeground(QColor('#c8c8c8'))
             copied_item.setFont(QFont('Consolas', 9))
             self.table_subscribers.setItem(i, 4, copied_item)
 
-            pnl_item = QTableWidgetItem("—")
+            pnl = sub.get('totalPnL', 0.0)
+            pnl_item = QTableWidgetItem(f"${pnl:.2f}")
             pnl_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            pnl_item.setForeground(QColor('#666666'))
+            pnl_color = QColor('#00d4aa') if pnl >= 0 else QColor('#ff4444')
+            pnl_item.setForeground(pnl_color)
             pnl_item.setFont(QFont('Consolas', 9))
             self.table_subscribers.setItem(i, 5, pnl_item)
 

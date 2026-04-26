@@ -7,7 +7,8 @@ import {
   Param,
   BadRequestException,
 } from '@nestjs/common';
-import { AuthService, UpdateMasterProfileDto } from './auth.service';
+import { AuthService } from './auth.service';
+import { UpdateMasterProfileDto } from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {

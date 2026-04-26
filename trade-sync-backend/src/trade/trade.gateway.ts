@@ -14,11 +14,13 @@ import { Repository } from 'typeorm';
 import { TradeService } from './trade.service';
 import { User } from '../database/user.entity';
 import { TradeLog } from '../database/tradelog.entity';
+import { AuthService } from '../auth/auth.service';
 
 type ConnectedClientInfo = {
   role: 'MASTER' | 'SLAVE';
   identifier: string;
   subscribedMasterId?: string;
+  slaveId?: string | null;
 };
 
 @WebSocketGateway({ cors: { origin: '*' } })
@@ -29,6 +31,7 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private readonly tradeService: TradeService,
+    private readonly authService: AuthService,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(TradeLog) private tradeLogRepo: Repository<TradeLog>,
   ) {}
@@ -106,6 +109,12 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
           masterId: user.id,
           room: roomName,
         });
+        client.emit('node_registered', {
+          success: true,
+          role: payload.role,
+          room: roomName,
+          timestamp: new Date().toISOString(),
+        });
       }
     } else if (payload.role === 'SLAVE') {
       user = await this.userRepo.findOne({
@@ -114,11 +123,15 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (user && user.subscribedToId) {
         const subscribedMasterId = user.subscribedToId;
         const roomName = `room_master_${user.subscribedToId}`;
+        const slaveId = await this.authService.getSlaveIdByEmail(
+          payload.identifier,
+        );
         client.join(roomName); // Slave silently joins the Master's room
         this.connectedClients.set(client.id, {
           role: 'SLAVE',
           identifier: payload.identifier,
           subscribedMasterId,
+          slaveId,
         });
         this.server.to(roomName).emit('subscriber_update', {
           slaveEmail: payload.identifier,
@@ -139,12 +152,24 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
           slaveId: user.id,
           room: roomName,
         });
+        client.emit('node_registered', {
+          success: true,
+          role: payload.role,
+          room: roomName,
+          timestamp: new Date().toISOString(),
+        });
       } else {
         this.log('warn', 'register_node_slave_no_subscription', {
           trace_id: traceId,
           role: payload.role,
           identifier: payload.identifier,
           slaveId: user?.id,
+        });
+        client.emit('node_registered', {
+          success: false,
+          role: payload.role,
+          error: 'Room assignment failed',
+          timestamp: new Date().toISOString(),
         });
       }
     }
@@ -199,8 +224,22 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // 2. NEW: Save to the new TradeLog Table (For Portfolios and PnL Tracking)
     try {
       if (data.event === 'OPEN') {
+        const connectedSlaveIds = Array.from(
+          this.connectedClients.values(),
+        ).filter(
+          (connectedClient) =>
+            connectedClient.role === 'SLAVE' &&
+            connectedClient.subscribedMasterId === masterUser.id &&
+            connectedClient.slaveId,
+        );
         const newLog = this.tradeLogRepo.create({
           masterId: masterUser.id,
+          // TODO: Multiple slaves in the same room need a slave-side execution callback;
+          // one master TradeLog row cannot identify every copied slave execution.
+          slaveId:
+            connectedSlaveIds.length === 1
+              ? connectedSlaveIds[0].slaveId
+              : null,
           masterName: masterUser.fullName,
           symbol: data.symbol,
           action: data.action,

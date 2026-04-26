@@ -145,6 +145,12 @@ The system is distributed across three distinct environments:
     * SubscribersPanel: real-time subscriber table with LIVE/OFFLINE status
     * Performance tab: master's own aggregate stats from Phase 6 profile endpoint
     * Session tracking: signals sent count, session elapsed time
+* **Phase 8.3: Architecture Hardening (COMPLETED)**
+    * verify-node response now returns id for direct master_user_id resolution
+    * TradeLogs.slaveId column added — per-subscriber P&L now tracked correctly
+    * AppState split into BaseState + MasterState + SlaveState using composition
+    * Backend DTOs added for type safety on all Phase 6-8 endpoints
+    * Socket registration acknowledgement: node_registered event confirms room join
 
 ---
 

@@ -13,6 +13,12 @@ export class TradeLog {
   @Column()
   masterId: string; // Who placed the trade
 
+  @Column({ type: 'varchar', nullable: true })
+  slaveId: string | null;
+  // UUID of the slave who copied this trade.
+  // Null for trades recorded before Phase 9 (pre-slaveId era).
+  // Set by TradeGateway when slave execution is confirmed.
+
   @Column()
   masterName: string; // For easy UI display
 

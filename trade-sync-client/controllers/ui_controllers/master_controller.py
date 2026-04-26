@@ -123,7 +123,15 @@ class MasterController:
                 return False
             
             user_data = res.json()
-            self._resolve_master_user_id(user_data.get('fullName'))
+            self.state.master_user_id = user_data.get('id', '')
+
+            if not self.state.master_user_id:
+                msg = "[MASTER] Warning: id not in verify-node response. Subscriber features may not work."
+                print(Fore.YELLOW + msg + Style.RESET_ALL)
+                self.state.add_log(msg)
+            else:
+                print(Fore.CYAN + f"[MASTER] master_user_id set: {self.state.master_user_id[:8]}..." + Style.RESET_ALL)
+
             self.state.add_log(f"License Verified for {user_data.get('fullName')}")
             self._structured_log(
                 "verify_node_success",
