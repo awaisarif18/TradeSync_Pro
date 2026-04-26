@@ -24,6 +24,7 @@ export interface MasterProfileResponse {
   riskLevel: string | null;
   typicalHoldTime: string | null;
   subscriberCount: number;
+  isLive: boolean;
 }
 
 // Response shape for subscriber list item

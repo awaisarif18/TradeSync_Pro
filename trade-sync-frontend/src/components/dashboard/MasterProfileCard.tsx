@@ -23,8 +23,10 @@ interface MasterProfileCardProps {
   loading: boolean;
   isSubscribed: boolean;
   subscriptionLocked: boolean;
-  onSubscribe: (masterId: string | null) => void;
-  onViewHistory: () => void;
+  onSubscribe?: (masterId: string | null) => void;
+  onViewHistory?: () => void;
+  showActions?: boolean;
+  showChart?: boolean;
 }
 
 function splitInstruments(instruments: string | null) {
@@ -59,7 +61,13 @@ function riskVariant(riskLevel: string | null) {
   };
 }
 
-function MasterProfileSkeleton() {
+function MasterProfileSkeleton({
+  showActions = true,
+  showChart = true,
+}: {
+  showActions?: boolean;
+  showChart?: boolean;
+}) {
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-5 animate-pulse">
       <div className="flex items-start gap-4">
@@ -79,8 +87,8 @@ function MasterProfileSkeleton() {
         <div className="h-16 rounded-xl bg-slate-800" />
         <div className="h-16 rounded-xl bg-slate-800" />
       </div>
-      <div className="mt-5 h-52 rounded-xl bg-slate-800" />
-      <div className="mt-5 h-10 rounded-full bg-slate-800" />
+      {showChart && <div className="mt-5 h-52 rounded-xl bg-slate-800" />}
+      {showActions && <div className="mt-5 h-10 rounded-full bg-slate-800" />}
     </div>
   );
 }
@@ -93,9 +101,13 @@ export default function MasterProfileCard({
   subscriptionLocked,
   onSubscribe,
   onViewHistory,
+  showActions = true,
+  showChart = true,
 }: MasterProfileCardProps) {
   if (loading) {
-    return <MasterProfileSkeleton />;
+    return (
+      <MasterProfileSkeleton showActions={showActions} showChart={showChart} />
+    );
   }
 
   if (!profile) {
@@ -133,12 +145,23 @@ export default function MasterProfileCard({
             Joined {new Date(profile.createdAt).toLocaleDateString()}
           </p>
         </div>
-        <span
-          className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${risk.className}`}
-        >
-          <risk.icon size={12} />
-          {risk.label}
-        </span>
+        <div className="flex flex-col items-end gap-2">
+          <span
+            className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${risk.className}`}
+          >
+            <risk.icon size={12} />
+            {risk.label}
+          </span>
+          {profile.isLive === true && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
+              <span className="relative flex h-2.5 w-2.5 items-center justify-center">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />
+                <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
+              </span>
+              Live
+            </span>
+          )}
+        </div>
       </div>
 
       <div className="mt-4 space-y-3">
@@ -258,47 +281,51 @@ export default function MasterProfileCard({
         </div>
       </div>
 
-      <div className="mt-5">
-        <PnLChart history={history} />
-      </div>
+      {showChart && (
+        <div className="mt-5">
+          <PnLChart history={history} />
+        </div>
+      )}
 
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-        <button
-          type="button"
-          onClick={onViewHistory}
-          className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
-        >
-          <History size={14} />
-          View Trade History
-        </button>
-
-        {isSubscribed ? (
+      {showActions && (
+        <div className="mt-5 flex flex-col gap-3 sm:flex-row">
           <button
             type="button"
-            onClick={() => onSubscribe(null)}
-            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+            onClick={() => onViewHistory?.()}
+            className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-900/90 px-4 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500 hover:bg-slate-800"
           >
-            <XCircle size={14} />
-            Unsubscribe
+            <History size={14} />
+            View Trade History
           </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => onSubscribe(profile.id)}
-            disabled={subscriptionLocked}
-            className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${
-              subscriptionLocked
-                ? "cursor-not-allowed border border-slate-700 bg-slate-800 text-slate-500"
-                : "border border-emerald-500/30 bg-emerald-500 text-slate-950 hover:bg-emerald-400"
-            }`}
-          >
-            <ArrowRight size={14} />
-            {subscriptionLocked
-              ? "Unsubscribe other Master first"
-              : "Subscribe"}
-          </button>
-        )}
-      </div>
+
+          {isSubscribed ? (
+            <button
+              type="button"
+              onClick={() => onSubscribe?.(null)}
+              className="inline-flex flex-1 items-center justify-center gap-2 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+            >
+              <XCircle size={14} />
+              Unsubscribe
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => onSubscribe?.(profile.id)}
+              disabled={subscriptionLocked}
+              className={`inline-flex flex-1 items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-semibold transition-colors ${
+                subscriptionLocked
+                  ? "cursor-not-allowed border border-slate-700 bg-slate-800 text-slate-500"
+                  : "border border-emerald-500/30 bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+              }`}
+            >
+              <ArrowRight size={14} />
+              {subscriptionLocked
+                ? "Unsubscribe other Master first"
+                : "Subscribe"}
+            </button>
+          )}
+        </div>
+      )}
     </article>
   );
 }

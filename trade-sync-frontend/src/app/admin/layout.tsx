@@ -1,4 +1,4 @@
-import AdminSidebar from "./AdminSidebar";
+import Link from "next/link";
 
 export default function AdminLayout({
   children,
@@ -6,12 +6,22 @@ export default function AdminLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      {/* The Sidebar Component you already have */}
-      <AdminSidebar />
+    <div className="min-h-screen bg-slate-950">
+      <nav className="border-b border-slate-800 bg-slate-950/95 px-6 py-4">
+        <div className="flex items-center gap-6 text-sm font-medium">
+          <Link
+            href="/admin"
+            className="text-emerald-400 transition-colors hover:text-emerald-300"
+          >
+            Users
+          </Link>
+          <span className="text-slate-600">Nodes</span>
+          <span className="text-slate-600">Audit</span>
+          <span className="text-slate-600">Settings</span>
+        </div>
+      </nav>
 
-      {/* The Main Dashboard Content */}
-      <div className="flex-1 overflow-auto">{children}</div>
+      <div className="w-full overflow-auto">{children}</div>
     </div>
   );
 }

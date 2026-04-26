@@ -5,6 +5,7 @@ import {
   Activity,
   BarChart3,
   Clock3,
+  Copy,
   DollarSign,
   LineChart,
   ListChecks,
@@ -66,6 +67,7 @@ export default function MasterDashboard() {
     "overview",
   );
   const [error, setError] = useState<string | null>(null);
+  const [licenseCopied, setLicenseCopied] = useState(false);
 
   useEffect(() => {
     const masterId = user?.id;
@@ -142,6 +144,17 @@ export default function MasterDashboard() {
     setActiveTab("overview");
   };
 
+  const handleCopyLicenseKey = async () => {
+    if (!user.licenseKey) return;
+
+    try {
+      await navigator.clipboard.writeText(user.licenseKey);
+      setLicenseCopied(true);
+    } catch (copyError) {
+      console.error("Failed to copy license key", copyError);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -191,6 +204,38 @@ export default function MasterDashboard() {
 
       {activeTab === "overview" ? (
         <div className="space-y-6">
+          <div className="rounded-2xl border border-slate-800 bg-slate-950/80 p-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-slate-500">
+                  Your License Key
+                </p>
+                {user.licenseKey ? (
+                  <div className="mt-2 rounded-xl border border-slate-800 bg-slate-900/80 px-4 py-3 font-mono text-sm text-emerald-300">
+                    {user.licenseKey}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-slate-500">
+                    No license key — contact admin
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyLicenseKey}
+                disabled={!user.licenseKey}
+                className={`inline-flex items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
+                  user.licenseKey
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20"
+                    : "cursor-not-allowed border-slate-800 bg-slate-900 text-slate-600"
+                }`}
+              >
+                <Copy size={14} />
+                {licenseCopied ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-4">
             <Card
               title="Total Signals Sent"

@@ -138,7 +138,7 @@ The system is distributed across three distinct environments:
     * SymbolMapPanel QWidget (views/qt/symbol_map_panel.py): table view with broker presets
     * Broker preset mappings for Vantage, XM, Exness, IC Markets, Pepperstone
     * Slave dashboard now has 3 tabs: Copy Settings, Symbol Map, Risk Management
-* **Phase 8: Master Subscriber View (COMPLETED)**
+* **Phase 8.1: Master Subscriber View (COMPLETED)**
     * GET /auth/masters/:masterId/subscribers endpoint with trade summary
     * subscriber_update WebSocket event when slave connects/disconnects
     * master_window.py rebuilt: 3-tab Bloomberg layout (BROADCAST/SUBSCRIBERS/PERFORMANCE)
@@ -151,6 +151,15 @@ The system is distributed across three distinct environments:
     * AppState split into BaseState + MasterState + SlaveState using composition
     * Backend DTOs added for type safety on all Phase 6-8 endpoints
     * Socket registration acknowledgement: node_registered event confirms room join
+* **Phase 9: Web UI Overhaul (IN PROGRESS)**
+    * Complete redesign of Next.js web frontend
+    * New design system: Inter + JetBrains Mono, mint-green accent
+    * Landing page with live market ticker, hero chart, trader showcase
+    * Dedicated /traders page replacing landing page top-traders section
+    * Master detail page with full profile and trade history
+    * Admin panel streamlined: sidebar removed, single-page layout
+    * Master license keys shown on master's own dashboard
+    * LIVE badge based on real socket connection, not isActive flag
 
 ---
 

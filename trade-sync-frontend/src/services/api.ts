@@ -23,6 +23,7 @@ export interface MasterProfile {
   riskLevel: string | null;
   typicalHoldTime: string | null;
   subscriberCount: number;
+  isLive: boolean;
 }
 
 export interface UpdateMasterProfileDto {

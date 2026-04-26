@@ -6,6 +6,7 @@ interface AuthState {
     email: string;
     fullName?: string; // Added
     role: "MASTER" | "SLAVE" | "ADMIN" | null;
+    licenseKey?: string | null;
     subscribedToId?: string | null; // Added for the Marketplace
   } | null;
   isAuthenticated: boolean;

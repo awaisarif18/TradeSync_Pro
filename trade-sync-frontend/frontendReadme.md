@@ -50,7 +50,7 @@ Manual smoke expectation (frontend-facing behavior):
 
 Primary frontend responsibilities:
 
-1. Public landing + auth pages
+1. Public landing, traders marketplace, and auth pages
 2. Login + register workflows (Master/Slave)
 3. Role-gated dashboards (`MASTER`, `SLAVE`, `ADMIN`)
 4. Admin user/license/status management UI
@@ -83,6 +83,8 @@ trade-sync-frontend/
 	│  ├─ globals.css                  # Global CSS + Tailwind theme tokens
 	│  ├─ layout.tsx                   # Root app shell: Provider + Navbar + Footer
 	│  ├─ page.tsx                     # Marketing landing page
+	│  ├─ traders/
+	│  │  └─ page.tsx                  # Master trader marketplace grid
 	│  ├─ login/
 	│  │  └─ page.tsx                  # Login page wrapper around LoginForm
 	│  ├─ register/
@@ -90,9 +92,8 @@ trade-sync-frontend/
 	│  ├─ dashboard/
 	│  │  └─ page.tsx                  # Auth gate + role-based dashboard switch
 	│  └─ admin/
-	│     ├─ layout.tsx                # Admin shell with persistent sidebar
+	│     ├─ layout.tsx                # Admin shell with horizontal tab navigation
 	│     ├─ page.tsx                  # Admin control panel table/actions
-	│     └─ AdminSidebar.tsx          # Admin nav links
 	├─ components/
 	│  ├─ common/
 	│  │  ├─ Button.tsx                # Reusable button with loading state
@@ -137,7 +138,7 @@ Global app shell (`src/app/layout.tsx`) wraps all routes with:
 3. Central main container (`<main>`)
 4. `Footer` (always visible)
 
-Admin routes (`/admin/*`) have a nested layout (`src/app/admin/layout.tsx`) that adds `AdminSidebar` + content region.
+Admin routes (`/admin/*`) have a nested layout (`src/app/admin/layout.tsx`) that adds horizontal tab navigation above the content region.
 
 ### Component Execution Model
 
@@ -162,7 +163,16 @@ Key client components:
 
 - Static marketing hero + feature cards
 - Links to `/register` and `/login`
+- CTA link to `/traders`
 - Uses `lucide-react` icons (`ArrowRight`, `ShieldCheck`, `Zap`, `Globe`)
+
+## `/traders` — Master Trader Marketplace (`src/app/traders/page.tsx`)
+
+- Client page that fetches active masters via `GET /auth/masters`
+- Fetches each master profile via `GET /auth/masters/:id/profile`
+- Renders read-only `MasterProfileCard` components without subscribe/history actions
+- Provides client-side risk filters: `All`, `Low Risk`, `Medium Risk`, `High Risk`
+- Shows loading skeletons and an empty state when no masters are available
 
 ## `/login` — Login page (`src/app/login/page.tsx`)
 
@@ -197,16 +207,14 @@ Key client components:
   - toggle user active/disabled status
 - Uses local state for users/loading/filter
 
-### Admin nested links exposed in sidebar
+### Admin nested links exposed in horizontal tabs
 
-Sidebar has links for:
+The admin layout shows:
 
-- `/admin`
-- `/admin/nodes`
-- `/admin/audit`
-- `/admin/settings`
+- active `Users` link to `/admin`
+- disabled placeholders for future `Nodes`, `Audit`, and `Settings`
 
-Only `/admin` page exists right now. Others are placeholders and will 404 until implemented.
+Only `/admin` page exists right now. Future tabs should become links when their pages are added.
 
 ---
 
@@ -353,6 +361,7 @@ On success: alert + redirect `/login`.
 - Loads `GET /auth/masters/:id/dashboard` on mount using the authenticated master ID from Redux
 - Overview tab shows:
 	- status badge (`BROADCASTING` or `IDLE`)
+	- read-only master license key display with copy action
 	- 4 stat cards: total signals sent, connected subscribers, open trades, win rate
 	- performance boxes: total PnL, average volume, closed trades
 	- recent signal history table for the last 10 trades
@@ -434,6 +443,7 @@ Expected trade payload fields consumed:
 Dynamic navigation logic based on Redux auth state:
 
 - Show `Login`/`Register` when not authenticated
+- Show `Traders` public marketplace link
 - Show `Dashboard` when authenticated
 - Show `Admin` only if `user.role === 'ADMIN'`
 
@@ -447,10 +457,10 @@ Other details:
 - Static branding/footer text
 - Dynamic year via `new Date().getFullYear()`
 
-## `AdminSidebar`
+## `AdminLayout`
 
-- Static nav list with icon links
-- `active` prop hardcoded true only for `Users & Licenses` item
+- Renders horizontal admin tabs above the content area
+- Keeps `/admin` content full width with no persistent left sidebar
 
 ---
 
@@ -559,8 +569,8 @@ These are present in current source and should be considered before new coding:
 	- `SlaveDashboard.tsx` imports from `../../redux/store` (path does not exist in current tree)
 	- Actual file is `src/redux/slices/store.ts`
 
-2. `AdminSidebar` includes routes with no pages:
-	- `/admin/nodes`, `/admin/audit`, `/admin/settings`
+2. Admin tabs include disabled placeholders for future pages:
+	- `Nodes`, `Audit`, `Settings`
 
 3. `Navbar` mobile menu state exists but no mobile link panel is rendered.
 
@@ -595,7 +605,7 @@ If using AI to generate code changes, apply these constraints:
 2. Keep Redux state shape backward-compatible (`user`, `isAuthenticated`, `subscribedToId`).
 3. Do not rename `loginSuccess` reducer without updating all auth forms and marketplace update flow.
 4. If moving API base URL to env vars, keep current default behavior for local dev.
-5. If adding admin pages (`/nodes`, `/audit`, `/settings`), keep `AdminLayout` and sidebar contract intact.
+5. If adding admin pages (`/nodes`, `/audit`, `/settings`), convert the disabled admin tabs into links.
 6. If changing socket logic, preserve display behavior expected by `LiveTradeTable`.
 7. Prefer additive changes over destructive refactors.
 8. Update this document whenever API contracts, state shape, or route behavior changes.
@@ -663,7 +673,7 @@ Phase 6 implementation adds master profile card grid and trade history modal to 
 2. Add auth state persistence (or token-based session model).
 3. Replace alert-based UX with structured toasts/error banners.
 4. Add API request typing instead of broad `any` usage.
-5. Implement or remove placeholder admin sidebar routes.
+5. Implement future admin tabs for nodes, audit logs, and settings.
 6. Add route guards for `/admin` based on role at page level.
 7. Centralize socket management if multiple realtime widgets are added.
 

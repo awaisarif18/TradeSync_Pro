@@ -7,6 +7,7 @@ import {
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
+import { Inject, forwardRef } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -28,13 +29,23 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
 
   private connectedClients = new Map<string, ConnectedClientInfo>();
+  private connectedMasters = new Set<string>();
 
   constructor(
     private readonly tradeService: TradeService,
+    @Inject(forwardRef(() => AuthService))
     private readonly authService: AuthService,
     @InjectRepository(User) private userRepo: Repository<User>,
     @InjectRepository(TradeLog) private tradeLogRepo: Repository<TradeLog>,
   ) {}
+
+  getConnectedMasterIds(): string[] {
+    return Array.from(this.connectedMasters);
+  }
+
+  isMasterConnected(masterId: string): boolean {
+    return this.connectedMasters.has(masterId);
+  }
 
   private log(
     level: 'log' | 'warn' | 'error',
@@ -54,6 +65,13 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     const connectedClient = this.connectedClients.get(client.id);
+
+    if (
+      connectedClient?.role === 'MASTER' &&
+      connectedClient.subscribedMasterId
+    ) {
+      this.connectedMasters.delete(connectedClient.subscribedMasterId);
+    }
 
     if (
       connectedClient?.role === 'SLAVE' &&
@@ -102,6 +120,7 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
           identifier: payload.identifier,
           subscribedMasterId: user.id,
         });
+        this.connectedMasters.add(user.id);
         this.log('log', 'register_node_master_joined', {
           trace_id: traceId,
           role: payload.role,

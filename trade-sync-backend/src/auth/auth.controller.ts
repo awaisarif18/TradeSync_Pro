@@ -9,10 +9,14 @@ import {
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { UpdateMasterProfileDto } from './dto/auth.dto';
+import { TradeGateway } from '../trade/trade.gateway';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly tradeGateway: TradeGateway,
+  ) {}
 
   // --- EXISTING ROUTES ---
   @Post('register')
@@ -68,6 +72,11 @@ export class AuthController {
   @Get('masters')
   async getActiveMasters() {
     return await this.authService.getActiveMasters();
+  }
+
+  @Get('masters/live')
+  getLiveMasters() {
+    return { liveIds: this.tradeGateway.getConnectedMasterIds() };
   }
 
   // GET: http://localhost:3000/auth/masters/UUID/profile

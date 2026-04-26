@@ -154,7 +154,7 @@ export default function TopTradersSection() {
                         <risk.icon size={12} />
                         {risk.label}
                       </span>
-                      {master.openTrades > 0 && (
+                      {master.isLive === true && (
                         <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300">
                           <span className="relative flex h-2.5 w-2.5 items-center justify-center">
                             <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 animate-ping" />

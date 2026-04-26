@@ -16,6 +16,7 @@ export default function Navbar() {
 
   const navLinks = [
     { name: "Home", href: "/" },
+    { name: "Traders", href: "/traders" },
     { name: "Login", href: "/login", icon: LogIn, hidden: isAuthenticated },
     { name: "Register", href: "/register", hidden: isAuthenticated },
     {

@@ -1,7 +1,9 @@
 import {
+  Inject,
   Injectable,
   UnauthorizedException,
   NotFoundException,
+  forwardRef,
 } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -9,6 +11,7 @@ import { Repository } from 'typeorm';
 import { User } from '../database/user.entity';
 import { TradeLog } from '../database/tradelog.entity';
 import type { MasterHistoryEntry } from '../trade/trade.service';
+import { TradeGateway } from '../trade/trade.gateway';
 import type {
   MasterProfileResponse,
   SubscriberSummary,
@@ -35,6 +38,8 @@ export class AuthService {
     private userRepository: Repository<User>,
     @InjectRepository(TradeLog)
     private tradeLogRepository: Repository<TradeLog>,
+    @Inject(forwardRef(() => TradeGateway))
+    private readonly tradeGateway: TradeGateway,
   ) {}
 
   // --- EXISTING METHODS ---
@@ -381,6 +386,7 @@ export class AuthService {
       riskLevel: master.riskLevel ?? null,
       typicalHoldTime: master.typicalHoldTime ?? null,
       subscriberCount,
+      isLive: this.tradeGateway.isMasterConnected(master.id),
     };
   }
 
