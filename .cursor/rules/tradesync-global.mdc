@@ -1,0 +1,32 @@
+---
+description: TradeSync Pro global project rules
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# TradeSync Pro — Global Rules
+
+## Project Structure
+This is a 3-layer copy trading platform:
+- trade-sync-backend: NestJS + TypeORM + MSSQL on port 3000
+- trade-sync-frontend: Next.js App Router + Tailwind + Redux on port 3001  
+- trade-sync-client: Python 3.9+ + PySide6 + MetaTrader5 desktop app
+
+## Source of Truth Files
+Before making any change, read:
+1. SYSTEM_CONTRACT_MATRIX.md — all REST routes and socket contracts
+2. The relevant layer README (backendReadme.md / frontendReadme.md / clientReadme.md)
+
+## Non-Negotiable Rules
+- Never rename socket events: register_node, test_signal, trade_execution
+- Never remove required payload keys: event, master_ticket, symbol, action, volume
+- Never add JWT guards — project intentionally has none
+- Never use alert() in frontend — use console.error()
+- All changes must be ADDITIVE — no existing routes or DB columns removed
+- Update SYSTEM_CONTRACT_MATRIX.md whenever a new route or socket event is added
+- Update the relevant layer README for every new file, route, or component
+
+## Code Style
+- Python: match existing indentation (4 spaces), use print() with colorama for logs
+- TypeScript: no 'any' on new code, match existing service/controller patterns
+- React: 'use client' where needed, Tailwind only for styling

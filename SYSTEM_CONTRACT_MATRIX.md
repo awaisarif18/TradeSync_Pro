@@ -75,6 +75,7 @@ Rules:
 | /auth/masters | GET | AuthController.getActiveMasters | Frontend SlaveDashboard | none | active master[] | Marketplace source |
 | /auth/users/:id/subscribe | PATCH | AuthController.updateSubscription | Frontend SlaveDashboard | { masterId: string|null } | { message, subscribedToId } | null means unsubscribe |
 | /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend SlaveDashboard (MasterProfileCard) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount } | Returns aggregate stats and public profile fields for one active master. Added Phase 6. |
+| /auth/masters/:masterId/subscribers | GET | AuthController.getMasterSubscribers | Python MasterController.fetch_subscribers | none | { id, fullName, email, isActive, totalCopied, totalPnL }[] | Returns all slaves subscribed to a master with trade summary. Phase 8. |
 | /auth/masters/:id/profile | PATCH | AuthController.updateMasterProfile | Frontend MasterProfileSetup | { bio?, tradingPlatform?, instruments?, strategyDescription?, riskLevel?, typicalHoldTime? } | updated user object | Master self-updates trading identity. Added Phase 7. |
 | /auth/masters/:id/dashboard | GET | AuthController.getMasterDashboard | Frontend MasterDashboard | none | { profile, recentTrades, subscriberCount, openTrades, totalSignalsSent } | Master's own dashboard data. Added Phase 7. |
 | /auth/top-masters | GET | AuthController.getTopMasters | Frontend TopTradersSection (landing page) | none | enriched master array (max 3) | Public endpoint. Top 3 most active masters. Added Phase 7. |
@@ -109,6 +110,7 @@ Compatibility recommendation:
 | register_node | client -> backend | Python Master/Slave nodes | Backend TradeGateway | Role + identifier registration and room join |
 | test_signal | client -> backend | Python Master node (MasterRecorder) | Backend TradeGateway | Raw trade lifecycle signal ingestion |
 | trade_execution | backend -> clients | Backend TradeGateway | Python Slave + Frontend LiveTradeTable | Fanout execution signal stream |
+| subscriber_update | backend -> master client | Backend TradeGateway | Python SubscribersPanel via MasterController | Notifies master when a subscribed slave connects or disconnects |
 
 ### 4.2 Payload Schemas
 
@@ -161,6 +163,16 @@ Consumer-required keys (must remain stable):
 
 Optional compatibility key:
 - trace_id (for observability only)
+
+#### subscriber_update payload
+
+```json
+{
+  "slaveEmail": "string",
+  "online": true,
+  "timestamp": "ISO string"
+}
+```
 
 ---
 
@@ -218,6 +230,7 @@ Breaking impact warning:
 | Session tracking | Python AppState (session_pnl, open_trades, closed_trades) | SlaveController toggle_listening + on_trade_signal | TradesPanel display |
 | Equity protection | Python AppState.equity_floor | RiskPanel equity section | Guard -1 in on_trade_signal() |
 | Unmapped symbol behavior | Python AppState.unmapped_symbol_behavior | SymbolMapPanel dropdown | on_trade_signal() symbol mapping logic |
+| Subscriber online status | Python AppState.subscriber_online_status | MasterController on_subscriber_update handler | SubscribersPanel STATUS column |
 
 ---
 

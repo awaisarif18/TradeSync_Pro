@@ -510,6 +510,15 @@ This creates a room-based fanout model where each master has an isolated channel
 4. Service returns the updated user record
 5. Frontend updates local dashboard state and shows the saved state
 
+### G) Slave Online Notification
+
+1. Slave Python app connects socket and emits `register_node` with `role=SLAVE`
+2. `TradeGateway` stores `socket.id -> { role, email, subscribedMasterId }`
+3. Gateway looks up `subscribedMasterId` from the slave `Users.subscribedToId`
+4. Gateway emits `subscriber_update { online: true }` to `room_master_<id>`
+5. Master Python app receives the event and updates `AppState.subscriber_online_status`
+6. `SubscribersPanel.refresh_display()` shows `● LIVE` next to that subscriber
+
 ---
 
 ## 9) Routing and API Surface (Complete)
@@ -527,6 +536,7 @@ This creates a room-based fanout model where each master has an isolated channel
 - `GET /auth/masters`
 - `PATCH /auth/users/:id/subscribe`
 - `GET /auth/masters/:id/profile`
+- `GET /auth/masters/:masterId/subscribers`
 - `PATCH /auth/masters/:id/profile`
 - `GET /auth/masters/:id/dashboard`
 - `GET /auth/top-masters`

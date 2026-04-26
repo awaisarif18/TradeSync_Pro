@@ -49,6 +49,15 @@ export interface TopMasterProfile extends MasterProfile {
   openTrades: number;
 }
 
+interface MasterSubscriber {
+  id: string;
+  fullName: string;
+  email: string;
+  isActive: boolean;
+  totalCopied: number;
+  totalPnL: number;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -389,6 +398,38 @@ export class AuthService {
       typicalHoldTime: master.typicalHoldTime ?? null,
       subscriberCount,
     };
+  }
+
+  async getMasterSubscribers(masterId: string): Promise<MasterSubscriber[]> {
+    const subscribers = await this.userRepository.find({
+      where: { subscribedToId: masterId, role: 'SLAVE' },
+      select: ['id', 'fullName', 'email', 'isActive'],
+      order: { createdAt: 'DESC' },
+    });
+
+    const totalCopied = await this.tradeLogRepository.count({
+      where: { masterId },
+    });
+
+    const closedTradeRows = await this.tradeLogRepository.find({
+      where: { masterId, status: 'CLOSED' },
+      select: ['pnl'],
+    });
+
+    const totalPnL = Number(
+      closedTradeRows
+        .reduce((acc, row) => acc + (row.pnl ?? 0), 0)
+        .toFixed(2),
+    );
+
+    return subscribers.map((subscriber) => ({
+      id: subscriber.id,
+      fullName: subscriber.fullName,
+      email: subscriber.email,
+      isActive: subscriber.isActive,
+      totalCopied,
+      totalPnL,
+    }));
   }
 
   async updateMasterProfile(

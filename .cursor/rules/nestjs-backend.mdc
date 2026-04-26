@@ -1,0 +1,27 @@
+---
+description: NestJS backend rules
+globs: ["trade-sync-backend/**/*.ts"]
+alwaysApply: false
+---
+
+# NestJS Backend Rules
+
+## Architecture
+- Match existing module structure: AuthModule, TradeModule, DatabaseModule
+- New routes go in existing controllers unless a genuinely new module is needed
+- New DB queries follow existing TypeORM repository pattern in services
+- Never add new entities without updating backendReadme.md Section 5
+
+## Database Rules
+- synchronize: true is enabled — new nullable columns auto-migrate on restart
+- Never write migration files manually
+- All new columns must be nullable or have defaults to avoid breaking existing rows
+
+## Route Rules
+- Every new route must be added to SYSTEM_CONTRACT_MATRIX.md Section 3.1 or 3.2
+- Match existing error handling: NotFoundException, UnauthorizedException
+- No JWT guards — verify-node pattern is the auth mechanism
+
+## WebSocket Rules
+- Never rename or add new global socket events without updating Section 4 of matrix
+- Room naming convention is room_master_<userId> — never change this pattern

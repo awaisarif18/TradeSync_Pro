@@ -90,6 +90,7 @@ trade-sync-client/
 │  │  ├─ master_window.py                   # PySide6 Master desktop UI
 │  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (4-tab Bloomberg theme)
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
+│  │  ├─ subscribers_panel.py               # SubscribersPanel QWidget
 │  │  ├─ symbol_map_panel.py                # SymbolMapPanel QWidget (dual broker presets)
 │  │  ├─ risk_panel.py                      # RiskPanel QWidget (equity + limits + loss + whitelist)
 │  │  └─ trades_panel.py                    # TradesPanel QWidget (open + closed trade tables)
@@ -243,6 +244,13 @@ Implication:
   - `session_pnl` (float, default `0.0`) — PnL since session start
   - `open_trades` (list, default `[]`) — dicts of currently open copied trades
   - `closed_trades` (list, default `[]`) — dicts of closed trades this session (max 50)
+- master subscriber state:
+  - `subscribers` (list, default `[]`) — rows loaded from `GET /auth/masters/:id/subscribers`
+  - `subscriber_online_status` (dict, default `{}`) — `{ email: bool }` from `subscriber_update`
+  - `master_user_id` (str, default `''`) — resolved after master verification for subscriber/profile API calls
+- master session stats:
+  - `signals_sent` (int, default `0`) — increments when a master `test_signal` is emitted
+  - `session_start_time_master` (str, default `''`) — `HH:MM:SS` when broadcasting starts
 - log buffer (`logs`, capped to 50 entries)
 
 Methods:
@@ -575,30 +583,58 @@ The UI layer has been migrated to PySide6. To ensure thread safety between the c
 
 Class: `MasterWindow(QMainWindow)`
 
-View flow (“routing” inside desktop app):
-1. Initialization builds both screens and adds them to a central `QStackedWidget`.
-2. `build_login_screen()` renders the credential form on startup.
-3. `on_login_submit()` extracts inputs, forces a synchronous UI repaint (`QApplication.processEvents()`), and calls the controller login.
-4. On success, the stacked widget switches to the dashboard view.
-5. The dashboard supports starting/stopping the broadcast thread.
+Design: Bloomberg Terminal-inspired minimal dark theme.
+Dashboard layout: 3-tab `QTabWidget` with `BROADCAST`, `SUBSCRIBERS`, and `PERFORMANCE`.
+
+Flow:
+1. Login screen rendered via `QStackedWidget`.
+2. `on_login_submit()` extracts MT5 credentials plus master license key and calls `MasterController.login_mt5()`.
+3. On success, `show_dashboard()` switches to the dashboard, refreshes MT5 account info, loads master performance stats, and schedules subscriber fetch.
+4. `update_ui()` runs every 500ms and refreshes status, logs, signal count, session timer, and subscriber display.
 
 Key widgets and controls:
 - **Login entries:**
   - MT5 Login ID (`QLineEdit`)
   - MT5 Password (`QLineEdit`, masked)
   - Server string (`QLineEdit`)
-  - Broker dropdown (`QComboBox`: `Vantage`, `XM`, `Exness`, `Auto-Detect`)
+  - Broker dropdown (`QComboBox`: `Vantage`, `XM`, `Exness`, `Exness Slave`, `Auto-Detect`)
   - License key input (`QLineEdit`)
-- **Dashboard:**
-  - Status label (`QLabel`)
-  - Broadcast toggle button (`QPushButton`)
-  - Log textbox (`QTextEdit`, read-only)
+- **Dashboard (Tab 1: BROADCAST):**
+  - Status bar: broadcast state, elapsed session time, signals sent
+  - START/STOP BROADCASTING button
+  - Account group: MT5 account name, server, and balance
+  - Event Log (`QTextEdit`, color-coded HTML output)
+- **Dashboard (Tab 2: SUBSCRIBERS):**
+  - `SubscribersPanel` with subscriber table, live/offline status, copied count, and PnL summary
+- **Dashboard (Tab 3: PERFORMANCE):**
+  - Trading stats from `GET /auth/masters/:id/profile`: total trades, closed trades, win rate, total PnL, average volume, and subscribers
 
 Methods:
 - `build_login_screen()` / `build_dashboard_screen()`: UI layout generation.
+- `show_login()` / `show_dashboard()`: Switch stacked views and load dashboard data.
 - `on_login_submit()`: Extracts text from Qt inputs and triggers `MasterController.login_mt5()`.
-- `on_toggle_broadcast()`: Triggers controller broadcast state and updates button text.
-- `update_ui()`: Thread-safe `@Slot()` that reads `AppState` logs and connection status, updating the widgets safely on the main thread.
+- `on_toggle_broadcast()`: Triggers controller broadcast state and updates the UI.
+- `load_performance_stats()`: Fetches master aggregate stats from the backend.
+- `_update_session_clock()`: QTimer-driven 1s updates for elapsed broadcast time.
+- `update_ui()`: Thread-safe `@Slot()` that reads `AppState`, updates color-coded logs, and refreshes `SubscribersPanel`.
+
+## Master Subscriber System
+
+The master subscriber system lets the Python master desktop app see which subscribed slaves are assigned to the master and whether they are currently online.
+
+Controller behavior:
+- `MasterController.fetch_subscribers()` calls `GET /auth/masters/:id/subscribers` and stores the response in `AppState.subscribers`.
+- `MasterController.connect_cloud()` registers a `subscriber_update` socket listener using `SocketManager.register_handler()`.
+- On `subscriber_update`, the controller updates `AppState.subscriber_online_status[email]`, writes a `[MASTER]` colorama terminal log, appends a UI log entry, and requests a UI refresh.
+
+Socket event:
+- `subscriber_update` is emitted by the backend to the master's room when a subscribed slave registers or disconnects.
+- Payload shape: `{ slaveEmail, online, timestamp }`.
+
+UI behavior:
+- `SubscribersPanel` renders the subscriber list from `AppState.subscribers`.
+- The STATUS column reads `AppState.subscriber_online_status` and displays `● LIVE` or `○ OFFLINE`.
+- The panel includes a manual refresh button and a 20-entry activity log for connect/disconnect changes.
 
 ## `views/qt/slave_window.py`
 
@@ -787,6 +823,7 @@ Backend currently routes by master room; client behavior depends on backend `reg
 
 - `MasterController.login_mt5`
 - `MasterController.connect_cloud`
+- `MasterController.fetch_subscribers`
 - `MasterController.toggle_broadcasting`
 - `SlaveController.login_mt5`
 - `SlaveController.connect_cloud`

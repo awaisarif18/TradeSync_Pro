@@ -138,6 +138,13 @@ The system is distributed across three distinct environments:
     * SymbolMapPanel QWidget (views/qt/symbol_map_panel.py): table view with broker presets
     * Broker preset mappings for Vantage, XM, Exness, IC Markets, Pepperstone
     * Slave dashboard now has 3 tabs: Copy Settings, Symbol Map, Risk Management
+* **Phase 8: Master Subscriber View (COMPLETED)**
+    * GET /auth/masters/:masterId/subscribers endpoint with trade summary
+    * subscriber_update WebSocket event when slave connects/disconnects
+    * master_window.py rebuilt: 3-tab Bloomberg layout (BROADCAST/SUBSCRIBERS/PERFORMANCE)
+    * SubscribersPanel: real-time subscriber table with LIVE/OFFLINE status
+    * Performance tab: master's own aggregate stats from Phase 6 profile endpoint
+    * Session tracking: signals sent count, session elapsed time
 
 ---
 

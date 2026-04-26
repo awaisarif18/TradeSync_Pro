@@ -1,0 +1,35 @@
+---
+description: Python PySide6 client rules
+globs: ["trade-sync-client/**/*.py"]
+alwaysApply: false
+---
+
+# Python Client Rules
+
+## Architecture
+- AppState is the single source of truth for all runtime state
+- Controllers handle logic; Windows handle UI only
+- Never put business logic in window files
+- Never put UI code in controller files
+- Create new files rather than bloating existing ones
+- New widgets go in views/qt/ as standalone QWidget subclasses
+
+## MT5 Adapter Rules
+- Never modify execute_trade() or close_trade() signatures without updating all callers
+- Always pass deviation parameter to execute_trade
+- Always preserve magic=234000, ORDER_TIME_GTC, ORDER_FILLING_IOC
+- Never remove the minimum lot guard (>= 0.01)
+
+## Logging
+- Use colorama: Fore.CYAN for info, Fore.YELLOW for warnings, Fore.RED for blocks/errors
+- All risk-related logs prefixed [RISK]
+- All copy-mode logs prefixed [COPY]
+- All session logs prefixed [SESSION]
+- Also call self.state.add_log() for any message that should appear in the UI log
+
+## UI Theme (Bloomberg Terminal)
+- Background: #0a0a0a, Surface: #1a1a1a, Border: #2a2a2a
+- Accent: #00d4aa (teal), Error/Loss: #ff4444
+- Numbers: Consolas font, Labels: Segoe UI 9pt
+- No gradients, no rounded corners beyond 2px
+- Apply QSS via setStyleSheet() on the main window

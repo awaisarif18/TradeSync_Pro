@@ -1,0 +1,24 @@
+---
+description: Next.js frontend rules  
+globs: ["trade-sync-frontend/**/*.tsx", "trade-sync-frontend/**/*.ts"]
+alwaysApply: false
+---
+
+# Next.js Frontend Rules
+
+## Architecture
+- App Router only — no pages/ directory
+- Redux state shape is fixed: { user: { id, email, fullName, role, subscribedToId }, isAuthenticated }
+- Never change authSlice state shape — it breaks all consumers
+- Service functions go in src/services/api.ts matching existing patterns
+
+## Component Rules  
+- 'use client' required for any component using useState, useEffect, or event handlers
+- Tailwind only for styling — no inline styles, no CSS modules
+- Loading states required on all data-fetching components (skeleton or spinner)
+- Never use alert() — console.error() for errors, toast for user-facing messages
+
+## TypeScript Rules
+- No 'any' on new interfaces or function signatures
+- Export all new interfaces from api.ts
+- Match existing naming: camelCase for variables, PascalCase for components/interfaces

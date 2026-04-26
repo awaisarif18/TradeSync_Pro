@@ -3,6 +3,7 @@ import {
   WebSocketServer,
   SubscribeMessage,
   OnGatewayConnection,
+  OnGatewayDisconnect,
   MessageBody,
   ConnectedSocket,
 } from '@nestjs/websockets';
@@ -14,9 +15,17 @@ import { TradeService } from './trade.service';
 import { User } from '../database/user.entity';
 import { TradeLog } from '../database/tradelog.entity';
 
+type ConnectedClientInfo = {
+  role: 'MASTER' | 'SLAVE';
+  identifier: string;
+  subscribedMasterId?: string;
+};
+
 @WebSocketGateway({ cors: { origin: '*' } })
-export class TradeGateway implements OnGatewayConnection {
+export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer() server: Server;
+
+  private connectedClients = new Map<string, ConnectedClientInfo>();
 
   constructor(
     private readonly tradeService: TradeService,
@@ -41,6 +50,28 @@ export class TradeGateway implements OnGatewayConnection {
   }
 
   handleDisconnect(client: Socket) {
+    const connectedClient = this.connectedClients.get(client.id);
+
+    if (
+      connectedClient?.role === 'SLAVE' &&
+      connectedClient.subscribedMasterId
+    ) {
+      const roomName = `room_master_${connectedClient.subscribedMasterId}`;
+      this.server.to(roomName).emit('subscriber_update', {
+        slaveEmail: connectedClient.identifier,
+        online: false,
+        timestamp: new Date().toISOString(),
+      });
+      this.log('log', 'subscriber_update_offline_emitted', {
+        clientId: client.id,
+        role: connectedClient.role,
+        identifier: connectedClient.identifier,
+        room: roomName,
+      });
+    }
+
+    this.connectedClients.delete(client.id);
+
     this.log('warn', 'client_disconnected', {
       clientId: client.id,
       health_state: 'DISCONNECTED',
@@ -63,6 +94,11 @@ export class TradeGateway implements OnGatewayConnection {
         const roomName = `room_master_${user.id}`;
         client.join(roomName); // Master creates their broadcast room
         client.data.user = user; // Save user context to the socket
+        this.connectedClients.set(client.id, {
+          role: 'MASTER',
+          identifier: payload.identifier,
+          subscribedMasterId: user.id,
+        });
         this.log('log', 'register_node_master_joined', {
           trace_id: traceId,
           role: payload.role,
@@ -76,9 +112,27 @@ export class TradeGateway implements OnGatewayConnection {
         where: { email: payload.identifier, role: 'SLAVE' },
       });
       if (user && user.subscribedToId) {
+        const subscribedMasterId = user.subscribedToId;
         const roomName = `room_master_${user.subscribedToId}`;
         client.join(roomName); // Slave silently joins the Master's room
+        this.connectedClients.set(client.id, {
+          role: 'SLAVE',
+          identifier: payload.identifier,
+          subscribedMasterId,
+        });
+        this.server.to(roomName).emit('subscriber_update', {
+          slaveEmail: payload.identifier,
+          online: true,
+          timestamp: new Date().toISOString(),
+        });
         this.log('log', 'register_node_slave_joined', {
+          trace_id: traceId,
+          role: payload.role,
+          identifier: payload.identifier,
+          slaveId: user.id,
+          room: roomName,
+        });
+        this.log('log', 'subscriber_update_online_emitted', {
           trace_id: traceId,
           role: payload.role,
           identifier: payload.identifier,

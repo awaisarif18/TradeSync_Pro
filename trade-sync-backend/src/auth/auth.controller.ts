@@ -75,6 +75,11 @@ export class AuthController {
     return await this.authService.getMasterProfile(id);
   }
 
+  @Get('masters/:masterId/subscribers')
+  async getMasterSubscribers(@Param('masterId') masterId: string) {
+    return await this.authService.getMasterSubscribers(masterId);
+  }
+
   @Patch('masters/:id/profile')
   async updateMasterProfile(
     @Param('id') id: string,
