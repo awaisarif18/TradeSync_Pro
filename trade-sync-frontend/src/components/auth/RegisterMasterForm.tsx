@@ -43,11 +43,17 @@ export default function RegisterMasterForm() {
       onSubmit={handleSubmit}
       className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500"
     >
-      <div className="p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg mb-6">
-        <h3 className="text-blue-400 font-medium text-sm mb-1">
+      <div
+        className="mb-6 rounded-lg border p-4"
+        style={{
+          background: "var(--color-mint-soft)",
+          borderColor: "var(--color-mint)",
+        }}
+      >
+        <h3 className="text-sm font-medium" style={{ color: "var(--color-mint)" }}>
           Provider Account
         </h3>
-        <p className="text-blue-200/60 text-xs">
+        <p className="text-xs" style={{ color: "var(--color-text-2)" }}>
           You will broadcast trades. Admin can issue your license key after
           account approval.
         </p>

@@ -9,7 +9,7 @@ interface CardProps {
 
 export default function Card({ title, value, icon: Icon, color }: CardProps) {
   const colors = {
-    blue: "text-blue-500 bg-blue-500/10 border-blue-500/20",
+    blue: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
     emerald: "text-emerald-500 bg-emerald-500/10 border-emerald-500/20",
     purple: "text-purple-500 bg-purple-500/10 border-purple-500/20",
     yellow: "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",

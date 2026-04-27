@@ -428,7 +428,9 @@ function AdminStubs() {
 }
 
 export default function AdminDashboard() {
-  const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
+  const { isAuthenticated, user, rehydratedFromStorage } = useSelector(
+    (state: RootState) => state.auth,
+  );
   const router = useRouter();
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -439,6 +441,10 @@ export default function AdminDashboard() {
   const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
 
   useEffect(() => {
+    if (!rehydratedFromStorage) {
+      return;
+    }
+
     if (!isAuthenticated) {
       router.push("/login");
       return;
@@ -447,7 +453,7 @@ export default function AdminDashboard() {
     if (user?.role !== "ADMIN") {
       router.push("/dashboard");
     }
-  }, [isAuthenticated, user?.role, router]);
+  }, [rehydratedFromStorage, isAuthenticated, user?.role, router]);
 
   const fetchUsers = useCallback(async () => {
     setIsLoading(true);
@@ -464,10 +470,10 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && user?.role === "ADMIN") {
+    if (rehydratedFromStorage && isAuthenticated && user?.role === "ADMIN") {
       fetchUsers();
     }
-  }, [fetchUsers, isAuthenticated, user?.role]);
+  }, [fetchUsers, rehydratedFromStorage, isAuthenticated, user?.role]);
 
   const counts = useMemo<UserCounts>(
     () => ({
@@ -527,6 +533,7 @@ export default function AdminDashboard() {
     }
   };
 
+  if (!rehydratedFromStorage) return null;
   if (!isAuthenticated || user?.role !== "ADMIN") return null;
 
   return (

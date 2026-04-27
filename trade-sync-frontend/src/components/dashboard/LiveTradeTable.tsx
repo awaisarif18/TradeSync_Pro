@@ -15,7 +15,7 @@ export default function LiveTradeTable() {
         <Clock className="mx-auto mb-3 opacity-50" size={32} />
         <p>Waiting for live market signals...</p>
         <p className="text-xs mt-2 opacity-60">
-          Place a trade on the Master MT5 to see it here.
+          Place a trade on the Provider MT5 terminal to see it here.
         </p>
       </div>
     );
@@ -42,7 +42,7 @@ export default function LiveTradeTable() {
             >
               <td className="px-6 py-4">
                 {trade.event === "OPEN" ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-1 text-xs font-medium text-blue-400">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-mint-soft)] px-2 py-1 text-xs font-medium text-[var(--color-mint)]">
                     OPEN
                   </span>
                 ) : (

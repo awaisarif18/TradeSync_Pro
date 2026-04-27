@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import PnLChart from "../../../components/dashboard/PnLChart";
-import TradeHistoryModal from "../../../components/dashboard/TradeHistoryModal";
+import TradeHistoryModal from "../../../components/master/TradeHistoryModal";
 import InstrumentsCard from "../../../components/marketplace/InstrumentsCard";
 import PerformanceBigCard from "../../../components/marketplace/PerformanceBigCard";
 import ProviderHeroBand from "../../../components/marketplace/ProviderHeroBand";
@@ -21,7 +21,7 @@ import {
   type TradeHistoryEntry,
 } from "../../../services/api";
 
-type DetailTab = "overview" | "stats" | "reviews";
+type DetailTab = "overview" | "history" | "stats" | "reviews";
 
 function normalizeRisk(riskLevel: string | null): {
   label: string;
@@ -221,7 +221,10 @@ export default function ProviderDetailPage() {
             ["stats", "Stats"],
             ["reviews", "Reviews"],
           ].map(([value, label]) => {
-            const active = activeTab === value;
+            const active =
+              value === "history"
+                ? activeTab === "history" || isHistoryModalOpen
+                : activeTab === value;
             return (
               <span
                 key={value}
@@ -229,6 +232,7 @@ export default function ProviderDetailPage() {
                 tabIndex={0}
                 onClick={() => {
                   if (value === "history") {
+                    setActiveTab("history");
                     setIsHistoryModalOpen(true);
                     return;
                   }
@@ -237,8 +241,12 @@ export default function ProviderDetailPage() {
                 }}
                 onKeyDown={(event) => {
                   if (event.key === "Enter" || event.key === " ") {
-                    if (value === "history") setIsHistoryModalOpen(true);
-                    else setActiveTab(value as DetailTab);
+                    if (value === "history") {
+                      setActiveTab("history");
+                      setIsHistoryModalOpen(true);
+                    } else {
+                      setActiveTab(value as DetailTab);
+                    }
                   }
                 }}
                 style={{
@@ -257,7 +265,7 @@ export default function ProviderDetailPage() {
         </div>
       </div>
 
-      {activeTab === "overview" ? (
+      {activeTab === "overview" || activeTab === "history" ? (
         <div
           style={{
             maxWidth: 1240,
@@ -380,7 +388,9 @@ export default function ProviderDetailPage() {
 
       <TradeHistoryModal
         isOpen={isHistoryModalOpen}
-        onClose={() => setIsHistoryModalOpen(false)}
+        onClose={() => {
+          setIsHistoryModalOpen(false);
+        }}
         history={history}
         loading={false}
         masterName={profile.fullName}

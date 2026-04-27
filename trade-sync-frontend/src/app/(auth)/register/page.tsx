@@ -4,12 +4,20 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
-import EquityCurve from "../../components/charts/EquityCurve";
-import TraderCard, { type TraderCardData } from "../../components/marketplace/TraderCard";
-import { Button, Card, CardBody, Input, Logo, Pill, SectionEyebrow } from "../../components/ui";
-import { authService } from "../../services/api";
+import EquityCurve from "../../../components/charts/EquityCurve";
+import TraderCard, { type TraderCardData } from "../../../components/marketplace/TraderCard";
+import { Button, Card, CardBody, Input, Logo, Pill, SectionEyebrow } from "../../../components/ui";
+import { authService } from "../../../services/api";
 
 type RegisterRole = "MASTER" | "SLAVE";
+
+type RegisterFieldErrors = {
+  fullName?: string;
+  email?: string;
+  password?: string;
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const providerPreview: TraderCardData = {
   id: "future-provider",
@@ -37,17 +45,52 @@ function authErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function validateRegisterForm(formData: {
+  fullName: string;
+  email: string;
+  password: string;
+}): RegisterFieldErrors {
+  const errors: RegisterFieldErrors = {};
+  const fullName = formData.fullName.trim();
+  const email = formData.email.trim();
+
+  if (!fullName) {
+    errors.fullName = "Full name is required";
+  }
+
+  if (!email) {
+    errors.email = "Email is required";
+  } else if (!EMAIL_RE.test(email)) {
+    errors.email = "Enter a valid email address";
+  }
+
+  if (!formData.password) {
+    errors.password = "Password is required";
+  } else if (formData.password.length < 5) {
+    errors.password = "Password must be at least 5 characters";
+  }
+
+  return errors;
+}
+
 export default function RegisterPage() {
   const router = useRouter();
   const [role, setRole] = useState<RegisterRole>("SLAVE");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [fieldError, setFieldError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<RegisterFieldErrors>({});
+  const [touched, setTouched] = useState<Record<keyof RegisterFieldErrors, boolean>>({
+    fullName: false,
+    email: false,
+    password: false,
+  });
   const [formData, setFormData] = useState({
     fullName: "",
     email: "",
     password: "",
   });
+  const validationErrors = validateRegisterForm(formData);
+  const isFormValid = Object.keys(validationErrors).length === 0;
 
   const isProvider = role === "MASTER";
   const roleColor = isProvider ? "var(--color-mint)" : "var(--color-violet)";
@@ -55,13 +98,20 @@ export default function RegisterPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setTouched({ fullName: true, email: true, password: true });
+    setFieldErrors(validationErrors);
+
+    if (!isFormValid) {
+      return;
+    }
+
     setIsLoading(true);
-    setFieldError("");
+    setFieldErrors({});
 
     try {
       await authService.register({
-        fullName: formData.fullName,
-        email: formData.email,
+        fullName: formData.fullName.trim(),
+        email: formData.email.trim(),
         password: formData.password,
         role,
       });
@@ -71,7 +121,7 @@ export default function RegisterPage() {
     } catch (error: unknown) {
       console.error("Registration Error:", error);
       const message = authErrorMessage(error, "Registration failed");
-      setFieldError(message);
+      setFieldErrors({ email: message });
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -163,8 +213,12 @@ export default function RegisterPage() {
               label="Full Name"
               placeholder={role === "MASTER" ? "John Doe" : "Jane Smith"}
               value={formData.fullName}
-              onChange={(event) => setFormData({ ...formData, fullName: event.target.value })}
-              error={fieldError}
+              onBlur={() => setTouched((current) => ({ ...current, fullName: true }))}
+              onChange={(event) => {
+                setFormData({ ...formData, fullName: event.target.value });
+                setFieldErrors((current) => ({ ...current, fullName: undefined }));
+              }}
+              error={fieldErrors.fullName ?? (touched.fullName ? validationErrors.fullName : undefined)}
               required
             />
             <Input
@@ -172,8 +226,12 @@ export default function RegisterPage() {
               type="email"
               placeholder="you@firm.com"
               value={formData.email}
-              onChange={(event) => setFormData({ ...formData, email: event.target.value })}
-              error={fieldError}
+              onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+              onChange={(event) => {
+                setFormData({ ...formData, email: event.target.value });
+                setFieldErrors((current) => ({ ...current, email: undefined }));
+              }}
+              error={fieldErrors.email ?? (touched.email ? validationErrors.email : undefined)}
               required
             />
             <Input
@@ -181,7 +239,11 @@ export default function RegisterPage() {
               type={showPassword ? "text" : "password"}
               placeholder="••••••••"
               value={formData.password}
-              onChange={(event) => setFormData({ ...formData, password: event.target.value })}
+              onBlur={() => setTouched((current) => ({ ...current, password: true }))}
+              onChange={(event) => {
+                setFormData({ ...formData, password: event.target.value });
+                setFieldErrors((current) => ({ ...current, password: undefined }));
+              }}
               rightIcon={
                 <span
                   role="button"
@@ -195,10 +257,17 @@ export default function RegisterPage() {
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </span>
               }
-              error={fieldError}
+              error={fieldErrors.password ?? (touched.password ? validationErrors.password : undefined)}
               required
             />
-            <Button type="submit" variant="primary" fullWidth loading={isLoading} rightIcon={<ArrowRight size={16} />}>
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              loading={isLoading}
+              disabled={!isFormValid || isLoading}
+              rightIcon={<ArrowRight size={16} />}
+            >
               {role === "MASTER" ? "Create Provider account" : "Create Copier account"}
             </Button>
           </form>

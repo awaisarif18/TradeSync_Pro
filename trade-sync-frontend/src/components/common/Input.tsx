@@ -13,7 +13,7 @@ export default function Input({ label, className = "", ...props }: InputProps) {
         </label>
       )}
       <input
-        className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200 ${className}`}
+        className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/80 focus:border-transparent transition duration-200 ${className}`}
         {...props}
       />
     </div>

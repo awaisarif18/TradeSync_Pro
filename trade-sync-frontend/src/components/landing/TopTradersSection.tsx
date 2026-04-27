@@ -14,8 +14,8 @@ import {
 import { TopMaster, profileService } from "../../services/api";
 
 const avatarGradients = [
-  "from-cyan-500 to-blue-600",
   "from-emerald-500 to-teal-600",
+  "from-lime-500 to-green-600",
   "from-amber-500 to-orange-600",
   "from-pink-500 to-rose-600",
   "from-violet-500 to-indigo-600",

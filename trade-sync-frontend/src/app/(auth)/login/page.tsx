@@ -6,11 +6,11 @@ import { useState, type FormEvent } from "react";
 import { useDispatch } from "react-redux";
 import { toast } from "sonner";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
-import EquityCurve from "../../components/charts/EquityCurve";
-import TradeRow, { type Trade } from "../../components/feed/TradeRow";
-import { Avatar, Button, Card, CardBody, Input, Logo, Pill, StatusPill } from "../../components/ui";
-import { loginSuccess } from "../../redux/slices/authSlice";
-import { authService } from "../../services/api";
+import EquityCurve from "../../../components/charts/EquityCurve";
+import TradeRow, { type Trade } from "../../../components/feed/TradeRow";
+import { Avatar, Button, Card, CardBody, Input, Logo, Pill, StatusPill } from "../../../components/ui";
+import { loginSuccess } from "../../../redux/slices/authSlice";
+import { authService } from "../../../services/api";
 
 type AuthUser = {
   id: string;
@@ -20,6 +20,13 @@ type AuthUser = {
   licenseKey?: string | null;
   subscribedToId?: string | null;
 };
+
+type LoginFieldErrors = {
+  email?: string;
+  password?: string;
+};
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const railTrades: Trade[] = [
   { time: "14:22:08", side: "BUY", sym: "XAUUSD", who: "Sasha Ng", qty: "0.50", px: "2,418.40", pnl: 0.42 },
@@ -37,29 +44,61 @@ function authErrorMessage(error: unknown, fallback: string): string {
   return fallback;
 }
 
+function validateLoginForm(formData: { email: string; password: string }): LoginFieldErrors {
+  const errors: LoginFieldErrors = {};
+  const email = formData.email.trim();
+
+  if (!email) {
+    errors.email = "Email is required";
+  } else if (!EMAIL_RE.test(email)) {
+    errors.email = "Enter a valid email address";
+  }
+
+  if (!formData.password) {
+    errors.password = "Password is required";
+  } else if (formData.password.length < 5) {
+    errors.password = "Password must be at least 5 characters";
+  }
+
+  return errors;
+}
+
 export default function LoginPage() {
   const dispatch = useDispatch();
   const router = useRouter();
   const [activeRole, setActiveRole] = useState<"copier" | "provider">("copier");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [fieldError, setFieldError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
+  const [touched, setTouched] = useState<Record<keyof LoginFieldErrors, boolean>>({
+    email: false,
+    password: false,
+  });
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const validationErrors = validateLoginForm(formData);
+  const isFormValid = Object.keys(validationErrors).length === 0;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setTouched({ email: true, password: true });
+    setFieldErrors(validationErrors);
+
+    if (!isFormValid) {
+      return;
+    }
+
     setIsLoading(true);
-    setFieldError("");
+    setFieldErrors({});
 
     try {
-      const user = (await authService.login(formData.email, formData.password)) as AuthUser;
+      const user = (await authService.login(formData.email.trim(), formData.password)) as AuthUser;
       dispatch(loginSuccess(user));
       toast.success(`Welcome back${user.fullName ? `, ${user.fullName}` : ""}`);
       router.push("/dashboard");
     } catch (error: unknown) {
       console.error("Login Failed:", error);
       const message = authErrorMessage(error, "Invalid credentials");
-      setFieldError(message);
+      setFieldErrors({ password: message });
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -149,8 +188,12 @@ export default function LoginPage() {
               type="email"
               placeholder="you@firm.com"
               value={formData.email}
-              onChange={(event) => setFormData({ ...formData, email: event.target.value })}
-              error={fieldError}
+              onBlur={() => setTouched((current) => ({ ...current, email: true }))}
+              onChange={(event) => {
+                setFormData({ ...formData, email: event.target.value });
+                setFieldErrors((current) => ({ ...current, email: undefined }));
+              }}
+              error={fieldErrors.email ?? (touched.email ? validationErrors.email : undefined)}
               required
             />
             <div>
@@ -164,7 +207,11 @@ export default function LoginPage() {
                 type={showPassword ? "text" : "password"}
                 placeholder="••••••••"
                 value={formData.password}
-                onChange={(event) => setFormData({ ...formData, password: event.target.value })}
+                onBlur={() => setTouched((current) => ({ ...current, password: true }))}
+                onChange={(event) => {
+                  setFormData({ ...formData, password: event.target.value });
+                  setFieldErrors((current) => ({ ...current, password: undefined }));
+                }}
                 rightIcon={
                   <span
                     role="button"
@@ -178,7 +225,7 @@ export default function LoginPage() {
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </span>
                 }
-                error={fieldError}
+                error={fieldErrors.password ?? (touched.password ? validationErrors.password : undefined)}
                 required
               />
             </div>
@@ -186,7 +233,14 @@ export default function LoginPage() {
               <input type="checkbox" defaultChecked style={{ accentColor: "var(--color-mint)" }} />
               Keep me signed in on this device
             </label>
-            <Button type="submit" variant="primary" fullWidth loading={isLoading} rightIcon={<ArrowRight size={16} />}>
+            <Button
+              type="submit"
+              variant="primary"
+              fullWidth
+              loading={isLoading}
+              disabled={!isFormValid || isLoading}
+              rightIcon={<ArrowRight size={16} />}
+            >
               Sign in
             </Button>
           </form>

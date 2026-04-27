@@ -51,10 +51,10 @@ Manual smoke expectation (frontend-facing behavior):
 Primary frontend responsibilities:
 
 1. Public landing, traders marketplace, and auth pages
-2. Login + register workflows (Master/Slave)
+2. Login + register workflows (Provider/Copier)
 3. Role-gated dashboards (`MASTER`, `SLAVE`, `ADMIN`)
 4. Admin user/license/status management UI
-5. Slave marketplace subscription management
+5. Copier marketplace subscription management
 6. Realtime trade feed display via WebSocket
 
 ---
@@ -82,15 +82,20 @@ trade-sync-frontend/
 	├─ app/
 	│  ├─ globals.css                  # Global CSS + Tailwind theme tokens
 	│  ├─ layout.tsx                   # Root app shell: Provider + Navbar + Footer
+	│  ├─ not-found.tsx                # Token-based 404 page
+	│  ├─ error.tsx                    # Token-based route error boundary
+	│  ├─ global-error.tsx             # Root error boundary (imports globals for tokens)
 	│  ├─ page.tsx                     # Marketing landing page
+	│  ├─ (auth)/
+	│  │  ├─ layout.tsx                # Lightweight auth route-group layout
+	│  │  ├─ login/
+	│  │  │  └─ page.tsx              # Split-screen login (`/login`)
+	│  │  └─ register/
+	│  │     └─ page.tsx              # Split-screen registration (`/register`)
 	│  ├─ traders/
 	│  │  ├─ page.tsx                  # Provider marketplace grid with risk filter
 	│  │  └─ [id]/
 	│  │     └─ page.tsx               # Public provider detail page
-	│  ├─ login/
-	│  │  └─ page.tsx                  # Split-screen login page with Sonner feedback
-	│  ├─ register/
-	│  │  └─ page.tsx                  # Split-screen Provider/Copier registration page
 	│  ├─ dashboard/
 	│  │  └─ page.tsx                  # Auth gate + role-based dashboard switch
 	│  └─ admin/
@@ -133,6 +138,8 @@ trade-sync-frontend/
 	│  │  └─ RegisterSlaveForm.tsx
 	│  ├─ landing/
 	│  │  └─ TopTradersSection.tsx     # Public landing-page trader showcase (Phase 7)
+	│  ├─ master/
+	│  │  └─ TradeHistoryModal.tsx     # Re-export of dashboard modal (canonical import path)
 	│  └─ dashboard/
 	│     ├─ ProviderDashboard.tsx     # Provider console with overview, profile setup, and empty states
 	│     ├─ MasterProfileSetup.tsx   # Deprecated standalone master identity form retained for older imports
@@ -164,13 +171,13 @@ trade-sync-frontend/
 
 Global app shell (`src/app/layout.tsx`) wraps all routes with:
 
-1. `ReduxProvider` (global Redux store context)
+1. `ReduxProvider` (global Redux store context + auth hydration)
 2. `Navbar` (always visible)
 3. Central main container (`<main>`)
 4. `Footer` (always visible)
 5. `Toaster` from `sonner` for dark top-right toast notifications
 
-Admin routes (`/admin/*`) have a nested layout (`src/app/admin/layout.tsx`) that adds horizontal tab navigation above the content region.
+Admin routes (`/admin/*`) have a nested layout (`src/app/admin/layout.tsx`) that keeps admin content full-width while the page owns the tab UI.
 
 ### Component Execution Model
 
@@ -217,25 +224,28 @@ Key client components:
 - For authenticated `SLAVE` users, copy action calls `PATCH /auth/users/:slaveId/subscribe` with `{ masterId }`, updates Redux via `loginSuccess`, shows a Sonner toast, and redirects to `/dashboard`
 - `MASTER` users receive a Sonner error if they try to copy a provider; `ADMIN` users do not see the copy button
 
-## `/login` — Login page (`src/app/login/page.tsx`)
+## `/login` — Login page (`src/app/(auth)/login/page.tsx`)
 
 - Client split-screen auth page with dark token-based inputs and a decorative right rail
 - Calls `authService.login(email, password)` and dispatches `loginSuccess(user)` on success
 - Redirects to `/dashboard` after login
 - Uses `toast.success` / `toast.error` from Sonner instead of `alert()`
 - Includes decorative role tabs only; login remains role-agnostic and uses the backend response role
+- Validates required fields, email format, and password length inline before calling `POST /auth/login`
 
-## `/register` — Registration page (`src/app/register/page.tsx`)
+## `/register` — Registration page (`src/app/(auth)/register/page.tsx`)
 
 - Client split-screen registration page with a role toggle between Provider and Copier
 - UI labels are Provider/Copier, but the request payload preserves exact backend role values: `MASTER` or `SLAVE`
 - Calls `authService.register({ fullName, email, password, role })`
 - Redirects to `/login` after successful registration
 - Uses `toast.success` / `toast.error` from Sonner instead of `alert()`
+- Validates full name, email format, and password length inline before calling `POST /auth/register`
 
 ## `/dashboard` — Role-gated dashboard (`src/app/dashboard/page.tsx`)
 
-- Reads Redux auth state (`isAuthenticated`, `user`)
+- Reads Redux auth state (`isAuthenticated`, `user`, `rehydratedFromStorage`)
+- Waits for `rehydratedFromStorage` before running auth redirects so localStorage sessions are not dropped on first paint
 - `useEffect` redirect logic:
   1. not authenticated → `router.push('/login')`
   2. authenticated + role ADMIN → `router.push('/admin')`
@@ -247,6 +257,7 @@ Key client components:
 ## `/admin` — Admin panel (`src/app/admin/page.tsx`)
 
 - Fetches users via `adminService.getUsers()` on mount
+- Same `rehydratedFromStorage` wait as the dashboard: avoids redirecting admins or flashing login before `hydrateAuth` completes
 - Guards the page with Redux auth state and redirects non-admin users away
 - Supports client-side role filter chips (`ALL`, `MASTER`, `SLAVE`, `ADMIN`) and search across full name, email, and license key
 - Shows page-level admin tabs: `Users` renders the table, while `Nodes`, `Audit`, and `Settings` render coming-soon stubs
@@ -294,6 +305,7 @@ Auth state shape:
 	 subscribedToId?: string | null;
   } | null;
   isAuthenticated: boolean;
+  rehydratedFromStorage: boolean;
 }
 ```
 
@@ -302,19 +314,29 @@ Reducers:
 1. `loginSuccess(payload)`
 	- sets `state.user = payload`
 	- sets `state.isAuthenticated = true`
+	- sets `state.rehydratedFromStorage = true`
+	- persists the user to `localStorage` key `tsp_user`
 
 2. `logout()`
 	- clears user
 	- sets `isAuthenticated = false`
+	- sets `rehydratedFromStorage = true`
+	- removes `tsp_user` from `localStorage`
+
+3. `hydrateAuth()`
+	- reads `tsp_user` from `localStorage`
+	- restores `state.user` and `state.isAuthenticated`
+	- sets `state.rehydratedFromStorage = true`
+	- removes invalid stored data if parsing fails
 
 ### Store provider wiring
 
 - `src/components/layout/ReduxProvider.tsx` wraps app tree in `<Provider store={store}>`.
+- On mount, `ReduxProvider` dispatches `hydrateAuth()` inside `useLayoutEffect` so hydration runs before paint and route guards do not redirect away from a restored session.
 
 ### Persistence note
 
-- No persistence layer (localStorage/session) exists.
-- Full page reload resets auth state unless new logic is added.
+- Auth state persists the backend login user under `localStorage` key `tsp_user`. No `redux-persist` package and no JWT/session token layer.
 
 ---
 
@@ -376,6 +398,7 @@ Hooks used:
 3. `dispatch(loginSuccess(user))`
 4. redirect to `/dashboard`
 5. show Sonner toast on failure
+6. client-side validation blocks invalid email/password before the request
 
 ## `RegisterMasterForm`
 
@@ -393,6 +416,7 @@ The active `/register` route now owns the split-screen Provider/Copier registrat
 ```
 
 On success: Sonner toast + redirect `/login`.
+Client-side validation blocks missing name/email/password, invalid email format, and passwords shorter than 5 characters before the request.
 
 ## `RegisterSlaveForm`
 
@@ -410,6 +434,7 @@ The active `/register` route uses Copier as the UI label, but the backend role v
 ```
 
 On success: Sonner toast + redirect `/login`.
+Client-side validation blocks missing name/email/password, invalid email format, and passwords shorter than 5 characters before the request.
 
 ---
 
@@ -623,6 +648,7 @@ From `package.json` / lockfile:
 	- imports `ReduxProvider`, `Navbar`, `Footer`
 2. `ReduxProvider`
 	- injects `store` from `redux/slices/store.ts`
+	- dispatches `hydrateAuth()` on mount
 3. Auth forms
 	- call service layer in `services/api.ts`
 	- dispatch `loginSuccess` from `authSlice`
@@ -654,8 +680,6 @@ These are present in current source and should be considered before new coding:
 
 2. `Navbar` mobile menu state exists but no mobile link panel is rendered.
 
-3. Auth state has no persistence across hard refresh.
-
 These are not documentation errors; they reflect current code reality.
 
 ---
@@ -682,7 +706,7 @@ From backend architecture:
 If using AI to generate code changes, apply these constraints:
 
 1. Preserve existing route paths and form submission payload contracts.
-2. Keep Redux state shape backward-compatible (`user`, `isAuthenticated`, `subscribedToId`).
+2. Keep Redux state shape backward-compatible (`user`, `isAuthenticated`, `subscribedToId`, and `rehydratedFromStorage` for session hydration).
 3. Do not rename `loginSuccess` reducer without updating all auth forms and marketplace update flow.
 4. If moving API base URL to env vars, keep current default behavior for local dev.
 5. If adding admin pages (`/nodes`, `/audit`, `/settings`), convert the disabled admin tabs into links.
@@ -743,23 +767,52 @@ Phase 6 implementation added the legacy master profile card grid and trade histo
 
 - `CopierDashboard` renders a grid of `TraderCard` components; `MasterProfileCard` remains deprecated for older dashboard callers
 - Each card is independent and can fetch/display its own data
-- Modal state is scoped to the card component level (no global modal state needed)
+- **Phase 8:** trade history is exposed on the public provider detail page (`/traders/[id]`, **Trade history** tab) via `components/master/TradeHistoryModal`; copier dashboard cards do not open the modal
 
 ---
 
 ## 19) Suggested Next Improvements (Non-Breaking)
 
 1. Fix `RootState` import path inconsistencies.
-2. Add auth state persistence (or token-based session model).
-3. Replace alert-based UX with structured toasts/error banners.
-4. Add API request typing instead of broad `any` usage.
-5. Implement future admin tabs for nodes, audit logs, and settings.
-6. Add route guards for `/admin` based on role at page level.
-7. Centralize socket management if multiple realtime widgets are added.
+2. Keep toasts as the only user-facing error surface (no `alert()` in `src/`).
+3. Add API request typing instead of broad `any` usage.
+4. Implement future admin tabs for nodes, audit logs, and settings.
+5. Centralize socket management if multiple realtime widgets are added.
 
 ---
 
-## 20) Canonical Contract Pointer
+## 20) Phase 8: final polish (error UI, auth persistence, trade history)
+
+### App shell and errors
+
+- `src/app/not-found.tsx` — 404, token background, primary/ghost actions
+- `src/app/error.tsx` — route error boundary, `reset()` and home link
+- `src/app/global-error.tsx` — root segment error UI (includes `globals.css` so design tokens load)
+- `src/app/(auth)/layout.tsx` — min-height + dark background for login and register only
+
+### Auth persistence (no `redux-persist`)
+
+- `loginSuccess` / `logout` / `hydrateAuth` in `authSlice` sync `tsp_user` in `localStorage`
+- `ReduxProvider` runs `hydrateAuth` in `useLayoutEffect`
+- Gated pages wait on `rehydratedFromStorage` so hard refresh keeps the session and logged-out users still reach `/login`
+
+### Trade history modal
+
+- Canonical import: `src/components/master/TradeHistoryModal.tsx` (re-exports the dashboard implementation)
+- Primary UX: public provider detail `src/app/traders/[id]/page.tsx` — **Trade history** tab opens the modal; dashboard cards do not open it
+
+### Phase 8 ship checklist
+
+- [ ] Hard refresh while logged in keeps you logged in
+- [ ] Hard refresh on `/dashboard` while logged out redirects to `/login` after hydration
+- [ ] Unknown URL shows `not-found`
+- [ ] Login and register validate email and password length client-side with inline `Input` errors; submit disabled when invalid or loading
+- [ ] No `alert()` in `src/`
+- [ ] All main routes load: `/`, `/login`, `/register`, `/traders`, `/traders/[id]`, `/dashboard`, `/admin`
+
+---
+
+## 21) Canonical contract pointer
 
 For shared backend/frontend/client integration contracts, use:
 

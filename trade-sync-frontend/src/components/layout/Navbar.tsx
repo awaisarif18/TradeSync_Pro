@@ -39,7 +39,10 @@ export default function Navbar() {
         <div className="flex justify-between h-16">
           <div className="flex items-center">
             <Link href="/" className="flex-shrink-0 flex items-center gap-2">
-              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold text-white">
+              <div
+                className="flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold"
+                style={{ background: "var(--color-mint)", color: "#02110b" }}
+              >
                 TSP
               </div>
               <span className="font-bold text-xl tracking-tight text-white">

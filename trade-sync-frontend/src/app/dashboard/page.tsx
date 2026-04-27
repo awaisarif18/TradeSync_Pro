@@ -7,20 +7,25 @@ import ProviderDashboard from "../../components/dashboard/ProviderDashboard";
 import CopierDashboard from "../../components/dashboard/CopierDashboard";
 
 export default function DashboardPage() {
-  const { isAuthenticated, user } = useSelector(
+  const { isAuthenticated, user, rehydratedFromStorage } = useSelector(
     (state: RootState) => state.auth,
   );
   const router = useRouter();
 
   useEffect(() => {
+    if (!rehydratedFromStorage) {
+      return;
+    }
+
     if (!isAuthenticated) {
       router.push("/login");
     } else if (user?.role === "ADMIN") {
       // FIX: Redirect Admin to the Admin Panel immediately
       router.push("/admin");
     }
-  }, [isAuthenticated, user, router]);
+  }, [rehydratedFromStorage, isAuthenticated, user, router]);
 
+  if (!rehydratedFromStorage) return null;
   if (!isAuthenticated || !user) return null;
   if (user.role === "ADMIN") return null; // Prevent flash of content
 

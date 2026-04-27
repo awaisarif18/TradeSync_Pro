@@ -13,7 +13,7 @@ export default function Button({
   ...props
 }: ButtonProps) {
   const variants = {
-    primary: "bg-blue-600 hover:bg-blue-700 text-white",
+    primary: "bg-emerald-500 hover:bg-emerald-400 text-slate-950",
     secondary: "bg-slate-800 hover:bg-slate-700 text-slate-200",
     danger: "bg-red-600 hover:bg-red-700 text-white",
   };

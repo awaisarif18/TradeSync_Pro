@@ -601,7 +601,7 @@ export default function CopierDashboard() {
             {isSubscribed ? "BROWSE OTHER PROVIDERS" : "TOP PROVIDERS THIS MONTH"}
           </SectionEyebrow>
           <h2 className="mt-1 text-[28px] font-semibold tracking-[-0.025em]">
-            {isSubscribed ? "Master Marketplace" : "Trending now"}
+            {isSubscribed ? "Provider Marketplace" : "Trending now"}
           </h2>
         </div>
         {isSubscribed ? (
