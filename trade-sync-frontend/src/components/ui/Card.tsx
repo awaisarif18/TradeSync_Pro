@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '../../lib/cn';
 
 type CardVariant = 'default' | 'role-mint' | 'role-violet' | 'role-danger';
@@ -6,6 +6,7 @@ type CardVariant = 'default' | 'role-mint' | 'role-violet' | 'role-danger';
 type CardProps = {
   variant?: CardVariant;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 };
 
@@ -21,7 +22,7 @@ function borderLeftForVariant(variant: CardVariant): string | undefined {
   return undefined;
 }
 
-export default function Card({ variant = 'default', className, children }: CardProps) {
+export default function Card({ variant = 'default', className, style, children }: CardProps) {
   return (
     <div
       className={cn(className)}
@@ -31,6 +32,7 @@ export default function Card({ variant = 'default', className, children }: CardP
         borderLeft: borderLeftForVariant(variant),
         background: 'var(--color-surface)',
         overflow: 'hidden',
+        ...style,
       }}
     >
       {children}

@@ -1,96 +1,92 @@
-import Link from "next/link";
-import {
-  ArrowRight,
-  Globe,
-  ShieldCheck,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
+import MarketTicker from "../components/feed/MarketTicker";
+import FooterStrip from "../components/marketing/FooterStrip";
+import Hero from "../components/marketing/Hero";
+import HowItWorks from "../components/marketing/HowItWorks";
+import LiveTradeFeedCard from "../components/marketing/LiveTradeFeedCard";
+import ProviderShowcase, { type TraderCardData } from "../components/marketing/ProviderShowcase";
+import { StatusPill } from "../components/ui";
+
+const mockProviders: TraderCardData[] = [
+  {
+    id: "sasha-ng",
+    fullName: "Sasha Ng",
+    handle: "sasha_fx",
+    primaryAsset: "Forex · Gold",
+    riskLevel: "MEDIUM",
+    roi30d: 42.8,
+    winRate: 71,
+    subscriberCount: 1842,
+    isLive: true,
+    tradingPlatform: "Exness",
+    typicalHoldTime: "Hours",
+    strategyDescription: "Scalping",
+    bio: "London-session FX with disciplined gold scalps.",
+  },
+  {
+    id: "marco-aurelio",
+    fullName: "Marco Aurelio",
+    handle: "mrc_btc",
+    primaryAsset: "Crypto",
+    riskLevel: "HIGH",
+    roi30d: 68.1,
+    winRate: 64,
+    subscriberCount: 3217,
+    isLive: true,
+    tradingPlatform: "Vantage",
+    typicalHoldTime: "Days",
+    strategyDescription: "Swing",
+    bio: "BTC swing setups, no leverage games.",
+  },
+  {
+    id: "liu-chen",
+    fullName: "Liu Chen",
+    handle: "liu_macro",
+    primaryAsset: "Futures",
+    riskLevel: "LOW",
+    roi30d: 24.6,
+    winRate: 78,
+    subscriberCount: 5108,
+    isLive: true,
+    tradingPlatform: "IC Markets",
+    typicalHoldTime: "Weeks",
+    strategyDescription: "Macro",
+    bio: "Macro futures only. Patient entries.",
+  },
+];
 
 export default function Home() {
   return (
-    <div className="flex flex-col items-center justify-center space-y-16 pt-12">
-      <div className="text-center space-y-6 max-w-3xl">
-        <h1 className="text-5xl font-extrabold tracking-tight text-white sm:text-6xl">
-          Institutional Grade{" "}
-          <span className="text-blue-500">Copy Trading</span>
-        </h1>
-        <p className="text-lg text-slate-400">
-          Bridge MetaTrader 5 terminals across brokers with sub-millisecond
-          latency.
-        </p>
-        <div className="flex gap-4 justify-center">
-          <Link
-            href="/register"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-semibold flex items-center gap-2 transition"
-          >
-            Get Started <ArrowRight size={20} />
-          </Link>
-          <Link
-            href="/login"
-            className="bg-slate-800 hover:bg-slate-700 text-white px-8 py-3 rounded-lg font-semibold transition"
-          >
-            Login
-          </Link>
+    <div style={{ minHeight: "100%" }}>
+      <Hero />
+      <MarketTicker />
+      {/* TODO: Wire provider count from GET /auth/masters length; traders online and mirrored trades are not exposed by backend yet. */}
+      <div style={{ maxWidth: 1240, margin: "0 auto", padding: "20px 32px 0" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 14,
+            fontSize: 13,
+            color: "var(--color-text-3)",
+            flexWrap: "wrap",
+          }}
+        >
+          <StatusPill status="live" label="1,284 traders online" mono />
+          <span>·</span>
+          <span>
+            <span className="font-mono-tnum">247</span> verified providers
+          </span>
+          <span>·</span>
+          <span>
+            <span className="font-mono-tnum">487</span> trades mirrored today
+          </span>
         </div>
       </div>
-
-      <div className="grid md:grid-cols-3 gap-8 w-full max-w-6xl">
-        <FeatureCard
-          icon={Zap}
-          title="Ultra Low Latency"
-          desc="Direct socket connection ensures trades copy instantly."
-        />
-        <FeatureCard
-          icon={ShieldCheck}
-          title="Risk Guard"
-          desc="Prevent loops with Magic Number filtering."
-        />
-        <FeatureCard
-          icon={Globe}
-          title="Multi-Broker Bridge"
-          desc="Copy from Vantage to XM or any MT5 broker."
-        />
-      </div>
-
-      <section className="w-full max-w-6xl rounded-3xl border border-slate-800 bg-slate-900/70 p-8 shadow-[0_24px_80px_rgba(15,23,42,0.35)]">
-        <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-[0.24em] text-blue-400">
-              Marketplace
-            </p>
-            <h2 className="mt-2 text-2xl font-bold text-white">
-              Ready to find your strategy?
-            </h2>
-          </div>
-          <Link
-            href="/traders"
-            className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition hover:bg-blue-700"
-          >
-            Browse Traders <ArrowRight size={18} />
-          </Link>
-        </div>
-      </section>
-    </div>
-  );
-}
-
-function FeatureCard({
-  icon: Icon,
-  title,
-  desc,
-}: {
-  icon: LucideIcon;
-  title: string;
-  desc: string;
-}) {
-  return (
-    <div className="bg-slate-900 border border-slate-800 p-6 rounded-xl hover:border-blue-500/50 transition duration-300">
-      <div className="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center mb-4 text-blue-500">
-        <Icon size={24} />
-      </div>
-      <h3 className="text-xl font-bold text-white mb-2">{title}</h3>
-      <p className="text-slate-400 leading-relaxed">{desc}</p>
+      <HowItWorks />
+      {/* TODO: Replace with real fetch GET /auth/masters?limit=3 + per-master profile in Phase 5. */}
+      <ProviderShowcase providers={mockProviders} />
+      <LiveTradeFeedCard />
+      <FooterStrip />
     </div>
   );
 }

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDispatch } from "react-redux";
 import { LogIn } from "lucide-react";
+import { toast } from "sonner";
 import Input from "../common/Input";
 import Button from "../common/Button";
 import { loginSuccess } from "../../redux/slices/authSlice";
@@ -27,9 +28,9 @@ export default function LoginForm() {
 
       // 3. Redirect to Dashboard
       router.push("/dashboard");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Login Failed:", error);
-      alert("Login Failed: Please check your email and password.");
+      toast.error("Login failed. Please check your email and password.");
     } finally {
       setIsLoading(false);
     }

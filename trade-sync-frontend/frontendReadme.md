@@ -86,9 +86,9 @@ trade-sync-frontend/
 	│  ├─ traders/
 	│  │  └─ page.tsx                  # Master trader marketplace grid
 	│  ├─ login/
-	│  │  └─ page.tsx                  # Login page wrapper around LoginForm
+	│  │  └─ page.tsx                  # Split-screen login page with Sonner feedback
 	│  ├─ register/
-	│  │  └─ page.tsx                  # Role toggle + register forms
+	│  │  └─ page.tsx                  # Split-screen Provider/Copier registration page
 	│  ├─ dashboard/
 	│  │  └─ page.tsx                  # Auth gate + role-based dashboard switch
 	│  └─ admin/
@@ -101,8 +101,25 @@ trade-sync-frontend/
 	│  │  └─ Card.tsx                  # Metric card used in dashboards
 	│  ├─ layout/
 	│  │  ├─ ReduxProvider.tsx         # App-level Redux Provider wrapper
-	│  │  ├─ Navbar.tsx                # Top nav with role/auth-aware links
+	│  │  ├─ Navbar.tsx                # Legacy top nav retained for reference
 	│  │  └─ Footer.tsx                # Footer bar
+	│  ├─ navigation/
+	│  │  └─ Navbar.tsx                # Token-based top nav with role/auth-aware links
+	│  ├─ charts/
+	│  │  └─ EquityCurve.tsx           # SVG equity curve for cards and marketing previews
+	│  ├─ feed/
+	│  │  ├─ TradeRow.tsx              # Typed live-trade row display
+	│  │  └─ MarketTicker.tsx          # Decorative horizontal market ticker
+	│  ├─ marketplace/
+	│  │  ├─ TraderCard.tsx            # Provider profile card for marketplace/showcase contexts
+	│  │  ├─ TraderCardSkeleton.tsx    # Loading skeleton for provider cards
+	│  │  └─ RiskFilter.tsx            # Risk-level filter pill row
+	│  ├─ marketing/
+	│  │  ├─ Hero.tsx                  # Landing hero and product preview
+	│  │  ├─ HowItWorks.tsx            # Three-card explainer section
+	│  │  ├─ ProviderShowcase.tsx      # Landing provider card grid
+	│  │  ├─ LiveTradeFeedCard.tsx     # Decorative live-trade feed strip
+	│  │  └─ FooterStrip.tsx           # Minimal landing footer strip
 	│  ├─ auth/
 	│  │  ├─ LoginForm.tsx
 	│  │  ├─ RegisterMasterForm.tsx
@@ -167,10 +184,10 @@ Key client components:
 
 ## `/` — Landing (`src/app/page.tsx`)
 
-- Static marketing hero + feature cards
-- Links to `/register` and `/login`
-- CTA link to `/traders`
-- Uses `lucide-react` icons (`ArrowRight`, `ShieldCheck`, `Zap`, `Globe`)
+- Server component landing page using the Phase 2 marketing composites
+- Renders the hero/product preview, market ticker, decorative online status strip, how-it-works section, provider showcase, live feed card, and footer strip
+- Provider showcase currently uses three mock providers; future real wiring should use `GET /auth/masters` plus per-master profile calls
+- Decorative online counts are mock values; only total active providers is currently derivable from existing backend endpoints
 
 ## `/traders` — Master Trader Marketplace (`src/app/traders/page.tsx`)
 
@@ -182,16 +199,19 @@ Key client components:
 
 ## `/login` — Login page (`src/app/login/page.tsx`)
 
-- Renders card-style wrapper + `LoginForm`
-- Link to `/register`
+- Client split-screen auth page with dark token-based inputs and a decorative right rail
+- Calls `authService.login(email, password)` and dispatches `loginSuccess(user)` on success
+- Redirects to `/dashboard` after login
+- Uses `toast.success` / `toast.error` from Sonner instead of `alert()`
+- Includes decorative role tabs only; login remains role-agnostic and uses the backend response role
 
 ## `/register` — Registration page (`src/app/register/page.tsx`)
 
-- Client state: `role` toggle between `MASTER` and `SLAVE`
-- Conditionally renders:
-  - `RegisterMasterForm`
-  - `RegisterSlaveForm`
-- Link to `/login`
+- Client split-screen registration page with a role toggle between Provider and Copier
+- UI labels are Provider/Copier, but the request payload preserves exact backend role values: `MASTER` or `SLAVE`
+- Calls `authService.register({ fullName, email, password, role })`
+- Redirects to `/login` after successful registration
+- Uses `toast.success` / `toast.error` from Sonner instead of `alert()`
 
 ## `/dashboard` — Role-gated dashboard (`src/app/dashboard/page.tsx`)
 
@@ -312,6 +332,8 @@ These endpoints are aligned with the backend behavior documented in `trade-sync-
 
 ## `LoginForm` (`src/components/auth/LoginForm.tsx`)
 
+The active `/login` route now owns the split-screen login UI directly. This legacy form is retained for compatibility if reused elsewhere.
+
 Hooks used:
 
 - `useState` for form + loading
@@ -324,9 +346,11 @@ Hooks used:
 2. call `authService.login(email, password)`
 3. `dispatch(loginSuccess(user))`
 4. redirect to `/dashboard`
-5. show alert on failure
+5. show Sonner toast on failure
 
 ## `RegisterMasterForm`
+
+The active `/register` route now owns the split-screen Provider/Copier registration UI directly. This legacy form is retained for compatibility if reused elsewhere.
 
 `handleSubmit` sends:
 
@@ -339,9 +363,11 @@ Hooks used:
 }
 ```
 
-On success: alert + redirect `/login`.
+On success: Sonner toast + redirect `/login`.
 
 ## `RegisterSlaveForm`
+
+The active `/register` route uses Copier as the UI label, but the backend role value remains `SLAVE`.
 
 `handleSubmit` sends:
 
@@ -354,7 +380,7 @@ On success: alert + redirect `/login`.
 }
 ```
 
-On success: alert + redirect `/login`.
+On success: Sonner toast + redirect `/login`.
 
 ---
 
@@ -443,19 +469,30 @@ Expected trade payload fields consumed:
 
 ## 9) Layout and Navigation Components
 
-## `Navbar` (`src/components/layout/Navbar.tsx`)
+## `Navbar` (`src/components/navigation/Navbar.tsx`)
 
 Dynamic navigation logic based on Redux auth state:
 
-- Show `Login`/`Register` when not authenticated
-- Show `Traders` public marketplace link
-- Show `Dashboard` when authenticated
-- Show `Admin` only if `user.role === 'ADMIN'`
+- Show `Sign in`/`Get started` when not authenticated
+- Show public links `Discover`, `How it works`, `Pricing`, and `Docs` when not authenticated
+- Show role-aware links when authenticated:
+  - `MASTER` sees `Dashboard`
+  - `SLAVE` sees `Discover` and `Dashboard`
+  - `ADMIN` sees `Discover`, `Dashboard`, and `Admin`
+- Show `Admin` actions only if `user.role === 'ADMIN'`
 
 Other details:
 
 - Uses `usePathname` for active link styles
-- Includes mobile menu toggle state (`isMobileOpen`) but currently no rendered mobile dropdown panel
+- Uses the Phase 1 `Logo` and `Button` primitives with Tailwind v4 theme tokens
+- Mobile is currently a compact Logo + primary action fallback; full mobile navigation is deferred
+
+## Composite UI Components
+
+- `EquityCurve` renders the deterministic SVG curve used by cards and marketing previews
+- `TradeRow` and `MarketTicker` provide decorative feed/ticker display without API calls
+- `TraderCard`, `TraderCardSkeleton`, and `RiskFilter` support provider marketplace UI
+- `Hero`, `HowItWorks`, `ProviderShowcase`, `LiveTradeFeedCard`, and `FooterStrip` provide reusable landing-page sections
 
 ## `Footer`
 
@@ -571,8 +608,7 @@ From `package.json` / lockfile:
 
 These are present in current source and should be considered before new coding:
 
-1. `RootState` import path mismatches in some files:
-	- `Navbar.tsx` imports from `@/redux/store` (path does not exist in current tree)
+1. `RootState` import path mismatch remains in one dashboard file:
 	- `SlaveDashboard.tsx` imports from `../../redux/store` (path does not exist in current tree)
 	- Actual file is `src/redux/slices/store.ts`
 

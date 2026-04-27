@@ -17,6 +17,7 @@ const initialState: AuthState = {
   isAuthenticated: false,
 };
 
+// TODO: persist to localStorage with redux-persist or similar. Auth is currently lost on F5.
 const authSlice = createSlice({
   name: "auth",
   initialState,

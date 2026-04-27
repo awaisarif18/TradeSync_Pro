@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import Input from "../common/Input";
 import Button from "../common/Button";
 import { authService } from "../../services/api";
@@ -27,11 +28,11 @@ export default function RegisterMasterForm() {
         role: "MASTER",
       });
 
-      alert("Master Account Created Successfully! Please Login.");
+      toast.success("Provider account created. Please sign in.");
       router.push("/login");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Registration Error:", error);
-      alert("Registration Failed. Email might already be in use.");
+      toast.error("Registration failed. Email might already be in use.");
     } finally {
       setIsLoading(false);
     }
@@ -44,7 +45,7 @@ export default function RegisterMasterForm() {
     >
       <div className="p-4 bg-blue-900/20 border border-blue-800/50 rounded-lg mb-6">
         <h3 className="text-blue-400 font-medium text-sm mb-1">
-          Master Account
+          Provider Account
         </h3>
         <p className="text-blue-200/60 text-xs">
           You will broadcast trades. Admin can issue your license key after
@@ -77,7 +78,7 @@ export default function RegisterMasterForm() {
       />
 
       <Button variant="primary" type="submit" isLoading={isLoading}>
-        Create Master Account
+        Create Provider Account
       </Button>
     </form>
   );

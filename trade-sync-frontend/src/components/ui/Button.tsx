@@ -17,6 +17,8 @@ type ButtonProps = {
   disabled?: boolean;
   children: ReactNode;
   className?: string;
+  style?: CSSProperties;
+  title?: string;
   onClick?: () => void;
   type?: 'button' | 'submit' | 'reset';
 };
@@ -81,6 +83,8 @@ export default function Button({
   disabled = false,
   children,
   className,
+  style,
+  title,
   onClick,
   type = 'button',
 }: ButtonProps) {
@@ -92,6 +96,7 @@ export default function Button({
   return (
     <button
       type={type}
+      title={title}
       disabled={isDisabled}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
@@ -118,6 +123,7 @@ export default function Button({
         opacity: isDisabled ? 0.5 : hovered && variant === 'primary' ? 0.9 : 1,
         background: hovered && !isDisabled && isGhost ? ghostHoverBackground(variant) : VARIANT_STYLES[variant].background,
         transform: active && !isDisabled ? 'translateY(1px)' : undefined,
+        ...style,
       }}
     >
       {loading ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : leftIcon}

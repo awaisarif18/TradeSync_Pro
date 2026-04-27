@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import Input from "../common/Input";
 import Button from "../common/Button";
 import { authService } from "../../services/api";
@@ -27,11 +28,11 @@ export default function RegisterSlaveForm() {
         role: "SLAVE",
       });
 
-      alert("Slave Account Created Successfully! Please Login.");
+      toast.success("Copier account created. Please sign in.");
       router.push("/login");
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Registration Error:", error);
-      alert("Registration Failed. Email might already be in use.");
+      toast.error("Registration failed. Email might already be in use.");
     } finally {
       setIsLoading(false);
     }
@@ -44,10 +45,10 @@ export default function RegisterSlaveForm() {
     >
       <div className="p-4 bg-emerald-900/20 border border-emerald-800/50 rounded-lg mb-6">
         <h3 className="text-emerald-400 font-medium text-sm mb-1">
-          Slave Account
+          Copier Account
         </h3>
         <p className="text-emerald-200/60 text-xs">
-          You will copy trades. You need to know which Master ID you want to
+          You will copy trades. You need to know which Provider ID you want to
           subscribe to.
         </p>
       </div>
@@ -82,7 +83,7 @@ export default function RegisterSlaveForm() {
         isLoading={isLoading}
         className="bg-emerald-600 hover:bg-emerald-700"
       >
-        Create Slave Account
+        Create Copier Account
       </Button>
     </form>
   );
