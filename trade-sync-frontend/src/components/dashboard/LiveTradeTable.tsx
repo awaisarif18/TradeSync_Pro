@@ -1,42 +1,13 @@
 "use client";
-import { useEffect, useState } from "react";
-import { io } from "socket.io-client";
 import { ArrowUpCircle, ArrowDownCircle, Clock } from "lucide-react";
+import { useIncomingSignals } from "../../hooks/useIncomingSignals";
 
-interface Trade {
-  event: string;
-  symbol: string;
-  action: string;
-  volume: number;
-  master_ticket: number;
-  time: string;
-}
-
+/**
+ * @deprecated Phase 5 replaced the rendered dashboard feed with IncomingSignalsTable.
+ * Keep this wrapper available for older callers while sharing the same socket hook.
+ */
 export default function LiveTradeTable() {
-  const [trades, setTrades] = useState<Trade[]>([]);
-
-  useEffect(() => {
-    // 1. Connect to the NestJS Socket
-    const socket = io("http://localhost:3000");
-
-    socket.on("connect", () => {
-      console.log("Web Dashboard Connected to Socket");
-    });
-
-    // 2. Listen for Trades (Just like the Python Slave!)
-    socket.on("trade_execution", (data) => {
-      const newTrade = {
-        ...data,
-        time: new Date().toLocaleTimeString(),
-      };
-      // Add new trade to top of list, keep max 10
-      setTrades((prev) => [newTrade, ...prev].slice(0, 10));
-    });
-
-    return () => {
-      socket.disconnect();
-    };
-  }, []);
+  const { trades } = useIncomingSignals();
 
   if (trades.length === 0) {
     return (

@@ -3,6 +3,7 @@ import { cn } from '../../lib/cn';
 
 type EmptyStateProps = {
   icon?: ReactNode;
+  iconFrame?: boolean;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -11,6 +12,7 @@ type EmptyStateProps = {
 
 export default function EmptyState({
   icon,
+  iconFrame = true,
   title,
   description,
   action,
@@ -31,11 +33,11 @@ export default function EmptyState({
       {icon ? (
         <div
           style={{
-            width: 48,
-            height: 48,
-            borderRadius: '50%',
-            background: 'var(--color-surface-2)',
-            color: 'var(--color-text-3)',
+            width: iconFrame ? 48 : undefined,
+            height: iconFrame ? 48 : undefined,
+            borderRadius: iconFrame ? '50%' : undefined,
+            background: iconFrame ? 'var(--color-surface-2)' : undefined,
+            color: iconFrame ? 'var(--color-text-3)' : undefined,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

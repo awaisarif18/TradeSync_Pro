@@ -15,21 +15,29 @@ type CardSectionProps = {
   children: ReactNode;
 };
 
-function borderLeftForVariant(variant: CardVariant): string | undefined {
-  if (variant === 'role-mint') return '4px solid var(--color-mint)';
-  if (variant === 'role-violet') return '4px solid var(--color-violet)';
-  if (variant === 'role-danger') return '4px solid var(--color-danger)';
+function borderLeftColorForVariant(variant: CardVariant): string | undefined {
+  if (variant === 'role-mint') return 'var(--color-mint)';
+  if (variant === 'role-violet') return 'var(--color-violet)';
+  if (variant === 'role-danger') return 'var(--color-danger)';
   return undefined;
 }
 
 export default function Card({ variant = 'default', className, style, children }: CardProps) {
+  const computedBorderLeftColor = borderLeftColorForVariant(variant);
+
   return (
     <div
       className={cn(className)}
       style={{
         borderRadius: 14,
-        border: '1px solid var(--color-line)',
-        borderLeft: borderLeftForVariant(variant),
+        borderWidth: 1,
+        borderStyle: 'solid',
+        borderTopColor: 'var(--color-line)',
+        borderRightColor: 'var(--color-line)',
+        borderBottomColor: 'var(--color-line)',
+        borderLeftWidth: computedBorderLeftColor ? 4 : 1,
+        borderLeftStyle: 'solid',
+        borderLeftColor: computedBorderLeftColor ?? 'var(--color-line)',
         background: 'var(--color-surface)',
         overflow: 'hidden',
         ...style,

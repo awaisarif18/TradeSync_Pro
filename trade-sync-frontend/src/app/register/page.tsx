@@ -136,7 +136,15 @@ export default function RegisterPage() {
           </div>
 
           <div style={{ marginBottom: 22 }}>
-            <Card style={{ background: roleSoft, border: `1px solid ${roleColor}` }}>
+            <Card
+              style={{
+                background: roleSoft,
+                borderTopColor: roleColor,
+                borderRightColor: roleColor,
+                borderBottomColor: roleColor,
+                borderLeftColor: roleColor,
+              }}
+            >
               <CardBody>
                 <SectionEyebrow color={isProvider ? "mint" : "violet"}>
                   {isProvider ? "Provider account" : "Copier account"}

@@ -136,11 +136,13 @@ trade-sync-frontend/
 	│  └─ dashboard/
 	│     ├─ MasterDashboard.tsx
 	│     ├─ MasterProfileSetup.tsx   # Master identity form for profile setup (Phase 7)
-	│     ├─ SlaveDashboard.tsx
-	│     ├─ LiveTradeTable.tsx        # WebSocket-driven live trade feed
+	│     ├─ CopierDashboard.tsx      # Copier console with active/empty states and incoming signals
+	│     ├─ LiveTradeTable.tsx        # Deprecated WebSocket feed wrapper retained for compatibility
 	│     ├─ MasterProfileCard.tsx     # Deprecated dashboard profile card kept for current dashboard callers
 	│     ├─ TradeHistoryModal.tsx     # Design-system trade history modal with filters and aggregates
 	│     └─ PnLChart.tsx              # Cumulative PnL visualization via recharts (Phase 6)
+	├─ hooks/
+	│  └─ useIncomingSignals.ts        # Shared trade_execution socket listener for dashboard feeds
 	├─ redux/
 	│  └─ slices/
 	│     ├─ authSlice.ts              # Auth state + reducers
@@ -240,7 +242,7 @@ Key client components:
 - Returns `null` while redirecting (prevents flash)
 - Renders:
   - `MasterDashboard` for role `MASTER`
-  - `SlaveDashboard` otherwise
+  - `CopierDashboard` for role `SLAVE`
 
 ## `/admin` — Admin panel (`src/app/admin/page.tsx`)
 
@@ -421,16 +423,16 @@ On success: Sonner toast + redirect `/login`.
 - Profile Setup tab renders `MasterProfileSetup` with bio, platform, instruments, strategy, risk level, and hold-time fields
 - Saving the profile updates local dashboard state and returns to the overview tab
 
-## `SlaveDashboard`
+## `CopierDashboard`
 
 Core responsibilities:
 
-1. Fetch active masters from backend
-2. Track current slave subscription
+1. Fetch active providers from backend
+2. Track current copier subscription
 3. Allow subscribe/unsubscribe actions
 4. Sync updated `subscribedToId` back into Redux user state
-5. Render master profile cards in a grid layout (Phase 6)
-6. Show profile stats, PnL chart, and trade history modal per master (Phase 6)
+5. Render active and empty copier dashboard states
+6. Show a live incoming-signal table from the shared socket hook
 
 Hooks used:
 
@@ -438,18 +440,14 @@ Hooks used:
 - `useDispatch` → update user after subscribe change
 - `useState` → masters, loading, current subscription
 - `useEffect` → fetch active masters on mount
+- `useIncomingSignals` → shared `trade_execution` socket listener and signal counters
 
 Marketplace/profile components:
 
 - Public marketplace pages use `TraderCard` from `src/components/marketplace/TraderCard.tsx`
-- Slave dashboard still uses deprecated `MasterProfileCard` until the dashboard is redesigned
-- Provider cards show:
-  - Master full name and creation date
-  - Aggregate stats: total trades, win rate, total PnL, average volume
-  - Embedded `PnLChart` with cumulative profit/loss visualization
-  - Subscribe/Unsubscribe buttons
-  - "View Trade History" link that opens `TradeHistoryModal`
-- `TradeHistoryModal` displays filtered trade history with design-system pills and aggregate totals
+- Copier dashboard uses `TraderCard` in marketplace and subscribed modes
+- Active subscription card shows the selected provider, risk pill, signal count, session P&L, and unsubscribe action
+- Empty state shows a provider-selection CTA and a three-card marketplace teaser
 - All data fetched via `profileService.getMasterProfile(masterId)` and `profileService.getMasterHistory(masterId)`
 
 `handleSubscribe(masterId)` flow:
@@ -457,14 +455,14 @@ Marketplace/profile components:
 1. call `marketplaceService.updateSubscription(user.id, masterId)`
 2. update local `currentSubscription`
 3. dispatch `loginSuccess({...user, subscribedToId})`
-4. alert backend response message
+4. show a Sonner toast for success or failure
 
 UI behavior:
 
-- If already subscribed, all other subscribe buttons are disabled
+- If already subscribed, that provider card renders in subscribed mode and other cards can replace the subscription
 - Unsubscribe action uses `masterId = null`
 
-## `LiveTradeTable`
+## `useIncomingSignals`
 
 Hooks:
 
@@ -478,6 +476,12 @@ Realtime flow:
 3. prepend row with local timestamp
 4. keep only latest 10 entries
 5. disconnect socket on unmount
+6. expose connection state plus today count, session P&L, and mirrored-trade count
+
+## `IncomingSignalsTable` and `LiveTradeTable`
+
+- `IncomingSignalsTable` is the Phase 5 visual feed inside `CopierDashboard`
+- `LiveTradeTable` is deprecated and retained as a compatibility wrapper around `useIncomingSignals`
 
 Expected trade payload fields consumed:
 
@@ -613,16 +617,19 @@ From `package.json` / lockfile:
 	- navigate with Next router
 4. `dashboard/page.tsx`
 	- consumes Redux auth state
-	- selects master/slave dashboard component
-5. `SlaveDashboard`
+	- selects provider/copier dashboard component
+5. `CopierDashboard`
 	- calls `marketplaceService`
 	- updates local + Redux subscription state
+	- renders `IncomingSignalsTable`
 6. `admin/page.tsx`
 	- calls `adminService`
 	- updates local users table state
-7. `LiveTradeTable`
+7. `useIncomingSignals`
 	- opens socket directly to backend
-	- displays incoming `trade_execution` payloads
+	- listens for incoming `trade_execution` payloads
+8. `LiveTradeTable`
+	- deprecated compatibility wrapper around `useIncomingSignals`
 
 ---
 
@@ -630,16 +637,12 @@ From `package.json` / lockfile:
 
 These are present in current source and should be considered before new coding:
 
-1. `RootState` import path mismatch remains in one dashboard file:
-	- `SlaveDashboard.tsx` imports from `../../redux/store` (path does not exist in current tree)
-	- Actual file is `src/redux/slices/store.ts`
-
-2. Admin tabs include disabled placeholders for future pages:
+1. Admin tabs include disabled placeholders for future pages:
 	- `Nodes`, `Audit`, `Settings`
 
-3. `Navbar` mobile menu state exists but no mobile link panel is rendered.
+2. `Navbar` mobile menu state exists but no mobile link panel is rendered.
 
-4. Auth state has no persistence across hard refresh.
+3. Auth state has no persistence across hard refresh.
 
 These are not documentation errors; they reflect current code reality.
 
@@ -671,7 +674,7 @@ If using AI to generate code changes, apply these constraints:
 3. Do not rename `loginSuccess` reducer without updating all auth forms and marketplace update flow.
 4. If moving API base URL to env vars, keep current default behavior for local dev.
 5. If adding admin pages (`/nodes`, `/audit`, `/settings`), convert the disabled admin tabs into links.
-6. If changing socket logic, preserve display behavior expected by `LiveTradeTable`.
+6. If changing socket logic, preserve display behavior expected by `useIncomingSignals` and `LiveTradeTable`.
 7. Prefer additive changes over destructive refactors.
 8. Update this document whenever API contracts, state shape, or route behavior changes.
 
@@ -693,7 +696,7 @@ Default dev URL: `http://localhost:3001`.
 
 ## 18) Phase 6: Master Profile & Trading History (Completed)
 
-Phase 6 implementation adds master profile card grid and trade history modal to SlaveDashboard.
+Phase 6 implementation added the legacy master profile card grid and trade history modal to the former `SlaveDashboard`. Phase 5 of the UI overhaul replaced that screen with `CopierDashboard` and marketplace `TraderCard` rendering.
 
 ### New Components
 
@@ -718,7 +721,7 @@ Phase 6 implementation adds master profile card grid and trade history modal to 
 
 - `profileService.getMasterProfile(masterId)` fetches aggregate master stats
 - `profileService.getMasterHistory(masterId)` fetches last 50 trades
-- Both methods integrated into `SlaveDashboard` via `useEffect` and state management
+- Both methods are integrated into `CopierDashboard` via `useEffect` and state management
 
 ### Dependencies Added
 
@@ -726,7 +729,7 @@ Phase 6 implementation adds master profile card grid and trade history modal to 
 
 ### Integration Pattern
 
-- `SlaveDashboard` renders a grid of `MasterProfileCard` components
+- `CopierDashboard` renders a grid of `TraderCard` components; `MasterProfileCard` remains deprecated for older dashboard callers
 - Each card is independent and can fetch/display its own data
 - Modal state is scoped to the card component level (no global modal state needed)
 

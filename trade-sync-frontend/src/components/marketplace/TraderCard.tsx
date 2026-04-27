@@ -25,6 +25,7 @@ type TraderCardProps = {
   mode: 'marketplace' | 'showcase' | 'subscribed' | 'preview';
   onAction?: () => void;
   actionLabel?: string;
+  actionVariant?: 'primary' | 'ghost' | 'ghost-mint' | 'ghost-danger' | 'ghost-violet';
 };
 
 function displayHandle(trader: TraderCardData): string {
@@ -101,6 +102,7 @@ export default function TraderCard({
   mode,
   onAction,
   actionLabel,
+  actionVariant = 'ghost',
 }: TraderCardProps) {
   const empty =
     trader.bio == null && trader.tradingPlatform == null && trader.strategyDescription == null;
@@ -220,7 +222,7 @@ export default function TraderCard({
 
           {showButton ? (
             <Button
-              variant="ghost"
+              variant={actionVariant}
               fullWidth
               size="sm"
               disabled={empty}

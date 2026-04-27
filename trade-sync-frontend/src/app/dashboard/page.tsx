@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useSelector } from "react-redux";
 import { RootState } from "../../redux/slices/store";
 import MasterDashboard from "../../components/dashboard/MasterDashboard";
-import SlaveDashboard from "../../components/dashboard/SlaveDashboard";
+import CopierDashboard from "../../components/dashboard/CopierDashboard";
 
 export default function DashboardPage() {
   const { isAuthenticated, user } = useSelector(
@@ -26,7 +26,7 @@ export default function DashboardPage() {
 
   return (
     <div className="max-w-7xl mx-auto">
-      {user.role === "MASTER" ? <MasterDashboard /> : <SlaveDashboard />}
+      {user.role === "MASTER" ? <MasterDashboard /> : <CopierDashboard />}
     </div>
   );
 }
