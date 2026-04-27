@@ -247,18 +247,24 @@ Key client components:
 ## `/admin` — Admin panel (`src/app/admin/page.tsx`)
 
 - Fetches users via `adminService.getUsers()` on mount
-- Supports client-side role filtering tabs (`ALL`, `MASTER`, `SLAVE`, `ADMIN`)
+- Guards the page with Redux auth state and redirects non-admin users away
+- Supports client-side role filter chips (`ALL`, `MASTER`, `SLAVE`, `ADMIN`) and search across full name, email, and license key
+- Shows page-level admin tabs: `Users` renders the table, while `Nodes`, `Audit`, and `Settings` render coming-soon stubs
 - Actions per row:
-  - generate master license key
-  - toggle user active/disabled status
-- Uses local state for users/loading/filter
+- issue or regenerate master license keys via `POST /auth/users/:id/license`
+- toggle user active/disabled status via `PATCH /auth/users/:id/toggle-status`
+- Uses local state for users, loading, filter, search, active tab, and per-button loading
+- Uses `RoleBadge` for relabeled `Provider`, `Copier`, and `Admin` role display
+- License keys render only as mono mint-soft pills in the table
+- Admin rows render `Protected` instead of action buttons
+- Uses Sonner toasts for action results; no `alert()` calls remain in the admin flow
 
 ### Admin nested links exposed in horizontal tabs
 
-The admin layout shows:
+The admin page shows:
 
-- active `Users` link to `/admin`
-- disabled placeholders for future `Nodes`, `Audit`, and `Settings`
+- active `Users` tab
+- disabled-style placeholders for future `Nodes`, `Audit`, and `Settings`
 
 Only `/admin` page exists right now. Future tabs should become links when their pages are added.
 
@@ -534,8 +540,7 @@ Other details:
 
 ## `AdminLayout`
 
-- Renders horizontal admin tabs above the content area
-- Keeps `/admin` content full width with no persistent left sidebar
+- Keeps `/admin` content full width and lets `src/app/admin/page.tsx` own the Phase 7 tab UI
 
 ---
 
