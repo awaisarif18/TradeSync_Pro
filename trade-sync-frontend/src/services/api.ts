@@ -9,6 +9,7 @@ export const api = axios.create({
 
 export interface MasterProfile {
   id: string;
+  email?: string;
   fullName: string;
   createdAt: string;
   totalTrades: number;
@@ -111,6 +112,11 @@ export const adminService = {
 export const marketplaceService = {
   getActiveMasters: async () => {
     const response = await api.get("/auth/masters");
+    return response.data;
+  },
+
+  getLiveMasters: async (): Promise<{ liveIds: string[] }> => {
+    const response = await api.get("/auth/masters/live");
     return response.data;
   },
 

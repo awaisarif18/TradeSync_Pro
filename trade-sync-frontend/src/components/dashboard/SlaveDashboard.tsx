@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Radio, ShieldAlert, Users, Zap } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
+import { toast } from "sonner";
 import Card from "../common/Card";
 import LiveTradeTable from "./LiveTradeTable";
 import MasterProfileCard from "./MasterProfileCard";
@@ -96,11 +97,12 @@ export default function SlaveDashboard() {
         }),
       );
       setInfoMessage(response.message);
+      toast.success(response.message || "Subscription updated");
     } catch (error) {
       const err = error as { response?: { data?: { message?: string } } };
-      setInfoMessage(
-        err.response?.data?.message || "Failed to update subscription",
-      );
+      const message = err.response?.data?.message || "Failed to update subscription";
+      setInfoMessage(message);
+      toast.error(message);
       console.error("Failed to update subscription", error);
     }
   };

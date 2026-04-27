@@ -1,42 +1,88 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import MasterProfileCard from "../../components/dashboard/MasterProfileCard";
+import { useRouter } from "next/navigation";
+import RiskFilter from "../../components/marketplace/RiskFilter";
+import TraderCard, {
+  type TraderCardData,
+} from "../../components/marketplace/TraderCard";
+import TraderCardSkeleton from "../../components/marketplace/TraderCardSkeleton";
+import { Button, Card, CardBody, EmptyState, SectionEyebrow } from "../../components/ui";
 import {
   MasterProfile,
   marketplaceService,
-  profileService,
 } from "../../services/api";
 
-type RiskFilter = "ALL" | "LOW" | "MEDIUM" | "HIGH";
+type RiskFilterValue = "ALL" | "LOW" | "MEDIUM" | "HIGH";
 
 interface ActiveMaster {
   id: string;
+  fullName?: string;
+  email?: string;
+  createdAt?: string;
 }
 
-const riskFilters: { label: string; value: RiskFilter }[] = [
-  { label: "All", value: "ALL" },
-  { label: "Low Risk", value: "LOW" },
-  { label: "Medium Risk", value: "MEDIUM" },
-  { label: "High Risk", value: "HIGH" },
-];
+function normalizeRisk(riskLevel: string | null | undefined): TraderCardData["riskLevel"] {
+  if (riskLevel === "LOW" || riskLevel === "MEDIUM" || riskLevel === "HIGH") return riskLevel;
+  return "MEDIUM";
+}
+
+function toTraderCardData(
+  master: ActiveMaster,
+  profile: MasterProfile | null,
+  liveIds: string[],
+): TraderCardData {
+  return {
+    id: master.id,
+    fullName: profile?.fullName ?? master.fullName ?? "Provider",
+    email: profile?.email ?? master.email,
+    instruments: profile?.instruments ?? null,
+    riskLevel: normalizeRisk(profile?.riskLevel),
+    winRate: profile?.winRate ?? 0,
+    subscriberCount: profile?.subscriberCount ?? 0,
+    isLive: liveIds.includes(master.id) || profile?.isLive === true,
+    tradingPlatform: profile?.tradingPlatform ?? null,
+    typicalHoldTime: profile?.typicalHoldTime ?? null,
+    strategyDescription: profile?.strategyDescription ?? null,
+    bio: profile?.bio ?? null,
+  };
+}
 
 export default function TradersPage() {
-  const [profiles, setProfiles] = useState<MasterProfile[]>([]);
-  const [activeFilter, setActiveFilter] = useState<RiskFilter>("ALL");
+  const router = useRouter();
+  const [providers, setProviders] = useState<TraderCardData[]>([]);
+  const [activeFilter, setActiveFilter] = useState<RiskFilterValue>("ALL");
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     const loadMasters = async () => {
+      setLoading(true);
+      setError(false);
+
       try {
-        const masters = (await marketplaceService.getActiveMasters()) as ActiveMaster[];
-        const profileRows = await Promise.all(
-          masters.map((master) => profileService.getMasterProfile(master.id)),
+        const [masters, live] = await Promise.all([
+          marketplaceService.getActiveMasters() as Promise<ActiveMaster[]>,
+          marketplaceService.getLiveMasters(),
+        ]);
+
+        const providerRows = await Promise.all(
+          masters.map(async (master) => {
+            try {
+              const profile = await marketplaceService.getMasterProfile(master.id);
+              return toTraderCardData(master, profile, live.liveIds);
+            } catch (profileError) {
+              console.error(`Failed to load provider profile ${master.id}`, profileError);
+              return toTraderCardData(master, null, live.liveIds);
+            }
+          }),
         );
-        setProfiles(profileRows);
+
+        setProviders(providerRows);
       } catch (error) {
-        console.error("Failed to load master traders", error);
-        setProfiles([]);
+        console.error("Failed to load providers", error);
+        setProviders([]);
+        setError(true);
       } finally {
         setLoading(false);
       }
@@ -45,85 +91,119 @@ export default function TradersPage() {
     loadMasters();
   }, []);
 
-  const filteredProfiles = useMemo(() => {
-    if (activeFilter === "ALL") {
-      return profiles;
-    }
+  const counts = useMemo(
+    () => ({
+      all: providers.length,
+      low: providers.filter((provider) => provider.riskLevel === "LOW").length,
+      medium: providers.filter((provider) => provider.riskLevel === "MEDIUM").length,
+      high: providers.filter((provider) => provider.riskLevel === "HIGH").length,
+    }),
+    [providers],
+  );
 
-    return profiles.filter(
-      (profile) => (profile.riskLevel ?? "MEDIUM") === activeFilter,
-    );
-  }, [activeFilter, profiles]);
+  const filteredProviders = useMemo(() => {
+    if (activeFilter === "ALL") return providers;
+    return providers.filter((provider) => provider.riskLevel === activeFilter);
+  }, [activeFilter, providers]);
 
   return (
-    <div className="space-y-8 py-10">
-      <section className="rounded-4xl border border-slate-800 bg-linear-to-b from-slate-950/95 to-slate-900/70 p-8 shadow-[0_30px_120px_rgba(2,6,23,0.45)] md:p-10">
-        <p className="text-xs uppercase tracking-[0.28em] text-emerald-400/80">
-          Marketplace
-        </p>
-        <div className="mt-3 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <h1 className="text-4xl font-semibold tracking-tight text-white md:text-5xl">
-              Browse Master Traders
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm text-slate-400 md:text-base">
-              Compare active master profiles, risk levels, live status, and
-              performance before choosing your strategy.
-            </p>
-          </div>
+    <div style={{ padding: "32px 0 80px" }}>
+      <section style={{ maxWidth: 1240, margin: "0 auto", padding: "0 32px 32px" }}>
+        <Card>
+          <CardBody>
+            <div
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr auto",
+                gap: 24,
+                alignItems: "flex-start",
+              }}
+            >
+              <div>
+                <SectionEyebrow color="mint">Marketplace</SectionEyebrow>
+                <h1
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 600,
+                    letterSpacing: "-0.025em",
+                    margin: "10px 0 12px",
+                  }}
+                >
+                  Browse Providers
+                </h1>
+                <p
+                  style={{
+                    fontSize: 15,
+                    color: "var(--color-text-2)",
+                    lineHeight: 1.5,
+                    margin: 0,
+                    maxWidth: 540,
+                  }}
+                >
+                  Compare active provider profiles, risk levels, live status, and performance
+                  before choosing your strategy.
+                </p>
+              </div>
+              <RiskFilter value={activeFilter} counts={counts} onChange={setActiveFilter} />
+            </div>
+          </CardBody>
+        </Card>
+      </section>
 
-          <div className="flex flex-wrap gap-2">
-            {riskFilters.map((filter) => (
-              <button
-                key={filter.value}
-                type="button"
-                onClick={() => setActiveFilter(filter.value)}
-                className={`rounded-full border px-4 py-2 text-sm font-semibold transition-colors ${
-                  activeFilter === filter.value
-                    ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                    : "border-slate-700 bg-slate-900/70 text-slate-400 hover:border-slate-500 hover:text-slate-200"
-                }`}
-              >
-                {filter.label}
-              </button>
+      <section style={{ maxWidth: 1240, margin: "0 auto", padding: "0 32px 80px" }}>
+        {loading ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+            {Array.from({ length: 6 }).map((_, index) => (
+              <TraderCardSkeleton key={index} />
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="grid gap-5 lg:grid-cols-2">
-        {loading ? (
-          Array.from({ length: 4 }).map((_, index) => (
-            <MasterProfileCard
-              key={index}
-              profile={null}
-              history={[]}
-              loading
-              isSubscribed={false}
-              subscriptionLocked={false}
-              showActions={false}
-              showChart={false}
-            />
-          ))
-        ) : filteredProfiles.length === 0 ? (
-          <div className="lg:col-span-2 rounded-2xl border border-slate-800 bg-slate-950/80 p-8 text-center text-sm text-slate-400">
-            No master traders available yet.
-          </div>
+        ) : error ? (
+          <EmptyState
+            title="Couldn't load providers"
+            description="The marketplace data could not be loaded. Check the backend and try again."
+            action={
+              <Button variant="ghost-mint" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            }
+          />
+        ) : filteredProviders.length === 0 ? (
+          <EmptyState
+            title="No providers match your filter"
+            description="Try another risk level or clear the filter."
+            action={
+              <Button variant="ghost-mint" onClick={() => setActiveFilter("ALL")}>
+                Clear filters
+              </Button>
+            }
+          />
         ) : (
-          filteredProfiles.map((profile) => (
-            <MasterProfileCard
-              key={profile.id}
-              profile={profile}
-              history={[]}
-              loading={false}
-              isSubscribed={false}
-              subscriptionLocked={false}
-              showActions={false}
-              showChart={false}
-            />
-          ))
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
+            {filteredProviders.map((provider) => (
+              <TraderCard
+                key={provider.id}
+                trader={provider}
+                mode="marketplace"
+                onAction={() => router.push(`/traders/${provider.id}`)}
+                actionLabel="View profile"
+              />
+            ))}
+          </div>
         )}
       </section>
+      <style>{`
+        @media (max-width: 1023px) {
+          section div[style*="repeat(3"] {
+            grid-template-columns: repeat(2, 1fr) !important;
+          }
+        }
+
+        @media (max-width: 639px) {
+          section div[style*="repeat(3"] {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }

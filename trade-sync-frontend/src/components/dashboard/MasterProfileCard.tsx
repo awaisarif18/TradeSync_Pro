@@ -1,5 +1,8 @@
 "use client";
 
+/**
+ * @deprecated Replaced by src/components/marketplace/TraderCard.tsx — kept temporarily for any callers we haven't migrated.
+ */
 import {
   Activity,
   ArrowRight,

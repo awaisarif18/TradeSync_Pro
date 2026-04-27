@@ -84,7 +84,9 @@ trade-sync-frontend/
 	│  ├─ layout.tsx                   # Root app shell: Provider + Navbar + Footer
 	│  ├─ page.tsx                     # Marketing landing page
 	│  ├─ traders/
-	│  │  └─ page.tsx                  # Master trader marketplace grid
+	│  │  ├─ page.tsx                  # Provider marketplace grid with risk filter
+	│  │  └─ [id]/
+	│  │     └─ page.tsx               # Public provider detail page
 	│  ├─ login/
 	│  │  └─ page.tsx                  # Split-screen login page with Sonner feedback
 	│  ├─ register/
@@ -113,7 +115,12 @@ trade-sync-frontend/
 	│  ├─ marketplace/
 	│  │  ├─ TraderCard.tsx            # Provider profile card for marketplace/showcase contexts
 	│  │  ├─ TraderCardSkeleton.tsx    # Loading skeleton for provider cards
-	│  │  └─ RiskFilter.tsx            # Risk-level filter pill row
+	│  │  ├─ RiskFilter.tsx            # Risk-level filter pill row
+	│  │  ├─ ProviderHeroBand.tsx      # Provider detail identity band
+	│  │  ├─ PerformanceBigCard.tsx    # Provider detail performance and copy action
+	│  │  ├─ RiskProfileCard.tsx       # Mock risk metrics side card
+	│  │  ├─ InstrumentsCard.tsx       # Instrument pill list
+	│  │  └─ TradingHoursCard.tsx      # Decorative trading-hours side card
 	│  ├─ marketing/
 	│  │  ├─ Hero.tsx                  # Landing hero and product preview
 	│  │  ├─ HowItWorks.tsx            # Three-card explainer section
@@ -131,8 +138,8 @@ trade-sync-frontend/
 	│     ├─ MasterProfileSetup.tsx   # Master identity form for profile setup (Phase 7)
 	│     ├─ SlaveDashboard.tsx
 	│     ├─ LiveTradeTable.tsx        # WebSocket-driven live trade feed
-	│     ├─ MasterProfileCard.tsx     # Profile card with stats grid + PnL chart (Phase 6)
-	│     ├─ TradeHistoryModal.tsx     # Modal showing last 50 trades (Phase 6)
+	│     ├─ MasterProfileCard.tsx     # Deprecated dashboard profile card kept for current dashboard callers
+	│     ├─ TradeHistoryModal.tsx     # Design-system trade history modal with filters and aggregates
 	│     └─ PnLChart.tsx              # Cumulative PnL visualization via recharts (Phase 6)
 	├─ redux/
 	│  └─ slices/
@@ -192,10 +199,21 @@ Key client components:
 ## `/traders` — Master Trader Marketplace (`src/app/traders/page.tsx`)
 
 - Client page that fetches active masters via `GET /auth/masters`
+- Fetches live master IDs via `GET /auth/masters/live`
 - Fetches each master profile via `GET /auth/masters/:id/profile`
-- Renders read-only `MasterProfileCard` components without subscribe/history actions
+- Renders `TraderCard` components in marketplace mode
 - Provides client-side risk filters: `All`, `Low Risk`, `Medium Risk`, `High Risk`
 - Shows loading skeletons and an empty state when no masters are available
+
+## `/traders/:id` — Public provider detail (`src/app/traders/[id]/page.tsx`)
+
+- Public route with no auth guard
+- Fetches provider profile via `GET /auth/masters/:id/profile`
+- Fetches trade history via `GET /trades/master/:masterId/history`
+- Shows a graceful provider-not-found empty state when the backend returns an error
+- Allows unauthenticated visitors to view profile data; copy action redirects them to `/login?next=/traders/:id`
+- For authenticated `SLAVE` users, copy action calls `PATCH /auth/users/:slaveId/subscribe` with `{ masterId }`, updates Redux via `loginSuccess`, shows a Sonner toast, and redirects to `/dashboard`
+- `MASTER` users receive a Sonner error if they try to copy a provider; `ADMIN` users do not see the copy button
 
 ## `/login` — Login page (`src/app/login/page.tsx`)
 
@@ -314,7 +332,10 @@ Reducers:
 ### `marketplaceService`
 
 1. `getActiveMasters()` → `GET /auth/masters`
-2. `updateSubscription(slaveId, masterId)` → `PATCH /auth/users/:id/subscribe`
+2. `getLiveMasters()` → `GET /auth/masters/live`
+3. `getMasterProfile(masterId)` → `GET /auth/masters/:id/profile`
+4. `getMasterHistory(masterId)` → `GET /trades/master/:masterId/history`
+5. `updateSubscription(slaveId, masterId)` → `PATCH /auth/users/:id/subscribe`
 
 ### `profileService` (Phase 6/7)
 
@@ -418,16 +439,17 @@ Hooks used:
 - `useState` → masters, loading, current subscription
 - `useEffect` → fetch active masters on mount
 
-Phase 6 Enhancements:
+Marketplace/profile components:
 
-- Masters are now displayed as `MasterProfileCard` components (instead of a plain list)
-- Each card shows:
+- Public marketplace pages use `TraderCard` from `src/components/marketplace/TraderCard.tsx`
+- Slave dashboard still uses deprecated `MasterProfileCard` until the dashboard is redesigned
+- Provider cards show:
   - Master full name and creation date
   - Aggregate stats: total trades, win rate, total PnL, average volume
   - Embedded `PnLChart` with cumulative profit/loss visualization
   - Subscribe/Unsubscribe buttons
   - "View Trade History" link that opens `TradeHistoryModal`
-- `TradeHistoryModal` displays a table of the last 50 trades (OPEN + CLOSED) with color-coded statuses and PnL values
+- `TradeHistoryModal` displays filtered trade history with design-system pills and aggregate totals
 - All data fetched via `profileService.getMasterProfile(masterId)` and `profileService.getMasterHistory(masterId)`
 
 `handleSubscribe(masterId)` flow:

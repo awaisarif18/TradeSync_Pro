@@ -1,7 +1,9 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { TradeHistoryEntry } from "../../services/api";
+import { Button, Card, CardBody, CardFooter, CardHeader, Pill } from "../ui";
 
 interface TradeHistoryModalProps {
   isOpen: boolean;
@@ -9,6 +11,27 @@ interface TradeHistoryModalProps {
   history: TradeHistoryEntry[];
   loading: boolean;
   masterName: string;
+  licenseKey?: string;
+}
+
+type HistoryWindow = "ALL" | "7D" | "30D" | "90D";
+
+const FILTERS: Array<{ label: string; value: HistoryWindow; days?: number }> = [
+  { label: "All time", value: "ALL" },
+  { label: "7d", value: "7D", days: 7 },
+  { label: "30d", value: "30D", days: 30 },
+  { label: "90d", value: "90D", days: 90 },
+];
+
+function withinDays(entry: TradeHistoryEntry, days?: number): boolean {
+  if (!days) return true;
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  return new Date(entry.createdAt).getTime() >= cutoff;
+}
+
+function formatPnl(value: number | null): string {
+  if (value === null) return "-";
+  return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(2)}`;
 }
 
 export default function TradeHistoryModal({
@@ -17,79 +40,155 @@ export default function TradeHistoryModal({
   history,
   loading,
   masterName,
+  licenseKey,
 }: TradeHistoryModalProps) {
-  if (!isOpen) return null;
+  const [activeFilter, setActiveFilter] = useState<HistoryWindow>("ALL");
+  const activeFilterConfig = FILTERS.find((filter) => filter.value === activeFilter);
+  const filteredHistory = useMemo(
+    () => history.filter((entry) => withinDays(entry, activeFilterConfig?.days)),
+    [activeFilterConfig?.days, history],
+  );
+  const closedTrades = filteredHistory.filter((entry) => entry.status === "CLOSED");
+  const totalPnL = filteredHistory.reduce((sum, entry) => sum + (entry.pnl ?? 0), 0);
+  const wins = closedTrades.filter((entry) => (entry.pnl ?? 0) > 0).length;
+  const winRate = closedTrades.length > 0 ? (wins / closedTrades.length) * 100 : 0;
 
-  const getPnLClass = (value: number | null) => {
-    if (value === null) return "text-slate-400";
-    return value >= 0 ? "text-emerald-400" : "text-red-400";
-  };
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
-      <div className="w-full max-w-4xl rounded-xl border border-slate-700 bg-slate-900 shadow-xl">
-        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h3 className="text-white font-semibold">
-            {masterName} Trade History
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            title="Close trade history modal"
-            aria-label="Close trade history modal"
-            className="text-slate-400 hover:text-white transition-colors"
-          >
-            <X size={18} />
-          </button>
-        </div>
+      <div style={{ width: "100%", maxWidth: 1040 }}>
+        <Card style={{ borderRadius: 18 }}>
+          <CardHeader>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
+              <div>
+                <h3 style={{ color: "var(--color-text)", fontSize: 18, fontWeight: 600, margin: 0 }}>
+                  {masterName} Trade History
+                </h3>
+                <div className="font-mono-tnum" style={{ color: "var(--color-text-3)", fontSize: 12, marginTop: 4 }}>
+                  License {licenseKey ?? "not public"}
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                title="Close trade history modal"
+                leftIcon={<X size={16} />}
+              >
+                Close
+              </Button>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 18 }}>
+              {FILTERS.map((filter) => (
+                <span
+                  key={filter.value}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setActiveFilter(filter.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") setActiveFilter(filter.value);
+                  }}
+                  style={{ cursor: "pointer" }}
+                >
+                  <Pill variant={activeFilter === filter.value ? "outline-mint" : "default"}>
+                    {filter.label}
+                  </Pill>
+                </span>
+              ))}
+            </div>
+          </CardHeader>
 
-        <div className="max-h-[65vh] overflow-auto p-4">
-          {loading ? (
-            <p className="text-slate-400 text-sm">Loading history...</p>
-          ) : history.length === 0 ? (
-            <p className="text-slate-400 text-sm">
-              No trade history available.
-            </p>
-          ) : (
-            <table className="w-full text-sm text-left">
-              <thead>
-                <tr className="text-slate-400 border-b border-slate-800">
-                  <th className="py-2">Symbol</th>
-                  <th className="py-2">Action</th>
-                  <th className="py-2">Volume</th>
-                  <th className="py-2">Status</th>
-                  <th className="py-2">PnL</th>
-                  <th className="py-2">Opened</th>
-                  <th className="py-2">Closed</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((entry) => (
-                  <tr
-                    key={entry.id}
-                    className="border-b border-slate-900 text-slate-200"
+          <CardBody>
+            <div style={{ maxHeight: "60vh", overflow: "auto" }}>
+              {loading ? (
+                <p style={{ color: "var(--color-text-2)", fontSize: 14 }}>Loading history...</p>
+              ) : filteredHistory.length === 0 ? (
+                <p style={{ color: "var(--color-text-2)", fontSize: 14 }}>No trade history available.</p>
+              ) : (
+                <>
+                  <div
+                    style={{
+                      display: "grid",
+                      gridTemplateColumns: "1fr 90px 90px 90px 110px 150px",
+                      gap: 12,
+                      fontSize: 11,
+                      color: "var(--color-text-3)",
+                      textTransform: "uppercase",
+                      letterSpacing: 0.6,
+                      paddingBottom: 8,
+                      borderBottom: "1px solid var(--color-line)",
+                    }}
                   >
-                    <td className="py-2">{entry.symbol}</td>
-                    <td className="py-2">{entry.action}</td>
-                    <td className="py-2">{entry.volume}</td>
-                    <td className="py-2">{entry.status}</td>
-                    <td className={`py-2 ${getPnLClass(entry.pnl)}`}>
-                      {entry.pnl === null ? "-" : entry.pnl.toFixed(2)}
-                    </td>
-                    <td className="py-2">
-                      {new Date(entry.createdAt).toLocaleString()}
-                    </td>
-                    <td className="py-2">
-                      {entry.closedAt
-                        ? new Date(entry.closedAt).toLocaleString()
-                        : "-"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+                    <div>Symbol</div>
+                    <div>Action</div>
+                    <div>Volume</div>
+                    <div>Status</div>
+                    <div style={{ textAlign: "right" }}>P&L</div>
+                    <div style={{ textAlign: "right" }}>Opened</div>
+                  </div>
+                  {filteredHistory.map((entry, index) => (
+                    <div
+                      key={entry.id}
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 90px 90px 90px 110px 150px",
+                        gap: 12,
+                        alignItems: "center",
+                        padding: "12px 0",
+                        borderBottom:
+                          index < filteredHistory.length - 1 ? "1px solid var(--color-line)" : "none",
+                        fontSize: 13,
+                        color: "var(--color-text)",
+                      }}
+                    >
+                      <div>{entry.symbol}</div>
+                      <div>
+                        <Pill variant={entry.action === "BUY" ? "mint" : "danger"}>{entry.action}</Pill>
+                      </div>
+                      <div className="font-mono-tnum">{entry.volume.toFixed(2)}</div>
+                      <div>
+                        <Pill variant={entry.status === "OPEN" ? "mint" : "default"}>{entry.status}</Pill>
+                      </div>
+                      <div
+                        className="font-mono-tnum"
+                        style={{
+                          textAlign: "right",
+                          color: (entry.pnl ?? 0) >= 0 ? "var(--color-mint)" : "var(--color-danger)",
+                        }}
+                      >
+                        {formatPnl(entry.pnl)}
+                      </div>
+                      <div className="font-mono-tnum" style={{ textAlign: "right", color: "var(--color-text-2)" }}>
+                        {new Date(entry.createdAt).toLocaleDateString("en-GB")}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </CardBody>
+
+          <CardFooter>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", color: "var(--color-text-2)", fontSize: 13 }}>
+              <span>Total trades <span className="font-mono-tnum">{filteredHistory.length}</span></span>
+              <span>·</span>
+              <span>
+                Total P&L{" "}
+                <span
+                  className="font-mono-tnum"
+                  style={{ color: totalPnL >= 0 ? "var(--color-mint)" : "var(--color-danger)" }}
+                >
+                  {formatPnl(totalPnL)}
+                </span>
+              </span>
+              <span>·</span>
+              <span>
+                Win rate <span className="font-mono-tnum">{winRate.toFixed(1)}%</span>
+              </span>
+            </div>
+          </CardFooter>
+        </Card>
       </div>
     </div>
   );
