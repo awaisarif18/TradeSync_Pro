@@ -40,7 +40,6 @@ export interface RegisterUserData {
   email: string;
   password: string;
   role: "MASTER" | "SLAVE";
-  licenseKey?: string;
 }
 
 export interface MasterProfileUpdateResult {

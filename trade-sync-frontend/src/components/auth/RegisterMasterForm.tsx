@@ -12,7 +12,6 @@ export default function RegisterMasterForm() {
     fullName: "",
     email: "",
     password: "",
-    licenseKey: "",
   });
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -26,7 +25,6 @@ export default function RegisterMasterForm() {
         email: formData.email,
         password: formData.password,
         role: "MASTER",
-        licenseKey: formData.licenseKey, // Optional
       });
 
       alert("Master Account Created Successfully! Please Login.");
@@ -49,8 +47,8 @@ export default function RegisterMasterForm() {
           Master Account
         </h3>
         <p className="text-blue-200/60 text-xs">
-          You will broadcast trades. You need a valid License Key to activate
-          broadcasting.
+          You will broadcast trades. Admin can issue your license key after
+          account approval.
         </p>
       </div>
 
@@ -76,14 +74,6 @@ export default function RegisterMasterForm() {
         value={formData.password}
         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
         required
-      />
-      <Input
-        label="License Key (Optional)"
-        placeholder="XXXX-XXXX-XXXX"
-        value={formData.licenseKey}
-        onChange={(e) =>
-          setFormData({ ...formData, licenseKey: e.target.value })
-        }
       />
 
       <Button variant="primary" type="submit" isLoading={isLoading}>

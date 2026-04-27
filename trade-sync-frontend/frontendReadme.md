@@ -329,8 +329,7 @@ Hooks used:
   "fullName": "...",
   "email": "...",
   "password": "...",
-  "role": "MASTER",
-  "licenseKey": "..."
+  "role": "MASTER"
 }
 ```
 
