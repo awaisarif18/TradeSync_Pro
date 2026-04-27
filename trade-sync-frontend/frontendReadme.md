@@ -121,8 +121,13 @@ trade-sync-frontend/
 	│  └─ slices/
 	│     ├─ authSlice.ts              # Auth state + reducers
 	│     └─ store.ts                  # Redux store + RootState types
-	└─ services/
-		└─ api.ts                       # Axios instance + service wrappers
+	├─ services/
+	│  └─ api.ts                       # Axios instance + service wrappers
+	└─ lib/
+	   ├─ cn.ts                        # clsx + tailwind-merge class helper
+	   ├─ role-display.ts              # Role labels and role color mapping
+	   ├─ format.ts                    # Currency, percent, volume, and date formatters
+	   └─ avatar-color.ts              # Deterministic avatar color helper
 ```
 
 ---
@@ -137,6 +142,7 @@ Global app shell (`src/app/layout.tsx`) wraps all routes with:
 2. `Navbar` (always visible)
 3. Central main container (`<main>`)
 4. `Footer` (always visible)
+5. `Toaster` from `sonner` for dark top-right toast notifications
 
 Admin routes (`/admin/*`) have a nested layout (`src/app/admin/layout.tsx`) that adds horizontal tab navigation above the content region.
 
@@ -490,9 +496,10 @@ Other details:
 ### `globals.css`
 
 - Imports Tailwind via `@import "tailwindcss"`
-- Defines CSS variables for background/foreground
-- Includes dark mode media query overrides
-- Body sets background, text, and fallback font family
+- Defines Tailwind v4 `@theme` tokens for dark background, surfaces, text, mint, violet, danger, and warning colors
+- Maps `--font-sans` to Inter and `--font-mono` to JetBrains Mono font variables
+- Body sets the dark app background, default text color, font smoothing, and global letter spacing
+- Includes tabular-number helpers, autofill styling, and shared animation keyframes
 
 ### Tailwind/PostCSS
 
@@ -521,6 +528,7 @@ From `package.json` / lockfile:
 - `socket.io-client`: `^4.8.3`
 - `lucide-react`: `^0.563.0`
 - `clsx`: `^2.1.1`
+- `sonner`: `^2.0.7`
 - `tailwind-merge`: `^3.4.0`
 
 ### Dev dependencies

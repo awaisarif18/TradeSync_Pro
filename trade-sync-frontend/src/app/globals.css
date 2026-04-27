@@ -1,26 +1,61 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+@theme {
+  --color-bg:           #0a0e0d;
+  --color-surface:      #11181a;
+  --color-surface-2:    #18222a;
+  --color-line:         rgba(255,255,255,0.08);
+  --color-line-2:       rgba(255,255,255,0.14);
+  --color-text:         #e8eef0;
+  --color-text-2:       #8a9ba0;
+  --color-text-3:       #5d6d72;
+  --color-mint:         #00c389;
+  --color-mint-2:       #00a378;
+  --color-mint-soft:    rgba(0,195,137,0.12);
+  --color-violet:       #7c5cff;
+  --color-violet-2:     #6a48f0;
+  --color-violet-soft:  rgba(124,92,255,0.12);
+  --color-danger:       #ff5a4a;
+  --color-danger-soft:  rgba(255,90,74,0.12);
+  --color-warn:         #ffb547;
+  --color-warn-soft:    rgba(255,181,71,0.12);
+  --font-sans:          var(--font-inter), system-ui, sans-serif;
+  --font-mono:          var(--font-jetbrains), 'JetBrains Mono', monospace;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  letter-spacing: -0.01em;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-mono-tnum {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum";
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+textarea:-webkit-autofill {
+  -webkit-text-fill-color: var(--color-text);
+  -webkit-box-shadow: 0 0 0 1000px var(--color-surface-2) inset;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+@keyframes a-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.85); }
+}
+
+@keyframes a-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
 }
