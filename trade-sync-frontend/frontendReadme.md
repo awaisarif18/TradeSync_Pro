@@ -134,8 +134,8 @@ trade-sync-frontend/
 	│  ├─ landing/
 	│  │  └─ TopTradersSection.tsx     # Public landing-page trader showcase (Phase 7)
 	│  └─ dashboard/
-	│     ├─ MasterDashboard.tsx
-	│     ├─ MasterProfileSetup.tsx   # Master identity form for profile setup (Phase 7)
+	│     ├─ ProviderDashboard.tsx     # Provider console with overview, profile setup, and empty states
+	│     ├─ MasterProfileSetup.tsx   # Deprecated standalone master identity form retained for older imports
 	│     ├─ CopierDashboard.tsx      # Copier console with active/empty states and incoming signals
 	│     ├─ LiveTradeTable.tsx        # Deprecated WebSocket feed wrapper retained for compatibility
 	│     ├─ MasterProfileCard.tsx     # Deprecated dashboard profile card kept for current dashboard callers
@@ -241,7 +241,7 @@ Key client components:
   2. authenticated + role ADMIN → `router.push('/admin')`
 - Returns `null` while redirecting (prevents flash)
 - Renders:
-  - `MasterDashboard` for role `MASTER`
+  - `ProviderDashboard` for role `MASTER`
   - `CopierDashboard` for role `SLAVE`
 
 ## `/admin` — Admin panel (`src/app/admin/page.tsx`)
@@ -409,19 +409,26 @@ On success: Sonner toast + redirect `/login`.
 
 ## 8) Dashboard Components and Realtime Flow
 
-## `MasterDashboard`
+## `ProviderDashboard`
 
-- Two-tab master console with `Overview` and `Profile Setup`
+- Two-tab provider console with `Overview` and `Profile Setup`
 - Loads `GET /auth/masters/:id/dashboard` on mount using the authenticated master ID from Redux
 - Overview tab shows:
-	- status badge (`BROADCASTING` or `IDLE`)
-	- read-only master license key display with copy action
-	- 4 stat cards: total signals sent, connected subscribers, open trades, win rate
-	- performance boxes: total PnL, average volume, closed trades
+	- provider header with derived `broadcasting` or `idle` status
+	- read-only license key display with clipboard copy and Sonner feedback
+	- 4 stat cards mapped directly from `totalSignalsSent`, `subscriberCount`, `openTrades`, and `profile.winRate`
+	- performance boxes for total P&L, average volume, and closed trades
 	- recent signal history table for the last 10 trades
-	- public profile preview card with bio, platform, instruments, risk badge, and edit button
-- Profile Setup tab renders `MasterProfileSetup` with bio, platform, instruments, strategy, risk level, and hold-time fields
-- Saving the profile updates local dashboard state and returns to the overview tab
+	- public profile preview rendered with the shared `TraderCard` in `preview` mode
+- Empty overview state appears when `totalSignalsSent === 0`, `profile.bio === null`, and `profile.tradingPlatform === null`
+- Profile Setup tab owns the Phase 6 profile form directly. The deprecated `MasterProfileSetup` component remains only for older imports.
+- Saving the profile computes a diff against the loaded profile and calls `PATCH /auth/masters/:id/profile` with only changed keys from `{ bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime }`
+- `riskLevel` values remain uppercase `LOW`, `MEDIUM`, or `HIGH`; `typicalHoldTime` values match the custom dropdown labels exactly
+- Decorative/TODO items:
+	- provider status uses `subscriberCount > 0` or recent trades from today until backend exposes real desktop presence
+	- connected copiers live sub-count is placeholder copy until backend exposes a live count endpoint
+	- 30-day ROI in the preview uses total P&L as a temporary visual proxy until backend exposes real ROI
+	- desktop download CTA points to placeholder `/downloads` until desktop packaging is available
 
 ## `CopierDashboard`
 

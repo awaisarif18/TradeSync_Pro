@@ -1,5 +1,9 @@
 "use client";
 
+/**
+ * @deprecated Phase 6 UI overhaul moved the provider profile form into
+ * src/components/dashboard/ProviderDashboard.tsx. Kept for older imports.
+ */
 import { FormEvent, useEffect, useState } from "react";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import {
@@ -87,6 +91,7 @@ export default function MasterProfileSetup({
             riskLevel: response.riskLevel,
             typicalHoldTime: response.typicalHoldTime,
             subscriberCount: 0,
+            isLive: false,
           };
 
       setSaved(true);
