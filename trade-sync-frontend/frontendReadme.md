@@ -306,25 +306,26 @@ Auth state shape:
   } | null;
   isAuthenticated: boolean;
   rehydratedFromStorage: boolean;
+  accessToken: string | null;  // JWT; mirrored in localStorage as tsp_access_token
 }
 ```
 
 Reducers:
 
 1. `loginSuccess(payload)`
-	- sets `state.user = payload`
+	- sets `state.user = payload.user` and optionally `state.accessToken` when `payload.accessToken` is provided
 	- sets `state.isAuthenticated = true`
 	- sets `state.rehydratedFromStorage = true`
-	- persists the user to `localStorage` key `tsp_user`
+	- persists the user to `localStorage` key `tsp_user` and the JWT to `tsp_access_token`
 
 2. `logout()`
 	- clears user
 	- sets `isAuthenticated = false`
 	- sets `rehydratedFromStorage = true`
-	- removes `tsp_user` from `localStorage`
+	- removes `tsp_user` and `tsp_access_token` from `localStorage`
 
 3. `hydrateAuth()`
-	- reads `tsp_user` from `localStorage`
+	- reads `tsp_user` and `tsp_access_token` from `localStorage`
 	- restores `state.user` and `state.isAuthenticated`
 	- sets `state.rehydratedFromStorage = true`
 	- removes invalid stored data if parsing fails
@@ -336,7 +337,7 @@ Reducers:
 
 ### Persistence note
 
-- Auth state persists the backend login user under `localStorage` key `tsp_user`. No `redux-persist` package and no JWT/session token layer.
+- Auth state persists the user under `tsp_user` and the JWT access token under `tsp_access_token`. The shared Axios instance in `services/api.ts` attaches `Authorization: Bearer …` when a token exists. No `redux-persist` package.
 
 ---
 
@@ -544,12 +545,13 @@ Dynamic navigation logic based on Redux auth state:
   - `SLAVE` sees `Discover` and `Dashboard`
   - `ADMIN` sees `Discover`, `Dashboard`, and `Admin`
 - Show `Admin` actions only if `user.role === 'ADMIN'`
+- When authenticated, a **Log out** ghost `Button` dispatches `logout()` (clears Redux, `tsp_user`, and `tsp_access_token`), shows a Sonner success toast, and navigates to `/login` (client-side session only; no server revoke endpoint)
 
 Other details:
 
 - Uses `usePathname` for active link styles
 - Uses the Phase 1 `Logo` and `Button` primitives with Tailwind v4 theme tokens
-- Mobile is currently a compact Logo + primary action fallback; full mobile navigation is deferred
+- Mobile is currently a compact Logo + primary **Dashboard** or **Sign in** plus **Log out** when authenticated; full mobile navigation is deferred
 
 ## Composite UI Components
 
@@ -792,7 +794,7 @@ Phase 6 implementation added the legacy master profile card grid and trade histo
 
 ### Auth persistence (no `redux-persist`)
 
-- `loginSuccess` / `logout` / `hydrateAuth` in `authSlice` sync `tsp_user` in `localStorage`
+- `loginSuccess` / `logout` / `hydrateAuth` in `authSlice` sync `tsp_user` and `tsp_access_token` in `localStorage`
 - `ReduxProvider` runs `hydrateAuth` in `useLayoutEffect`
 - Gated pages wait on `rehydratedFromStorage` so hard refresh keeps the session and logged-out users still reach `/login`
 

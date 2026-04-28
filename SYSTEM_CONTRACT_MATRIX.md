@@ -61,6 +61,13 @@ Rules:
 - SLAVE node registration and verification must use email.
 - Changing this identity mapping is a breaking change for both Python client and backend gateway routing.
 
+### JWT (HTTP web API)
+
+- `POST /auth/login` and `POST /auth/register` return `{ access_token: string, user: UserPublic }` (password is never returned). Passwords are stored with bcrypt; legacy plaintext rows in `Users.password` are re-hashed on the next successful login.
+- Set env `JWT_SECRET` (required) and optional `JWT_EXPIRES_IN` (default `7d`) on the backend.
+- Global `JwtAuthGuard` applies to all routes except those marked `@Public()` in code. Protected routes expect header `Authorization: Bearer <access_token>`.
+- **401** when the token is missing, invalid, or expired; **403** when the token is valid but the caller is not allowed (e.g. non-admin calling admin routes, or wrong user id on subscribe/profile/dashboard).
+
 ---
 
 ## 3) HTTP Contract Matrix
@@ -69,28 +76,28 @@ Rules:
 
 | Route | Method | Backend Handler | Called By | Request Body | Success Response (shape) | Notes |
 |---|---|---|---|---|---|---|
-| /auth/register | POST | AuthController.register | Frontend register forms | { fullName, email, password, role, licenseKey? } | saved user object | Role is MASTER or SLAVE from frontend forms |
-| /auth/login | POST | AuthController.login | Frontend LoginForm | { email, password } | user without password | Used to populate Redux auth user |
-| /auth/users | GET | AuthController.getAllUsers | Frontend admin page | none | user[] (selected fields only) | Frontend uses for admin table |
-| /auth/users/:id/license | POST | AuthController.generateLicense | Frontend admin page | none | { message, licenseKey } | Valid only for MASTER role |
-| /auth/users/:id/toggle-status | PATCH | AuthController.toggleStatus | Frontend admin page | none | { message, isActive } | ADMIN cannot be disabled |
-| /auth/verify-node | POST | AuthController.verifyNode | Python Master/Slave controllers | { role, identifier, trace_id? } | { message, role, fullName, id, trace_id? } | Pre-flight gate before MT5 operations |
-| /auth/masters | GET | AuthController.getActiveMasters | Frontend SlaveDashboard | none | active master[] | Marketplace source |
-| /auth/masters/live | GET | AuthController.getLiveMasters | Frontend trader cards | none | { liveIds: string[] } | Returns currently connected master socket user IDs. Used for real LIVE badges. |
-| /auth/users/:id/subscribe | PATCH | AuthController.updateSubscription | Frontend SlaveDashboard | { masterId: string|null } | { message, subscribedToId } | null means unsubscribe |
-| /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend SlaveDashboard (MasterProfileCard) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive } | Returns aggregate stats, live socket status, and public profile fields for one active master. Added Phase 6, isLive added Phase 9. |
-| /auth/masters/:masterId/subscribers | GET | AuthController.getMasterSubscribers | Python MasterController.fetch_subscribers | none | { id, fullName, email, isActive, totalCopied, totalPnL }[] | Returns per-slave trade summary using TradeLogs.slaveId. Historical records show 0 until slaveId is populated. |
-| /auth/masters/:id/profile | PATCH | AuthController.updateMasterProfile | Frontend MasterProfileSetup | { bio?, tradingPlatform?, instruments?, strategyDescription?, riskLevel?, typicalHoldTime? } | updated user object | Master self-updates trading identity. Added Phase 7. |
-| /auth/masters/:id/dashboard | GET | AuthController.getMasterDashboard | Frontend MasterDashboard | none | { profile, recentTrades, subscriberCount, openTrades, totalSignalsSent } | Master's own dashboard data. Added Phase 7. |
-| /auth/top-masters | GET | AuthController.getTopMasters | Frontend TopTradersSection (landing page) | none | enriched master array (max 3) | Public endpoint. Top 3 most active masters. Added Phase 7. |
+| /auth/register | POST | AuthController.register | Frontend register forms | { fullName, email, password, role, licenseKey? } | { access_token, user } | Public. Password hashed at rest. Role is MASTER or SLAVE from frontend forms |
+| /auth/login | POST | AuthController.login | Frontend LoginForm | { email, password } | { access_token, user } | Public. Used to populate Redux auth user + `tsp_access_token` |
+| /auth/users | GET | AuthController.getAllUsers | Frontend admin page | none | user[] (selected fields only) | **JWT required.** Role ADMIN only |
+| /auth/users/:id/license | POST | AuthController.generateLicense | Frontend admin page | none | { message, licenseKey } | **JWT required.** Role ADMIN only |
+| /auth/users/:id/toggle-status | PATCH | AuthController.toggleStatus | Frontend admin page | none | { message, isActive } | **JWT required.** Role ADMIN only |
+| /auth/verify-node | POST | AuthController.verifyNode | Python Master/Slave controllers | { role, identifier, trace_id? } | { message, role, fullName, id, trace_id? } | **Public.** Pre-flight gate before MT5 operations |
+| /auth/masters | GET | AuthController.getActiveMasters | Frontend SlaveDashboard | none | active master[] | **Public.** Marketplace source |
+| /auth/masters/live | GET | AuthController.getLiveMasters | Frontend trader cards | none | { liveIds: string[] } | **Public.** Returns currently connected master socket user IDs. Used for real LIVE badges. |
+| /auth/users/:id/subscribe | PATCH | AuthController.updateSubscription | Frontend SlaveDashboard | { masterId: string|null } | { message, subscribedToId } | **JWT required.** Authenticated user id must match `:id`, or caller is ADMIN. null means unsubscribe |
+| /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend SlaveDashboard (MasterProfileCard) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive } | **Public.** Returns aggregate stats, live socket status, and public profile fields for one active master. Added Phase 6, isLive added Phase 9. |
+| /auth/masters/:masterId/subscribers | GET | AuthController.getMasterSubscribers | Python MasterController.fetch_subscribers | none | { id, fullName, email, isActive, totalCopied, totalPnL }[] | **Public.** Returns per-slave trade summary using TradeLogs.slaveId. Historical records show 0 until slaveId is populated. |
+| /auth/masters/:id/profile | PATCH | AuthController.updateMasterProfile | Frontend MasterProfileSetup | { bio?, tradingPlatform?, instruments?, strategyDescription?, riskLevel?, typicalHoldTime? } | updated user object | **JWT required.** Caller must be master `:id` or ADMIN |
+| /auth/masters/:id/dashboard | GET | AuthController.getMasterDashboard | Frontend MasterDashboard | none | { profile, recentTrades, subscriberCount, openTrades, totalSignalsSent } | **JWT required.** Caller must be master `:id` or ADMIN |
+| /auth/top-masters | GET | AuthController.getTopMasters | Frontend TopTradersSection (landing page) | none | enriched master array (max 3) | **Public.** Top 3 most active masters. Added Phase 7. |
 
 ### 3.2 Trade REST
 
 | Route | Method | Backend Handler | Called By | Request Body | Response | Notes |
 |---|---|---|---|---|---|---|
-| /trades/history | GET | TradeController.getTradeHistory | Frontend dashboards (potential) | none | latest logs array | Returns top 50 via TradeService |
-| /trades/stats | GET | TradeController.getStats | Frontend dashboards (potential) | none | placeholder stats object | Currently stub/static |
-| /trades/master/:masterId/history | GET | TradeController.getMasterHistory | Frontend SlaveDashboard (TradeHistoryModal) | none | { symbol, action, status, pnl, createdAt, closedAt }[] | Returns last 50 trades per master (OPEN + CLOSED). Added Phase 6. |
+| /trades/history | GET | TradeController.getTradeHistory | Frontend dashboards (potential) | none | latest logs array | **Public.** Returns top 50 via TradeService |
+| /trades/stats | GET | TradeController.getStats | Frontend dashboards (potential) | none | placeholder stats object | **Public.** Currently stub/static |
+| /trades/master/:masterId/history | GET | TradeController.getMasterHistory | Frontend SlaveDashboard (TradeHistoryModal) | none | { symbol, action, status, pnl, createdAt, closedAt }[] | **Public.** Returns last 50 trades per master (OPEN + CLOSED). Added Phase 6. |
 
 ### 3.3 Status Code Tolerance Matrix
 

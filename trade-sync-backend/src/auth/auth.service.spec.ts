@@ -6,8 +6,18 @@ describe('AuthService.verifyNode', () => {
     const userRepository = {
       findOne: jest.fn(),
     } as any;
+    const tradeLogRepository = {};
+    const tradeGateway = {};
+    const jwtService = {
+      signAsync: jest.fn().mockResolvedValue('mock.jwt.token'),
+    };
 
-    const service = new AuthService(userRepository);
+    const service = new AuthService(
+      userRepository,
+      tradeLogRepository as any,
+      tradeGateway as any,
+      jwtService as any,
+    );
     return { service, userRepository };
   };
 

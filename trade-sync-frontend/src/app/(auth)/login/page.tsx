@@ -91,9 +91,19 @@ export default function LoginPage() {
     setFieldErrors({});
 
     try {
-      const user = (await authService.login(formData.email.trim(), formData.password)) as AuthUser;
-      dispatch(loginSuccess(user));
-      toast.success(`Welcome back${user.fullName ? `, ${user.fullName}` : ""}`);
+      const session = await authService.login(
+        formData.email.trim(),
+        formData.password,
+      );
+      dispatch(
+        loginSuccess({
+          user: session.user as AuthUser,
+          accessToken: session.access_token,
+        }),
+      );
+      toast.success(
+        `Welcome back${session.user.fullName ? `, ${session.user.fullName}` : ""}`,
+      );
       router.push("/dashboard");
     } catch (error: unknown) {
       console.error("Login Failed:", error);

@@ -20,7 +20,7 @@ Before making any change, read:
 ## Non-Negotiable Rules
 - Never rename socket events: register_node, test_signal, trade_execution
 - Never remove required payload keys: event, master_ticket, symbol, action, volume
-- Never add JWT guards — project intentionally has none
+- JWT protects authenticated REST routes; use `@Public()` on routes that stay anonymous (see SYSTEM_CONTRACT_MATRIX.md). Do not remove `Authorization` handling from the frontend API client for protected calls.
 - Never use alert() in frontend — use console.error()
 - All changes must be ADDITIVE — no existing routes or DB columns removed
 - Update SYSTEM_CONTRACT_MATRIX.md whenever a new route or socket event is added

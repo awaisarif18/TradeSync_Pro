@@ -21,10 +21,14 @@ export default function LoginForm() {
 
     try {
       // 1. Call the Real Backend API
-      const user = await authService.login(formData.email, formData.password);
+      const session = await authService.login(formData.email, formData.password);
 
-      // 2. Update Redux State with Real Data
-      dispatch(loginSuccess(user));
+      dispatch(
+        loginSuccess({
+          user: session.user,
+          accessToken: session.access_token,
+        }),
+      );
 
       // 3. Redirect to Dashboard
       router.push("/dashboard");

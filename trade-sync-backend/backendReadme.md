@@ -227,9 +227,22 @@ Phase 9 Note on slaveId:
 
 ### File: `src/auth/auth.module.ts`
 
-- Registers TypeORM repository for `User`
-- Provides `AuthService`
-- Exposes `AuthController`
+- Registers TypeORM repository for `User` and `TradeLog`
+- Configures `PassportModule` and `JwtModule` with `JWT_SECRET` / `JWT_EXPIRES_IN` from `ConfigModule`
+- Provides `AuthService`, `JwtStrategy`, and the **global** `APP_GUARD` `JwtAuthGuard` (routes opt out with `@Public()`)
+- Exposes `AuthController` and re-exports `AuthService` / `JwtModule` for other modules if needed
+
+### File: `src/auth/decorators/public.decorator.ts`
+
+- Exports `@Public()`; when set on a handler (or class), the global JWT guard does not require a Bearer token
+
+### File: `src/auth/guards/jwt-auth.guard.ts`
+
+- Extends `AuthGuard('jwt')` and skips authentication when `@Public()` is present
+
+### File: `src/auth/strategies/jwt.strategy.ts`
+
+- `passport-jwt` with `ExtractJwt.fromAuthHeaderAsBearerToken()`; `validate` loads the user by `sub` and rejects inactive users
 
 ### File: `src/auth/auth.controller.ts`
 
@@ -298,16 +311,15 @@ Base route prefix: `/auth`
 #### Method Inventory
 
 1. `register(userData: Partial<User>)`
-	- Creates user via repository `create`
-	- Saves user via repository `save`
-	- Returns full saved user entity
-	- Logging included
+	- Requires a non-empty password string
+	- Hashes password with **bcrypt** before `save`
+	- Returns full saved user entity (controller wraps with `buildAuthResponse` for `{ access_token, user }`)
 
 2. `login(email: string, pass: string)`
 	- Looks up user by email
-	- Plaintext password equality check (`user.password !== pass`)
+	- Verifies password with **bcrypt** when stored value is a bcrypt hash; otherwise compares plaintext once for **legacy** rows and then re-hashes and saves (lazy migration)
 	- Throws `UnauthorizedException` if not found/invalid
-	- Returns user minus password (`const { password, ...result }`)
+	- Returns `{ access_token, user }` via `buildAuthResponse` (JWT payload includes `sub`, `email`, `role`)
 
 3. `getAllUsers()`
 	- Returns selected fields only:
@@ -358,9 +370,10 @@ Base route prefix: `/auth`
 
 #### Auth Service Behavioral Notes
 
-- No DTO validation pipeline is currently present.
-- Passwords are persisted and compared as plaintext.
-- No JWT/session/token layer exists.
+- No DTO validation pipeline is currently present beyond ad-hoc checks.
+- Passwords are stored as **bcrypt** hashes; legacy plaintext passwords are upgraded on successful login.
+- **JWT access tokens** are issued on login/register; protected routes require `Authorization: Bearer <token>` unless `@Public()`.
+- Copy `.env.example` and set `JWT_SECRET`. In **non-production** (`NODE_ENV` not `production`), if `JWT_SECRET` is missing, a fixed development default is used (see `src/auth/jwt-secret.util.ts`); production **must** set `JWT_SECRET`.
 - Service relies heavily on console logging for traceability.
 
 ---

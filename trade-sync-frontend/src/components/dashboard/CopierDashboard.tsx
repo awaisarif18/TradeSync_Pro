@@ -554,8 +554,10 @@ export default function CopierDashboard() {
       setCurrentSubscription(response.subscribedToId);
       dispatch(
         loginSuccess({
-          ...user,
-          subscribedToId: response.subscribedToId,
+          user: {
+            ...user,
+            subscribedToId: response.subscribedToId,
+          },
         }),
       );
 

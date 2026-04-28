@@ -1,9 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useSelector } from 'react-redux';
-import type { RootState } from '../../redux/slices/store';
+import { usePathname, useRouter } from 'next/navigation';
+import { useDispatch, useSelector } from 'react-redux';
+import { toast } from 'sonner';
+import { logout } from '../../redux/slices/authSlice';
+import type { AppDispatch, RootState } from '../../redux/slices/store';
 import { Button, Logo } from '../ui';
 
 type NavLink = {
@@ -47,8 +49,16 @@ function activeButtonStyle(kind: 'dashboard' | 'admin', active: boolean) {
 
 export default function Navbar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const dispatch = useDispatch<AppDispatch>();
   const { isAuthenticated, user } = useSelector((state: RootState) => state.auth);
   const role = user?.role;
+
+  const handleLogout = () => {
+    dispatch(logout());
+    toast.success('Signed out');
+    router.push('/login');
+  };
   const dashboardActive = pathname.startsWith('/dashboard');
   const adminActive = pathname.startsWith('/admin');
 
@@ -132,17 +142,42 @@ export default function Navbar() {
                   </Button>
                 </Link>
               ) : null}
+              <Button type="button" variant="ghost" size="sm" onClick={handleLogout}>
+                Log out
+              </Button>
             </>
           )}
         </div>
 
-        <div className="nav-mobile-action" style={{ marginLeft: 'auto', display: 'none' }}>
+        <div
+          className="nav-mobile-action"
+          style={{
+            marginLeft: 'auto',
+            display: 'none',
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
           {/* TODO: replace this compact mobile fallback with the full mobile nav redesign. */}
-          <Link href={isAuthenticated ? '/dashboard' : '/login'} style={{ textDecoration: 'none' }}>
-            <Button variant="primary" size="sm">
-              {isAuthenticated ? 'Dashboard' : 'Sign in'}
-            </Button>
-          </Link>
+          {isAuthenticated ? (
+            <>
+              <Link href="/dashboard" style={{ textDecoration: 'none' }}>
+                <Button variant="primary" size="sm">
+                  Dashboard
+                </Button>
+              </Link>
+              <Button type="button" variant="ghost" size="sm" onClick={handleLogout}>
+                Log out
+              </Button>
+            </>
+          ) : (
+            <Link href="/login" style={{ textDecoration: 'none' }}>
+              <Button variant="primary" size="sm">
+                Sign in
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
       <style>{`

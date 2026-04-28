@@ -1,4 +1,9 @@
 import axios from "axios";
+import {
+  AUTH_ACCESS_TOKEN_STORAGE_KEY,
+  logout,
+} from "../redux/slices/authSlice";
+import { store } from "../redux/slices/store";
 
 const API_URL = "http://localhost:3000";
 
@@ -6,6 +11,38 @@ export const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
 });
+
+api.interceptors.request.use((config) => {
+  if (typeof window === "undefined") return config;
+  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+api.interceptors.response.use(
+  (response) => response,
+  (error: unknown) => {
+    if (typeof window === "undefined") {
+      return Promise.reject(error);
+    }
+    const axiosError = error as {
+      response?: { status?: number };
+      config?: { url?: string };
+    };
+    const status = axiosError.response?.status;
+    const url = axiosError.config?.url ?? "";
+    if (status === 401) {
+      const isAuthEntry =
+        url.includes("/auth/login") || url.includes("/auth/register");
+      if (!isAuthEntry) {
+        store.dispatch(logout());
+      }
+    }
+    return Promise.reject(error);
+  },
+);
 
 export interface MasterProfile {
   id: string;
@@ -41,6 +78,21 @@ export interface RegisterUserData {
   email: string;
   password: string;
   role: "MASTER" | "SLAVE";
+}
+
+/** User object returned with JWT from login/register (password never included). */
+export interface AuthSessionUser {
+  id: string;
+  email: string;
+  fullName?: string;
+  role: "MASTER" | "SLAVE" | "ADMIN";
+  licenseKey?: string | null;
+  subscribedToId?: string | null;
+}
+
+export interface AuthSessionResponse {
+  access_token: string;
+  user: AuthSessionUser;
 }
 
 export interface MasterProfileUpdateResult {
@@ -79,13 +131,21 @@ export interface TradeHistoryEntry {
 }
 
 export const authService = {
-  login: async (email: string, password: string) => {
-    const response = await api.post("/auth/login", { email, password });
+  login: async (email: string, password: string): Promise<AuthSessionResponse> => {
+    const response = await api.post<AuthSessionResponse>("/auth/login", {
+      email,
+      password,
+    });
     return response.data;
   },
 
-  register: async (userData: RegisterUserData) => {
-    const response = await api.post("/auth/register", userData);
+  register: async (
+    userData: RegisterUserData,
+  ): Promise<AuthSessionResponse> => {
+    const response = await api.post<AuthSessionResponse>(
+      "/auth/register",
+      userData,
+    );
     return response.data;
   },
 };

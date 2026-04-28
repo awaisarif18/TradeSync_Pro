@@ -1,10 +1,13 @@
 import {
+  BadRequestException,
   Inject,
   Injectable,
   UnauthorizedException,
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -31,8 +34,15 @@ export interface TopMasterProfile extends MasterProfileResponse {
   openTrades: number;
 }
 
+export type LoginResponse = {
+  access_token: string;
+  user: Omit<User, 'password'>;
+};
+
 @Injectable()
 export class AuthService {
+  private readonly saltRounds = 10;
+
   constructor(
     @InjectRepository(User)
     private userRepository: Repository<User>,
@@ -40,7 +50,51 @@ export class AuthService {
     private tradeLogRepository: Repository<TradeLog>,
     @Inject(forwardRef(() => TradeGateway))
     private readonly tradeGateway: TradeGateway,
+    private readonly jwtService: JwtService,
   ) {}
+
+  private isBcryptHash(value: string): boolean {
+    return typeof value === 'string' && value.startsWith('$2');
+  }
+
+  private async hashPassword(plain: string): Promise<string> {
+    return bcrypt.hash(plain, this.saltRounds);
+  }
+
+  private async verifyPlainAgainstStored(
+    plain: string,
+    stored: string,
+  ): Promise<boolean> {
+    if (this.isBcryptHash(stored)) {
+      return bcrypt.compare(plain, stored);
+    }
+    return plain === stored;
+  }
+
+  /** Issue JWT after successful login/register. */
+  async issueAccessToken(
+    userId: string,
+    email: string,
+    role: User['role'],
+  ): Promise<string> {
+    return this.jwtService.signAsync({
+      sub: userId,
+      email,
+      role,
+    });
+  }
+
+  /** Strip password and attach access_token (for register / login responses). */
+  async buildAuthResponse(user: User): Promise<LoginResponse> {
+    const { password, ...rest } = user;
+    void password;
+    const access_token = await this.issueAccessToken(
+      rest.id,
+      rest.email,
+      rest.role,
+    );
+    return { access_token, user: rest };
+  }
 
   // --- EXISTING METHODS ---
   async register(userData: Partial<User>) {
@@ -51,7 +105,18 @@ export class AuthService {
     });
 
     try {
-      const newUser = this.userRepository.create(userData);
+      if (
+        typeof userData.password !== 'string' ||
+        userData.password.length === 0
+      ) {
+        throw new BadRequestException('Password is required');
+      }
+
+      const hashed = await this.hashPassword(userData.password);
+      const newUser = this.userRepository.create({
+        ...userData,
+        password: hashed,
+      });
       console.log('[AuthService] register user instance created');
 
       const savedUser = await this.userRepository.save(newUser);
@@ -68,7 +133,7 @@ export class AuthService {
     }
   }
 
-  async login(email: string, pass: string) {
+  async login(email: string, pass: string): Promise<LoginResponse> {
     console.log('[AuthService] login called', { email });
 
     try {
@@ -78,21 +143,31 @@ export class AuthService {
         throw new UnauthorizedException('User not found');
       }
 
-      if (user.password !== pass) {
+      const valid = await this.verifyPlainAgainstStored(pass, user.password);
+      if (!valid) {
         console.warn('[AuthService] login failed: invalid credentials', {
           email,
         });
         throw new UnauthorizedException('Invalid credentials');
       }
 
-      const { password, ...result } = user;
-      void password;
+      // Lazy migration: legacy plaintext passwords become bcrypt on successful login
+      if (!this.isBcryptHash(user.password)) {
+        user.password = await this.hashPassword(pass);
+        await this.userRepository.save(user);
+      }
+
+      const fresh = await this.userRepository.findOne({ where: { email } });
+      if (!fresh) {
+        throw new UnauthorizedException('User not found');
+      }
+
       console.log('[AuthService] login success', {
-        userId: result.id,
-        email: result.email,
-        role: result.role,
+        userId: fresh.id,
+        email: fresh.email,
+        role: fresh.role,
       });
-      return result;
+      return this.buildAuthResponse(fresh);
     } catch (error) {
       console.error('[AuthService] login error', error);
       throw error;

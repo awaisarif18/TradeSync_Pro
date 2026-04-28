@@ -121,8 +121,10 @@ export default function ProviderDetailPage() {
       const response = await marketplaceService.updateSubscription(user.id, masterId);
       dispatch(
         loginSuccess({
-          ...user,
-          subscribedToId: response.subscribedToId ?? masterId,
+          user: {
+            ...user,
+            subscribedToId: response.subscribedToId ?? masterId,
+          },
         }),
       );
       toast.success(`Subscribed to ${profile.fullName}`);
