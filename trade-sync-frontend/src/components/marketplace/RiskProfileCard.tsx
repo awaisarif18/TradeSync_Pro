@@ -1,18 +1,44 @@
+import type { MasterRiskMetrics } from "../../services/api";
 import { Card, CardBody, SectionEyebrow } from "../ui";
 
-export default function RiskProfileCard() {
-  // TODO: Replace mock risk metrics when backend exposes drawdown, streaks, and gain distributions.
-  const rows = [
-    ["Max drawdown", "-8.4%", "var(--color-danger)"],
-    ["Avg trades/day", "3.1", "var(--color-text)"],
-    ["Longest losing streak", "4 trades", "var(--color-text)"],
-    ["Sharpest gain day", "+12.8%", "var(--color-mint)"],
+type RiskProfileCardProps = {
+  metrics?: MasterRiskMetrics | null;
+};
+
+function formatBestDayPnl(pnl: number): string {
+  const sign = pnl >= 0 ? "+" : "-";
+  return `${sign}$${Math.abs(pnl).toFixed(2)}`;
+}
+
+export default function RiskProfileCard({ metrics }: RiskProfileCardProps) {
+  if (!metrics) {
+    return (
+      <Card>
+        <CardBody>
+          <SectionEyebrow>Risk profile</SectionEyebrow>
+          <p style={{ margin: "12px 0 0", fontSize: 14, color: "var(--color-text-2)", lineHeight: 1.5 }}>
+            Not enough closed trades yet to show drawdown and streak stats.
+          </p>
+        </CardBody>
+      </Card>
+    );
+  }
+
+  const bestDayColor = metrics.bestDayPnl >= 0 ? "var(--color-mint)" : "var(--color-danger)";
+  const rows: [string, string, string][] = [
+    ["Max drawdown", `-${metrics.maxDrawdownPercent}%`, "var(--color-danger)"],
+    ["Avg trades/day", String(metrics.avgTradesPerDay), "var(--color-text)"],
+    ["Longest losing streak", `${metrics.longestLosingStreakTrades} trades`, "var(--color-text)"],
+    ["Best day (P&L)", formatBestDayPnl(metrics.bestDayPnl), bestDayColor],
   ];
 
   return (
     <Card>
       <CardBody>
         <SectionEyebrow>Risk profile</SectionEyebrow>
+        <p style={{ margin: "6px 0 0", fontSize: 11, color: "var(--color-text-3)", lineHeight: 1.4 }}>
+          From recent closed trades (capped sample on server).
+        </p>
         <div style={{ marginTop: 6 }}>
           {rows.map(([label, value, color], index) => (
             <div

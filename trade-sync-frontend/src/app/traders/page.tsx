@@ -8,10 +8,8 @@ import TraderCard, {
 } from "../../components/marketplace/TraderCard";
 import TraderCardSkeleton from "../../components/marketplace/TraderCardSkeleton";
 import { Button, Card, CardBody, EmptyState, SectionEyebrow } from "../../components/ui";
-import {
-  MasterProfile,
-  marketplaceService,
-} from "../../services/api";
+import { mapMasterProfileToTraderCardData } from "../../lib/mapMasterToTraderCard";
+import { MasterProfile, marketplaceService } from "../../services/api";
 
 type RiskFilterValue = "ALL" | "LOW" | "MEDIUM" | "HIGH";
 
@@ -22,30 +20,12 @@ interface ActiveMaster {
   createdAt?: string;
 }
 
-function normalizeRisk(riskLevel: string | null | undefined): TraderCardData["riskLevel"] {
-  if (riskLevel === "LOW" || riskLevel === "MEDIUM" || riskLevel === "HIGH") return riskLevel;
-  return "MEDIUM";
-}
-
 function toTraderCardData(
   master: ActiveMaster,
   profile: MasterProfile | null,
   liveIds: string[],
 ): TraderCardData {
-  return {
-    id: master.id,
-    fullName: profile?.fullName ?? master.fullName ?? "Provider",
-    email: profile?.email ?? master.email,
-    instruments: profile?.instruments ?? null,
-    riskLevel: normalizeRisk(profile?.riskLevel),
-    winRate: profile?.winRate ?? 0,
-    subscriberCount: profile?.subscriberCount ?? 0,
-    isLive: liveIds.includes(master.id) || profile?.isLive === true,
-    tradingPlatform: profile?.tradingPlatform ?? null,
-    typicalHoldTime: profile?.typicalHoldTime ?? null,
-    strategyDescription: profile?.strategyDescription ?? null,
-    bio: profile?.bio ?? null,
-  };
+  return mapMasterProfileToTraderCardData(master, profile, liveIds);
 }
 
 export default function TradersPage() {

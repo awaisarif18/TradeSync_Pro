@@ -44,6 +44,13 @@ api.interceptors.response.use(
   },
 );
 
+export interface MasterRiskMetrics {
+  maxDrawdownPercent: number;
+  avgTradesPerDay: number;
+  longestLosingStreakTrades: number;
+  bestDayPnl: number;
+}
+
 export interface MasterProfile {
   id: string;
   email?: string;
@@ -62,6 +69,9 @@ export interface MasterProfile {
   typicalHoldTime: string | null;
   subscriberCount: number;
   isLive: boolean;
+  riskMetrics?: MasterRiskMetrics;
+  equitySparkline?: number[];
+  activeHoursSummary?: string | null;
 }
 
 export interface UpdateMasterProfileDto {

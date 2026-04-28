@@ -7,6 +7,14 @@ export interface VerifyNodeResponse {
   trace_id?: string;
 }
 
+/** Optional; derived from last N closed TradeLogs (see MASTER_ANALYTICS_CLOSED_CAP). */
+export interface MasterRiskMetricsDto {
+  maxDrawdownPercent: number;
+  avgTradesPerDay: number;
+  longestLosingStreakTrades: number;
+  bestDayPnl: number;
+}
+
 // Response shape for master profile
 export interface MasterProfileResponse {
   id: string;
@@ -25,6 +33,12 @@ export interface MasterProfileResponse {
   typicalHoldTime: string | null;
   subscriberCount: number;
   isLive: boolean;
+  /** Present when capped closed-trade sample is non-empty. */
+  riskMetrics?: MasterRiskMetricsDto;
+  /** Cumulative PnL curve (downsampled) for sparkline UI. */
+  equitySparkline?: number[];
+  /** UTC activity window from recent closed trades; null if not enough data. */
+  activeHoursSummary?: string | null;
 }
 
 // Response shape for subscriber list item

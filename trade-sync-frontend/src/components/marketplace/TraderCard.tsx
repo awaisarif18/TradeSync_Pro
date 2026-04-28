@@ -18,6 +18,7 @@ export interface TraderCardData {
   typicalHoldTime?: string | null;
   strategyDescription?: string | null;
   bio?: string | null;
+  equitySparkline?: number[];
 }
 
 type TraderCardProps = {
@@ -175,7 +176,16 @@ export default function TraderCard({
           </div>
 
           <div style={{ height: 64, margin: '0 -4px', opacity: empty ? 0.3 : 1 }}>
-            <EquityCurve width={300} height={64} accent={curveAccent} />
+            <EquityCurve
+              width={300}
+              height={64}
+              accent={curveAccent}
+              data={
+                trader.equitySparkline && trader.equitySparkline.length > 0
+                  ? trader.equitySparkline
+                  : undefined
+              }
+            />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>

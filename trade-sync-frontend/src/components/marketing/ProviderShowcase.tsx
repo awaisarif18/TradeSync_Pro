@@ -5,9 +5,10 @@ import { Button, SectionEyebrow } from '../ui';
 
 type ProviderShowcaseProps = {
   providers: TraderCardData[];
+  totalProviderCount: number;
 };
 
-export default function ProviderShowcase({ providers }: ProviderShowcaseProps) {
+export default function ProviderShowcase({ providers, totalProviderCount }: ProviderShowcaseProps) {
   if (providers.length === 0) return null;
 
   return (
@@ -31,7 +32,9 @@ export default function ProviderShowcase({ providers }: ProviderShowcaseProps) {
             gap: 6,
           }}
         >
-          See all <span className="font-mono-tnum">247</span> <ArrowRight size={15} />
+          See all{' '}
+          <span className="font-mono-tnum">{Math.max(totalProviderCount, providers.length)}</span>{' '}
+          <ArrowRight size={15} />
         </Link>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>

@@ -21,6 +21,10 @@ import type {
   UpdateMasterProfileDto,
   VerifyNodeResponse,
 } from './dto/auth.dto';
+import {
+  computeMasterAnalytics,
+  MASTER_ANALYTICS_CLOSED_CAP,
+} from './master-analytics.util';
 
 export interface MasterDashboardData {
   profile: MasterProfileResponse;
@@ -445,6 +449,17 @@ export class AuthService {
       where: { subscribedToId: master.id },
     });
 
+    const analyticRows = await this.tradeLogRepository
+      .createQueryBuilder('log')
+      .select(['log.pnl', 'log.closedAt', 'log.createdAt'])
+      .where('log.masterId = :masterId', { masterId: master.id })
+      .andWhere('log.status = :status', { status: 'CLOSED' })
+      .orderBy('COALESCE(log.closedAt, log.createdAt)', 'DESC')
+      .take(MASTER_ANALYTICS_CLOSED_CAP)
+      .getMany();
+
+    const analytics = computeMasterAnalytics(analyticRows);
+
     return {
       id: master.id,
       fullName: master.fullName,
@@ -462,6 +477,7 @@ export class AuthService {
       typicalHoldTime: master.typicalHoldTime ?? null,
       subscriberCount,
       isLive: this.tradeGateway.isMasterConnected(master.id),
+      ...analytics,
     };
   }
 

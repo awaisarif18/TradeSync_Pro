@@ -83,7 +83,8 @@ trade-sync-backend/
 │  │  ├─ auth.controller.ts    # REST routes under /auth
 │  │  ├─ dto/
 │  │  │  └─ auth.dto.ts        # Auth response interfaces and profile update DTO
-│  │  └─ auth.service.ts       # Auth business logic + admin + marketplace
+│  │  ├─ auth.service.ts       # Auth business logic + admin + marketplace
+│  │  └─ master-analytics.util.ts  # Capped TradeLog-derived risk + sparkline helpers for profiles
 │  ├─ trade/
 │  │  ├─ trade.module.ts       # Trade module + providers
 │  │  ├─ trade.controller.ts   # REST routes under /trades
@@ -288,7 +289,7 @@ Base route prefix: `/auth`
 	- Path param: `id` (masterId)
 	- Calls `AuthService.getMasterProfile(id)`
 	- Returns aggregate master statistics plus public identity fields (Phase 6)
-	- Response shape: `{ id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount }`
+	- Response shape: `{ id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive }` plus optional analytics when closed trades exist: loads up to **2000** newest CLOSED rows by `COALESCE(closedAt, createdAt)` and merges `riskMetrics`, `equitySparkline`, `activeHoursSummary` from `master-analytics.util.ts`
 
 10. `PATCH /auth/masters/:id/profile`
 	- Path param: `id` (masterId)

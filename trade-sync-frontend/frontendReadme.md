@@ -123,13 +123,14 @@ trade-sync-frontend/
 	│  │  ├─ RiskFilter.tsx            # Risk-level filter pill row
 	│  │  ├─ ProviderHeroBand.tsx      # Provider detail identity band
 	│  │  ├─ PerformanceBigCard.tsx    # Provider detail performance and copy action
-	│  │  ├─ RiskProfileCard.tsx       # Mock risk metrics side card
+	│  │  ├─ RiskProfileCard.tsx       # Risk metrics from profile.riskMetrics or empty state
 	│  │  ├─ InstrumentsCard.tsx       # Instrument pill list
-	│  │  └─ TradingHoursCard.tsx      # Decorative trading-hours side card
+	│  │  └─ TradingHoursCard.tsx      # Log-derived hours summary or fallback copy
 	│  ├─ marketing/
 	│  │  ├─ Hero.tsx                  # Landing hero and product preview
 	│  │  ├─ HowItWorks.tsx            # Three-card explainer section
-	│  │  ├─ ProviderShowcase.tsx      # Landing provider card grid
+	│  │  ├─ ProviderShowcase.tsx      # Landing provider card grid (`totalProviderCount` for “See all”)
+	│  │  ├─ VerifiedProviderShowcaseBlock.tsx  # Client: top masters + active count strip + showcase
 	│  │  ├─ LiveTradeFeedCard.tsx     # Decorative live-trade feed strip
 	│  │  └─ FooterStrip.tsx           # Minimal landing footer strip
 	│  ├─ auth/
@@ -160,7 +161,8 @@ trade-sync-frontend/
 	   ├─ cn.ts                        # clsx + tailwind-merge class helper
 	   ├─ role-display.ts              # Role labels and role color mapping
 	   ├─ format.ts                    # Currency, percent, volume, and date formatters
-	   └─ avatar-color.ts              # Deterministic avatar color helper
+	   ├─ avatar-color.ts              # Deterministic avatar color helper
+	   └─ mapMasterToTraderCard.ts     # MasterProfile/TopMaster → TraderCardData + ROI proxy
 ```
 
 ---
@@ -558,7 +560,7 @@ Other details:
 - `EquityCurve` renders the deterministic SVG curve used by cards and marketing previews
 - `TradeRow` and `MarketTicker` provide decorative feed/ticker display without API calls
 - `TraderCard`, `TraderCardSkeleton`, and `RiskFilter` support provider marketplace UI
-- `Hero`, `HowItWorks`, `ProviderShowcase`, `LiveTradeFeedCard`, and `FooterStrip` provide reusable landing-page sections
+- `Hero`, `HowItWorks`, `ProviderShowcase`, `VerifiedProviderShowcaseBlock` (real `GET /auth/top-masters` + `GET /auth/masters` counts), `LiveTradeFeedCard`, and `FooterStrip` provide reusable landing-page sections
 
 ## `Footer`
 

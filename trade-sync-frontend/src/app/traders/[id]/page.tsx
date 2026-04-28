@@ -376,9 +376,9 @@ export default function ProviderDetailPage() {
           </div>
 
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-            <RiskProfileCard />
+            <RiskProfileCard metrics={profile.riskMetrics} />
             <InstrumentsCard instruments={profile.instruments} />
-            <TradingHoursCard />
+            <TradingHoursCard summary={profile.activeHoursSummary} />
           </div>
         </div>
       ) : (

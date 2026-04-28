@@ -579,7 +579,7 @@ Key widgets and controls:
 - **Dashboard (Tab 2: SUBSCRIBERS):**
   - `SubscribersPanel` with subscriber table, live/offline status, copied count, and PnL summary
 - **Dashboard (Tab 3: PERFORMANCE):**
-  - Trading stats from `GET /auth/masters/:id/profile`: total trades, closed trades, win rate, total PnL, average volume, and subscribers
+  - Trading stats from `GET /auth/masters/:id/profile`: total trades, closed trades, win rate, total PnL, average volume, and subscribers (the JSON may also include optional analytics fields such as `riskMetrics`, `equitySparkline`, and `activeHoursSummary`; the PySide UI continues to read only the known keys)
 
 Methods:
 - `build_login_screen()` / `build_dashboard_screen()`: UI layout generation.
