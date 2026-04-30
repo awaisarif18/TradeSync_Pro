@@ -1,30 +1,44 @@
-"""Shell chrome: title bar, sidebar, footer, header strips, KPI strips.
+"""Shell chrome: title bar, sidebar, footer, header/KPI strips, event log, window shell.
 
-See ``docs/pyside6_translation.md`` § 4.1–4.4, § 4.6.
+See ``docs/pyside6_translation.md`` § 4.1–4.5, § 4.7.
 """
 
 from __future__ import annotations
 
+import html
+
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QStackedWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
 from views.qt.custom_widgets import PulseDot
 from views.qt.primitives import MicroLabel, StatusPill
 from views.qt.theme import (
     ACCENT,
     ACCENT_SOFT,
+    BG,
     DANGER,
     FOOTER_H,
     HEADER_H,
     KPI_H,
     LINE,
+    LOG_W,
     SIDEBAR_W,
     SURFACE,
     SURFACE3,
     TEXT,
+    TEXT2,
     TEXT3,
     TITLEBAR_H,
     FONT_MONO,
+    WARN,
 )
 
 NAV_ITEMS_SLAVE = [
@@ -515,3 +529,212 @@ class KpiStripMaster(QWidget):
             else:
                 tile.set_value(val, color=payload[2])
                 tile.set_sub(payload[1])
+
+
+# ── § 4.5 — Event log ───────────────────────────────────────────
+
+
+class EventLog(QWidget):
+    """
+    Right-hand log panel: filter chips + read-only monospace body.
+    Categories map to accent / warn / danger / muted colors.
+    """
+
+    LOG_COLORS = {
+        "SIGNAL": ACCENT,
+        "COPY": ACCENT,
+        "SESSION": TEXT2,
+        "MT5": WARN,
+        "ERROR": DANGER,
+        "ERR": DANGER,
+        "INFO": TEXT3,
+    }
+
+    def __init__(self, role="slave", parent=None):
+        super().__init__(parent)
+        self.setFixedWidth(LOG_W)
+        self.setStyleSheet(
+            f"""
+            background: {SURFACE};
+            border-left: 1px solid {LINE};
+            """
+        )
+        self._active_filter = "ALL"
+        self._entries: list[tuple[str, str]] = []
+
+        col = QVBoxLayout(self)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(0)
+
+        header = QWidget()
+        header.setFixedHeight(36)
+        header.setStyleSheet(f"border-bottom: 1px solid {LINE};")
+        hrow = QHBoxLayout(header)
+        hrow.setContentsMargins(12, 0, 12, 0)
+        lbl = MicroLabel("Event Log")
+        hrow.addWidget(lbl)
+        hrow.addStretch()
+        col.addWidget(header)
+
+        filters = QWidget()
+        filters.setFixedHeight(32)
+        frow = QHBoxLayout(filters)
+        frow.setContentsMargins(8, 4, 8, 4)
+        frow.setSpacing(4)
+        filter_labels = ["ALL", "SIGNAL", "COPY", "MT5", "ERR"]
+        self._filter_btns: dict[str, QPushButton] = {}
+        for filt in filter_labels:
+            btn = QPushButton(filt)
+            btn.setFixedHeight(22)
+
+            def _pick(_checked: bool, ff: str = filt) -> None:
+                self._set_filter(ff)
+
+            btn.clicked.connect(_pick)
+            self._filter_btns[filt] = btn
+            frow.addWidget(btn)
+        frow.addStretch()
+        col.addWidget(filters)
+        self._refresh_filter_styles()
+
+        self._log_widget = QTextEdit()
+        self._log_widget.setReadOnly(True)
+        self._log_widget.setStyleSheet(
+            f"""
+            QTextEdit {{
+                background: {BG};
+                color: {TEXT3};
+                font-family: '{FONT_MONO}';
+                font-size: 11px;
+                border: none;
+                padding: 8px;
+            }}
+            """
+        )
+        col.addWidget(self._log_widget, 1)
+
+    def _set_filter(self, filt: str) -> None:
+        self._active_filter = filt
+        self._refresh_filter_styles()
+        self._redraw_log()
+
+    def _refresh_filter_styles(self) -> None:
+        for filt, btn in self._filter_btns.items():
+            active = filt == self._active_filter
+            btn.setStyleSheet(
+                f"""
+                QPushButton {{
+                    background: {'rgba(0,195,137,0.12)' if active else 'transparent'};
+                    color: {ACCENT if active else TEXT3};
+                    font-size: 10px; font-weight: 600;
+                    border: {'1px solid ' + ACCENT if active else '1px solid ' + LINE};
+                    border-radius: 4px; padding: 0 6px;
+                }}
+                """
+            )
+
+    def _entry_matches_filter(self, category: str) -> bool:
+        if self._active_filter == "ALL":
+            return True
+        if self._active_filter == "ERR":
+            return category in ("ERR", "ERROR")
+        return category == self._active_filter
+
+    def append_log(self, text: str, category="INFO") -> None:
+        self._entries.append((category, text))
+        self._redraw_log()
+
+    def _redraw_log(self) -> None:
+        self._log_widget.clear()
+        for cat, text in reversed(self._entries[-200:]):
+            if not self._entry_matches_filter(cat):
+                continue
+            color = self.LOG_COLORS.get(cat, TEXT3)
+            safe = html.escape(text, quote=True)
+            self._log_widget.append(f'<span style="color:{color}">{safe}</span>')
+
+
+# ── § 4.7 — Window shell composer ───────────────────────────────
+
+
+class WindowShell(QWidget):
+    """
+    Main interior: Sidebar | header + KPI + stacked pages | EventLog,
+    plus footer. Sidebar switches ``QStackedWidget`` views by key.
+    """
+
+    def __init__(self, role="slave", parent=None):
+        super().__init__(parent)
+        self._role = role
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        center_row = QHBoxLayout()
+        center_row.setContentsMargins(0, 0, 0, 0)
+        center_row.setSpacing(0)
+
+        nav_items = NAV_ITEMS_SLAVE if role == "slave" else NAV_ITEMS_MASTER
+        self.sidebar = Sidebar(items=nav_items)
+        self.sidebar.nav_changed.connect(self._on_nav)
+
+        center_col = QVBoxLayout()
+        center_col.setContentsMargins(0, 0, 0, 0)
+        center_col.setSpacing(0)
+
+        if role == "slave":
+            self.header = HeaderStripSlave()
+            self.kpi = KpiStripSlave()
+        else:
+            self.header = HeaderStripMaster()
+            self.kpi = KpiStripMaster()
+
+        self.stack = QStackedWidget()
+
+        center_col.addWidget(self.header)
+        center_col.addWidget(self.kpi)
+        center_col.addWidget(self.stack, 1)
+
+        center_widget = QWidget()
+        center_widget.setLayout(center_col)
+
+        self.event_log = EventLog(role=role)
+
+        center_row.addWidget(self.sidebar)
+        center_row.addWidget(center_widget, 1)
+        center_row.addWidget(self.event_log)
+
+        center_widget_outer = QWidget()
+        center_widget_outer.setLayout(center_row)
+
+        self.footer = FooterStrip()
+
+        outer.addWidget(center_widget_outer, 1)
+        outer.addWidget(self.footer)
+
+        self._views: dict[str, QWidget] = {}
+
+        for key, _icon, nav_label in nav_items:
+            placeholder = QLabel(f"{nav_label}\n(placeholder)")
+            placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder.setStyleSheet(f"color: {TEXT3}; font-size: 13px;")
+            self.register_view(key, placeholder)
+
+        if nav_items:
+            self.show_view(nav_items[0][0])
+
+    def register_view(self, key: str, widget: QWidget) -> None:
+        self._views[key] = widget
+        self.stack.addWidget(widget)
+
+    def show_view(self, key: str) -> None:
+        if key in self._views:
+            self.stack.setCurrentWidget(self._views[key])
+            self.sidebar.set_active(key)
+
+    def _on_nav(self, key: str) -> None:
+        self.show_view(key)
+
+    def log(self, text: str, category="INFO") -> None:
+        self.event_log.append_log(text, category)
