@@ -730,6 +730,12 @@ Endpoint used:
 
 - `POST http://localhost:3000/auth/verify-node`
 
+Auth boundary note:
+
+- This node-verification endpoint is intentionally public for desktop MASTER/SLAVE bootstrap.
+- JWT bearer authentication is used by web/admin REST flows (frontend to backend), not by this verify-node handshake.
+- After verification, realtime authorization continues through `register_node` role/identifier semantics and backend room routing.
+
 Master request:
 
 ```json

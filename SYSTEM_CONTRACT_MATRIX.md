@@ -74,6 +74,11 @@ Rules:
 
 ### 3.1 Authentication and User Management
 
+JWT enforcement contract for web REST:
+- Protected routes require `Authorization: Bearer <access_token>`.
+- Public routes are explicitly marked `Public` in the Notes column.
+- Error semantics remain stable: `401` for missing/invalid/expired token, `403` for valid token without permission.
+
 | Route | Method | Backend Handler | Called By | Request Body | Success Response (shape) | Notes |
 |---|---|---|---|---|---|---|
 | /auth/register | POST | AuthController.register | Frontend register forms | { fullName, email, password, role, licenseKey? } | { access_token, user } | Public. Password hashed at rest. Role is MASTER or SLAVE from frontend forms |

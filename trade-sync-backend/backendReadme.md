@@ -661,9 +661,9 @@ Current codebase does **not** define a root `/` route/controller, so this test i
 ## 12) Known Risks and Design Constraints
 
 1. **Security**
-	- Passwords are plaintext in DB and compared plaintext.
-	- Hardcoded DB credentials in source.
-	- No authentication token/session guard on admin routes.
+	- Passwords are stored as bcrypt hashes for current users; legacy plaintext rows are upgraded to bcrypt on successful login.
+	- JWT access tokens are required on protected routes through the global `JwtAuthGuard`; only `@Public()` endpoints skip token auth.
+	- Database credentials are still hardcoded in source and should be moved to environment variables.
 
 2. **Data Modeling Drift**
 	- `TradeLogs` entity table vs raw SQL `TradeLog` table naming mismatch.
@@ -734,7 +734,7 @@ When generating or modifying backend code, follow these rules to avoid breakage:
 1. Introduce DTOs + validation pipes for all controller inputs.
 2. Move DB config and CORS origin to environment variables.
 3. Add password hashing (bcrypt/argon2) with migration strategy.
-4. Add auth guard for admin-only routes.
+4. Continue tightening role checks and endpoint-level authorization tests for admin-only routes.
 5. Align trade table naming strategy (`TradeLog` vs `TradeLogs`).
 6. Replace stale e2e root test with real route coverage.
 

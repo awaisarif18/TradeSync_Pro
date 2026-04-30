@@ -350,6 +350,13 @@ Reducers:
 - Shared Axios instance:
   - `baseURL = 'http://localhost:3000'`
   - JSON content-type header
+  - Reads `tsp_access_token` from localStorage and attaches `Authorization: Bearer <token>` on requests when present
+
+JWT contract note:
+
+- Frontend registration and login receive `{ access_token, user }`.
+- Protected backend routes enforce JWT on the server side; frontend route guards are UX controls only and do not replace backend auth.
+- Public endpoints such as `/auth/verify-node`, `/auth/masters`, `/auth/masters/live`, and `/auth/top-masters` remain callable without a bearer token.
 
 ### `authService`
 
@@ -699,7 +706,7 @@ Frontend assumes backend at `http://localhost:3000` and relies on:
 
 From backend architecture:
 
-- Admin actions have no frontend token guard in this codebase; authorization is effectively backend-dependent.
+- Admin and user-management actions are backend-authorized and require a valid bearer token plus role checks.
 - Marketplace subscription writes `subscribedToId` in backend user model.
 - Trade feed is room/routing-aware in backend, but frontend socket consumer currently just listens globally.
 
