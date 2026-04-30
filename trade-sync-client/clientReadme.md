@@ -90,6 +90,10 @@ trade-sync-client/
 │  └─ trade_signal.py                       # Lightweight trade DTO helper
 ├─ views/
 │  ├─ qt/
+│  │  ├─ theme.py                           # Design tokens, fonts, global QSS builder
+│  │  ├─ primitives.py                       # Styled atoms and molecules (cards, inputs, chips)
+│  │  ├─ custom_widgets.py                   # Custom paint: PulseDot, sparkline, histogram, sweep
+│  │  ├─ shell.py                            # TitleBar, Sidebar, FooterStrip; NAV_ITEMS_* constants
 │  │  ├─ master_window.py                   # PySide6 Master desktop UI
 │  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (4-tab Bloomberg theme)
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
