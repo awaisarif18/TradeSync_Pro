@@ -1,4 +1,5 @@
 import sys
+from typing import Optional
 
 import MetaTrader5 as mt5
 from PySide6.QtWidgets import (
@@ -16,6 +17,7 @@ from PySide6.QtCore import Qt, Slot
 from controllers.ui_controllers.slave_controller import SlaveController
 from views.qt.primitives import Btn, Card, FieldLabel, LineInput, MonoInput
 from views.qt.shell import HeaderStripSlave, TitleBar, WindowShell
+from views.qt.views.copy_view import CopyView
 from views.qt.theme import ACCENT, BG, DANGER, FOOTER_H, HEADER_H, KPI_H, TEXT
 from views.qt.ui_bridge import UIBridge
 
@@ -302,6 +304,7 @@ class SlaveWindow(QMainWindow):
 
         self._slave_log_emit_cursor = 0
         self._slave_header_signature = None  # tuple (master_name_or_none, variant)
+        self.copy_view: Optional[CopyView] = None
 
         self.setStyleSheet(
             BLOOMBERG_QSS
@@ -339,6 +342,15 @@ class SlaveWindow(QMainWindow):
         self.login_card.login_btn.clicked.connect(self.on_login_submit)
         return panel
 
+    def _replace_shell_placeholder(self, shell: WindowShell, key: str, widget: QWidget) -> None:
+        """Swap a shell stack page without editing ``shell.py`` (reads private ``_views``)."""
+        old = shell._views[key]
+        ix = shell.stack.indexOf(old)
+        shell.stack.removeWidget(old)
+        old.deleteLater()
+        shell._views[key] = widget
+        shell.stack.insertWidget(ix, widget)
+
     def build_dashboard_screen(self):
         """Post-login scaffold: TitleBar + ``WindowShell`` (placeholders inside shell stack)."""
 
@@ -351,6 +363,9 @@ class SlaveWindow(QMainWindow):
         v.addWidget(self.title_bar)
 
         self.shell = WindowShell(role="slave")
+
+        self.copy_view = CopyView(self.controller)
+        self._replace_shell_placeholder(self.shell, "copy", self.copy_view)
 
         sb_lay = self.shell.sidebar.layout()
         if hasattr(sb_lay, "setContentsMargins"):
@@ -443,6 +458,10 @@ class SlaveWindow(QMainWindow):
         for line in new_chunk:
             shell.event_log.append_log(line, _slave_log_category(line))
         self._slave_log_emit_cursor = len(logs)
+
+        cv = getattr(self, "copy_view", None)
+        if cv is not None:
+            cv.sync_from_state()
 
         if hasattr(self, "risk_panel"):
             self.risk_panel.refresh_display()

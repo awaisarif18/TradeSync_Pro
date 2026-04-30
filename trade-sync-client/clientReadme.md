@@ -95,7 +95,10 @@ trade-sync-client/
 │  │  ├─ custom_widgets.py                   # Custom paint: PulseDot, sparkline, histogram, sweep
 │  │  ├─ shell.py                            # TitleBar, Sidebar, FooterStrip; NAV_ITEMS_* constants
 │  │  ├─ master_window.py                   # PySide6 Master desktop UI
-│  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (4-tab Bloomberg theme)
+│  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (WindowShell scaffold)
+│  │  ├─ views/                             # Shell tab bodies (replacing placeholders)
+│  │  │  ├─ __init__.py                    # Package marker
+│  │  │  └─ copy_view.py                   # COPY tab: master summary, settings, listen control
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
 │  │  ├─ subscribers_panel.py               # SubscribersPanel QWidget
 │  │  ├─ symbol_map_panel.py                # SymbolMapPanel QWidget (dual broker presets)
@@ -622,49 +625,22 @@ Palette: `#0a0a0a` background, `#1a1a1a` surfaces, `#2a2a2a` borders, `#00d4aa` 
 Flow:
 1. Login screen rendered via `QStackedWidget`.
 2. Credentials extracted (strictly using Email as the identifier).
-3. Cloud verify + MT5 connect.
-4. Dashboard rendered as a 4-tab `QTabWidget`.
+3. Cloud verify + MT5 connect (`SlaveController.login_mt5`).
+4. Dashboard: `TitleBar` + `WindowShell(role='slave')` (sidebar, KPI, header, stack, footer, `EventLog`).
 
 Key widgets and controls:
-- **Login entries:**
-  - MT5 Login ID (`QLineEdit`)
-  - MT5 Password (`QLineEdit`, masked)
-  - Server string (`QLineEdit`)
-  - Broker dropdown (`QComboBox`: `XM`, `Vantage`, `Exness`)
-  - "TSP Registered Email" input (`QLineEdit`)
-- **Dashboard (Tab 1: COPY):**
-  - Status bar: connection dot (teal/red), session timer, session P&L
-  - Copy Mode groupbox: Multiplier/Fixed Lot radio buttons with stacked spinboxes
-  - Reverse Copy checkbox, Slippage spinbox
-  - START/STOP COPYING button (teal border when active)
-  - Event Log (`QTextEdit`, color-coded HTML output)
-- **Dashboard (Tab 2: SYMBOLS):**
-  - `SymbolMapPanel` with dual broker preset (master's broker + your broker)
-  - Unmapped symbol behavior dropdown (ignore vs copy-as-is)
-- **Dashboard (Tab 3: RISK):**
-  - `RiskPanel` with equity protection, lot cap, concurrent cap, daily loss protection, symbol whitelist
-- **Dashboard (Tab 4: TRADES):**
-  - `TradesPanel` with session summary, open positions table, session history table
+- **Login:** `SlaveLoginCard` — email, MT5 login/password, server, broker name (`LineInput` / `MonoInput`).
+- **Shell:** Sidebar keys `copy` / `symbols` / `risk` / `trades`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog`.
+- **COPY:** `views/qt/views/copy_view.py` — master status summary, segmented `MULTIPLIER` \| `FIXED_LOT`, spinboxes (`risk_multiplier`, `fixed_lot_size`, `slippage_points`), reverse checkbox, `toggle_listening()` + `SweepBand` when running.
+- **SYMBOLS / RISK / TRADES:** Shell placeholders until panels are reattached.
 
 Methods:
-- `build_login_screen()` / `build_dashboard_screen()`: UI layout generation.
-- `on_login_submit()`: Extracts text and triggers `SlaveController.login_mt5()`.
-- `on_risk_changed(value)`: Directly mutates `controller.state.risk_multiplier`.
-- `on_toggle_listen()`: Flips controller listening state, updates button text/style.
-- `_on_copy_mode_changed(id)`: Switches copy mode and stacked spinbox.
-- `_on_fixed_lot_changed(value)`: Mutates `state.fixed_lot_size`.
-- `_on_reverse_changed(checked)`: Mutates `state.reverse_copy`.
-- `_on_slippage_changed(value)`: Mutates `state.slippage_points`.
-- `_update_session_clock()`: QTimer-driven 1s updates for elapsed time.
-- `update_ui()`: Thread-safe `@Slot()` that refreshes connection dot, session PnL, color-coded HTML logs, `RiskPanel.refresh_display()`, and `TradesPanel.refresh_display()`.
+- `build_login_screen()` / `build_dashboard_screen()`: layouts plus `WindowShell`; `_replace_shell_placeholder()` swaps a stack widget by nav key without editing `shell.py`.
+- `on_login_submit()` calls `SlaveController.login_mt5(...)`.
+- `_show_dashboard()` switches the stack to the dashboard, resets log and header guards, runs `update_ui()`.
+- `update_ui()` (`@Slot()`): footer, `HeaderStripSlave`, KPI strip, tails `state.logs` into `EventLog`; optional panel refresh hooks when wired; `CopyView.sync_from_state()`.
 
-Log color coding in `update_ui()` HTML rendering:
-- `[RISK]` lines → `#ff9900` (orange)
-- `OPEN SUCCESS` → `#00d4aa` (teal)
-- `CLOSE SUCCESS` → `#888888` (gray)
-- `DAILY LOSS` / `FAILED` → `#ff4444` (red)
-- `[SESSION]` → `#00d4aa` (teal)
-- Normal lines → `#666666` (muted)
+`_slave_log_category` maps log lines into `EventLog` filter categories.
 
 ## 11.1) Risk Management System
 
