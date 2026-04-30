@@ -1,6 +1,6 @@
-"""Shell chrome: title bar, sidebar nav rail, footer strip.
+"""Shell chrome: title bar, sidebar, footer, header strips, KPI strips.
 
-See ``docs/pyside6_translation.md`` § 4.1, § 4.2, § 4.6.
+See ``docs/pyside6_translation.md`` § 4.1–4.4, § 4.6.
 """
 
 from __future__ import annotations
@@ -9,8 +9,10 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from views.qt.custom_widgets import PulseDot
+from views.qt.primitives import MicroLabel, StatusPill
 from views.qt.theme import (
     ACCENT,
+    ACCENT_SOFT,
     DANGER,
     FOOTER_H,
     HEADER_H,
@@ -261,3 +263,255 @@ class FooterStrip(QWidget):
             self._status_lbl.setStyleSheet(
                 f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};"
             )
+
+
+# ── § 4.3 — Header strips ────────────────────────────────────────
+
+
+class HeaderStripSlave(QWidget):
+    """Slave strip: master identity or empty state, optional latency, StatusPill."""
+
+    def __init__(self, master_name=None, status="idle", latency=None, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(HEADER_H)
+        self.setStyleSheet(
+            f"""
+            background: {SURFACE};
+            border-bottom: 1px solid {LINE};
+            """
+        )
+        row = QHBoxLayout(self)
+        row.setContentsMargins(16, 0, 16, 0)
+        row.setSpacing(12)
+
+        if master_name:
+            av = QLabel(master_name[0].upper())
+            av.setFixedSize(28, 28)
+            av.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            av.setStyleSheet(
+                f"""
+                background: {ACCENT_SOFT};
+                color: {ACCENT};
+                border-radius: 14px;
+                font-weight: 700; font-size: 12px;
+                """
+            )
+            row.addWidget(av)
+
+            name_col = QVBoxLayout()
+            name_col.setSpacing(1)
+            name_lbl = QLabel(master_name)
+            name_lbl.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT};")
+            role_lbl = QLabel("Signal Provider")
+            role_lbl.setStyleSheet(f"font-size: 11px; color: {TEXT3};")
+            name_col.addWidget(name_lbl)
+            name_col.addWidget(role_lbl)
+            row.addLayout(name_col)
+        else:
+            placeholder = QLabel("No master selected")
+            placeholder.setStyleSheet(f"color: {TEXT3}; font-size: 13px;")
+            row.addWidget(placeholder)
+
+        row.addStretch()
+
+        if latency is not None:
+            lat = QLabel(f"{latency}ms")
+            lat.setStyleSheet(
+                f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};"
+            )
+            row.addWidget(lat)
+
+        pill = StatusPill(variant=status, label=status.upper())
+        row.addWidget(pill)
+
+
+class HeaderStripMaster(QWidget):
+    """Master strip: account identity, license tail, session timer, StatusPill."""
+
+    def __init__(
+        self,
+        name=None,
+        license_tail=None,
+        status="idle",
+        session_elapsed=None,
+        parent=None,
+    ):
+        super().__init__(parent)
+        self.setFixedHeight(HEADER_H)
+        self.setStyleSheet(f"background: {SURFACE}; border-bottom: 1px solid {LINE};")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(16, 0, 16, 0)
+        row.setSpacing(12)
+
+        if name:
+            av = QLabel(name[0].upper())
+            av.setFixedSize(28, 28)
+            av.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            av.setStyleSheet(
+                f"""
+                background: {ACCENT_SOFT}; color: {ACCENT};
+                border-radius: 14px; font-weight: 700; font-size: 12px;
+                """
+            )
+            row.addWidget(av)
+            name_lbl = QLabel(name)
+            name_lbl.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT};")
+            row.addWidget(name_lbl)
+
+        if license_tail:
+            key_lbl = QLabel(f"···{license_tail}")
+            key_lbl.setStyleSheet(
+                f"""
+                font-family: '{FONT_MONO}'; font-size: 11px; color: {ACCENT};
+                background: {ACCENT_SOFT}; border-radius: 4px; padding: 2px 6px;
+                """
+            )
+            row.addWidget(key_lbl)
+
+        row.addStretch()
+
+        if session_elapsed:
+            timer = QLabel(session_elapsed)
+            timer.setStyleSheet(
+                f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};"
+            )
+            row.addWidget(timer)
+
+        pill = StatusPill(variant=status, label=status.upper())
+        row.addWidget(pill)
+
+
+# ── § 4.4 — KPI strips ──────────────────────────────────────────
+
+
+class KpiTile(QWidget):
+    """Micro label, large mono value, optional sub line."""
+
+    def __init__(self, label, value, sub=None, value_color=TEXT, parent=None):
+        super().__init__(parent)
+        self._value_color_default = value_color
+
+        col = QVBoxLayout(self)
+        col.setContentsMargins(14, 10, 14, 10)
+        col.setSpacing(2)
+        col.addWidget(MicroLabel(label))
+
+        self._value_lbl = QLabel(value)
+        self._value_lbl.setStyleSheet(
+            f"font-size: 20px; font-weight: 700; color: {value_color}; font-family: '{FONT_MONO}';"
+        )
+        col.addWidget(self._value_lbl)
+
+        self._sub_lbl = QLabel(sub or "")
+        self._sub_lbl.setStyleSheet(f"font-size: 11px; color: {TEXT3};")
+        self._sub_lbl.setVisible(bool(sub))
+        col.addWidget(self._sub_lbl)
+
+    def set_value(self, text: str, color: str | None = None) -> None:
+        self._value_lbl.setText(text)
+        c = color if color is not None else self._value_color_default
+        self._value_lbl.setStyleSheet(
+            f"font-size: 20px; font-weight: 700; color: {c}; font-family: '{FONT_MONO}';"
+        )
+
+    def set_sub(self, text: str | None) -> None:
+        self._sub_lbl.setText(text or "")
+        self._sub_lbl.setVisible(bool(text))
+
+
+class KpiStripSlave(QWidget):
+    """Five tiles: Signals, Copied, Session P&L, Equity, Latency (``KPI_H`` tall)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(KPI_H)
+        self.setStyleSheet(f"background: {SURFACE}; border-bottom: 1px solid {LINE};")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        self._tiles: dict[str, KpiTile] = {}
+        specs = [
+            ("signals", "Signals", "—", None, TEXT),
+            ("copied", "Copied", "—", None, TEXT),
+            ("session_pnl", "Session P&L", "$0.00", None, TEXT),
+            ("equity", "Equity", "$0.00", None, TEXT),
+            ("latency", "Latency", "—", None, TEXT3),
+        ]
+        for i, (key, label, val, sub, vc) in enumerate(specs):
+            tile = KpiTile(label, val, sub, vc)
+            if i < len(specs) - 1:
+                tile.setStyleSheet(
+                    (tile.styleSheet() or "")
+                    + f"background: transparent; border-right: 1px solid {LINE};"
+                )
+            row.addWidget(tile, 1)
+            self._tiles[key] = tile
+
+    def update_kpis(self, **kwargs) -> None:
+        """Update tiles. Payload: ``str``, ``(value,)``, ``(value, color)``, or ``(value, sub, color)``."""
+
+        for key, payload in kwargs.items():
+            tile = self._tiles.get(key)
+            if tile is None:
+                continue
+            if isinstance(payload, str):
+                tile.set_value(payload)
+                continue
+            if not isinstance(payload, tuple):
+                continue
+            val = str(payload[0])
+            if len(payload) == 1:
+                tile.set_value(val)
+            elif len(payload) == 2:
+                tile.set_value(val, color=payload[1])
+            else:
+                tile.set_value(val, color=payload[2])
+                tile.set_sub(payload[1])
+
+
+class KpiStripMaster(QWidget):
+    """Five tiles for master console metrics."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(KPI_H)
+        self.setStyleSheet(f"background: {SURFACE}; border-bottom: 1px solid {LINE};")
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(0)
+        specs = [
+            ("signals", "Total Signals", "—"),
+            ("subscribers", "Subscribers", "—"),
+            ("win_rate", "Win Rate", "—"),
+            ("total_pnl", "Total P&L", "$0.00"),
+            ("avg_volume", "Avg Volume", "—"),
+        ]
+        self._tiles: dict[str, KpiTile] = {}
+        for i, (key, label, val) in enumerate(specs):
+            tile = KpiTile(label, val)
+            if i < len(specs) - 1:
+                tile.setStyleSheet(
+                    (tile.styleSheet() or "")
+                    + f"background: transparent; border-right: 1px solid {LINE};"
+                )
+            row.addWidget(tile, 1)
+            self._tiles[key] = tile
+
+    def update_kpis(self, **kwargs) -> None:
+        for key, payload in kwargs.items():
+            tile = self._tiles.get(key)
+            if tile is None:
+                continue
+            if isinstance(payload, str):
+                tile.set_value(payload)
+                continue
+            if not isinstance(payload, tuple):
+                continue
+            val = str(payload[0])
+            if len(payload) == 1:
+                tile.set_value(val)
+            elif len(payload) == 2:
+                tile.set_value(val, color=payload[1])
+            else:
+                tile.set_value(val, color=payload[2])
+                tile.set_sub(payload[1])
