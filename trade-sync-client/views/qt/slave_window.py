@@ -1,32 +1,22 @@
 import sys
-from datetime import datetime
+
+import MetaTrader5 as mt5
 from PySide6.QtWidgets import (
     QApplication,
-    QButtonGroup,
-    QCheckBox,
-    QDoubleSpinBox,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
-    QPushButton,
-    QRadioButton,
-    QSpinBox,
     QStackedWidget,
-    QTabWidget,
-    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import Qt, Slot, QTimer
+from PySide6.QtCore import Qt, Slot
 
 from controllers.ui_controllers.slave_controller import SlaveController
 from views.qt.primitives import Btn, Card, FieldLabel, LineInput, MonoInput
-from views.qt.risk_panel import RiskPanel
-from views.qt.symbol_map_panel import SymbolMapPanel
-from views.qt.theme import ACCENT, BG, DANGER, TEXT
-from views.qt.trades_panel import TradesPanel
+from views.qt.shell import HeaderStripSlave, TitleBar, WindowShell
+from views.qt.theme import ACCENT, BG, DANGER, FOOTER_H, HEADER_H, KPI_H, TEXT
 from views.qt.ui_bridge import UIBridge
 
 
@@ -105,6 +95,46 @@ class SlaveLoginCard(QWidget):
         inner.addWidget(self.login_btn)
 
         root.addWidget(self.card_frame)
+
+
+def _slave_log_category(line: str) -> str:
+    if "[RISK]" in line:
+        return "MT5"
+    if "OPEN SUCCESS" in line or "[COPY]" in line or "Copying" in line:
+        return "COPY"
+    if "CLOSE SUCCESS" in line:
+        return "COPY"
+    if "[SESSION]" in line:
+        return "SESSION"
+    if "DAILY LOSS" in line or "FAILED" in line or "CLOUD REJECTED" in line:
+        return "ERR"
+    if "MT5 Error" in line or "MT5 login" in line:
+        return "MT5"
+    if "SOCKET" in line.upper() or "Socket" in line:
+        return "COPY"
+    if "CLOUD ERROR" in line:
+        return "ERR"
+    if "CLOUD REJECTED" in line:
+        return "ERR"
+    return "INFO"
+
+
+def _slave_header_variant(state) -> str:
+    if getattr(state, "mt5_connected", False) and getattr(state, "socket_connected", False):
+        if getattr(state, "is_running", False):
+            return "listening"
+        return "idle"
+    hs = getattr(state, "health_state", "DISCONNECTED")
+    if getattr(state, "mt5_connected", False) and not getattr(state, "socket_connected", False):
+        return "reconnect" if hs == "RECONNECTING" else "error"
+    return "error"
+
+
+def _slave_master_display(state):
+    mn = getattr(state, "master_name", None)
+    if mn:
+        return str(mn).strip()
+    return None
 
 
 # ── Bloomberg Terminal QSS ──────────────────────────────────────
@@ -262,11 +292,16 @@ class SlaveWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("TradeSync Pro - Slave Node")
         self.setMinimumSize(800, 600)
+        self.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window
+        )
 
-        # Setup Thread-Safe Bridge + Controller (must init before dashboard build)
         self.bridge = UIBridge()
         self.bridge.ui_update_requested.connect(self.update_ui)
         self.controller = SlaveController(self.bridge.request_update)
+
+        self._slave_log_emit_cursor = 0
+        self._slave_header_signature = None  # tuple (master_name_or_none, variant)
 
         self.setStyleSheet(
             BLOOMBERG_QSS
@@ -305,289 +340,114 @@ class SlaveWindow(QMainWindow):
         return panel
 
     def build_dashboard_screen(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(4, 4, 4, 4)
+        """Post-login scaffold: TitleBar + ``WindowShell`` (placeholders inside shell stack)."""
 
-        # ── Tab Widget ──────────────────────────────────────────
-        self.tab_widget = QTabWidget()
+        dash = QWidget()
+        v = QVBoxLayout(dash)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
 
-        # ── Tab 1: COPY ─────────────────────────────────────────
-        copy_tab = QWidget()
-        copy_layout = QVBoxLayout(copy_tab)
-        copy_layout.setSpacing(6)
+        self.title_bar = TitleBar(role="Slave Node", window=self)
+        v.addWidget(self.title_bar)
 
-        # Row 1 — Status bar
-        status_row = QHBoxLayout()
-        status_row.setSpacing(24)
+        self.shell = WindowShell(role="slave")
 
-        lbl_status_title = QLabel("STATUS")
-        lbl_status_title.setStyleSheet(
-            "color: #666666; font-weight: bold; letter-spacing: 1px; font-size: 8pt;"
-        )
-        status_row.addWidget(lbl_status_title)
+        sb_lay = self.shell.sidebar.layout()
+        if hasattr(sb_lay, "setContentsMargins"):
+            sb_lay.setContentsMargins(0, HEADER_H + KPI_H, 0, FOOTER_H)
 
-        self.lbl_status_dot = QLabel("●  DISCONNECTED")
-        self.lbl_status_dot.setStyleSheet(
-            "color: #ff4444; font-family: Consolas; font-weight: bold;"
-        )
-        status_row.addWidget(self.lbl_status_dot)
+        v.addWidget(self.shell, 1)
 
-        status_row.addSpacing(24)
+        return dash
 
-        lbl_session_title = QLabel("SESSION")
-        lbl_session_title.setStyleSheet(
-            "color: #666666; font-weight: bold; letter-spacing: 1px; font-size: 8pt;"
-        )
-        status_row.addWidget(lbl_session_title)
+    def _slave_sync_header_strip(self):
+        shell = getattr(self, "shell", None)
+        if shell is None or not isinstance(shell.header, HeaderStripSlave):
+            return
 
-        self.lbl_session_time = QLabel("--:--:--")
-        self.lbl_session_time.setStyleSheet(
-            "color: #c8c8c8; font-family: Consolas;"
-        )
-        status_row.addWidget(self.lbl_session_time)
+        state = self.controller.state
+        variant = _slave_header_variant(state)
+        name = _slave_master_display(state)
+        sig = (name, variant)
+        if getattr(self, "_slave_header_signature", None) == sig:
+            return
+        self._slave_header_signature = sig
 
-        status_row.addSpacing(24)
+        old_header = shell.header
+        container = old_header.parentWidget()
+        laid = container.layout()
+        if laid is None:
+            return
 
-        lbl_pnl_title = QLabel("SESSION P&&L")
-        lbl_pnl_title.setStyleSheet(
-            "color: #666666; font-weight: bold; letter-spacing: 1px; font-size: 8pt;"
-        )
-        status_row.addWidget(lbl_pnl_title)
+        ix = laid.indexOf(old_header)
+        if ix < 0:
+            ix = 0
 
-        self.lbl_session_pnl = QLabel("$0.00")
-        self.lbl_session_pnl.setStyleSheet(
-            "color: #00d4aa; font-family: Consolas; font-weight: bold;"
-        )
-        status_row.addWidget(self.lbl_session_pnl)
+        laid.removeWidget(old_header)
+        old_header.deleteLater()
 
-        status_row.addStretch()
-        copy_layout.addLayout(status_row)
-
-        # Row 2 — Copy Mode
-        mode_group = QGroupBox("COPY MODE")
-        mode_layout = QVBoxLayout(mode_group)
-
-        # Radio buttons row
-        radio_row = QHBoxLayout()
-        self.radio_multiplier = QRadioButton("Multiplier")
-        self.radio_fixed_lot = QRadioButton("Fixed Lot")
-        self.radio_multiplier.setChecked(True)
-
-        self.copy_mode_group = QButtonGroup()
-        self.copy_mode_group.addButton(self.radio_multiplier, 0)
-        self.copy_mode_group.addButton(self.radio_fixed_lot, 1)
-        self.copy_mode_group.idClicked.connect(self._on_copy_mode_changed)
-
-        radio_row.addWidget(self.radio_multiplier)
-        radio_row.addWidget(self.radio_fixed_lot)
-        radio_row.addStretch()
-        mode_layout.addLayout(radio_row)
-
-        # Stacked options
-        self.mode_stack = QStackedWidget()
-
-        # Multiplier panel
-        mult_widget = QWidget()
-        mult_layout = QHBoxLayout(mult_widget)
-        mult_layout.setContentsMargins(0, 0, 0, 0)
-        mult_layout.addWidget(QLabel("Lot Multiplier:"))
-        self.risk_spinbox = QDoubleSpinBox()
-        self.risk_spinbox.setRange(0.01, 10.0)
-        self.risk_spinbox.setSingleStep(0.01)
-        self.risk_spinbox.setDecimals(2)
-        self.risk_spinbox.setValue(self.controller.state.risk_multiplier)
-        self.risk_spinbox.valueChanged.connect(self.on_risk_changed)
-        mult_layout.addWidget(self.risk_spinbox)
-        mult_layout.addStretch()
-        self.mode_stack.addWidget(mult_widget)
-
-        # Fixed lot panel
-        fixed_widget = QWidget()
-        fixed_layout = QHBoxLayout(fixed_widget)
-        fixed_layout.setContentsMargins(0, 0, 0, 0)
-        fixed_layout.addWidget(QLabel("Fixed Lot:"))
-        self.spin_fixed_lot = QDoubleSpinBox()
-        self.spin_fixed_lot.setRange(0.01, 100.0)
-        self.spin_fixed_lot.setSingleStep(0.01)
-        self.spin_fixed_lot.setDecimals(2)
-        self.spin_fixed_lot.setValue(self.controller.state.fixed_lot_size)
-        self.spin_fixed_lot.valueChanged.connect(self._on_fixed_lot_changed)
-        fixed_layout.addWidget(self.spin_fixed_lot)
-        fixed_layout.addStretch()
-        self.mode_stack.addWidget(fixed_widget)
-
-        mode_layout.addWidget(self.mode_stack)
-
-        # Extra options row: Reverse copy + Slippage
-        extra_row = QHBoxLayout()
-
-        self.chk_reverse = QCheckBox("Reverse Copy")
-        self.chk_reverse.setChecked(self.controller.state.reverse_copy)
-        self.chk_reverse.toggled.connect(self._on_reverse_changed)
-        extra_row.addWidget(self.chk_reverse)
-
-        extra_row.addSpacing(24)
-        extra_row.addWidget(QLabel("Slippage (pts):"))
-
-        self.spin_slippage = QSpinBox()
-        self.spin_slippage.setRange(0, 100)
-        self.spin_slippage.setSingleStep(1)
-        self.spin_slippage.setValue(self.controller.state.slippage_points)
-        self.spin_slippage.valueChanged.connect(self._on_slippage_changed)
-        extra_row.addWidget(self.spin_slippage)
-
-        extra_row.addStretch()
-        mode_layout.addLayout(extra_row)
-
-        copy_layout.addWidget(mode_group)
-
-        # Row 3 — Start/Stop button
-        self.toggle_listen_btn = QPushButton("\u25b6  START COPYING")
-        self.toggle_listen_btn.setStyleSheet(
-            "padding: 8px; font-size: 10pt; font-weight: bold;"
-        )
-        self.toggle_listen_btn.clicked.connect(self.on_toggle_listen)
-        copy_layout.addWidget(self.toggle_listen_btn)
-
-        # Row 4 — Log output
-        lbl_log_title = QLabel("EVENT LOG")
-        lbl_log_title.setStyleSheet(
-            "color: #666666; font-weight: bold; letter-spacing: 1px; font-size: 8pt;"
-        )
-        copy_layout.addWidget(lbl_log_title)
-
-        self.logs_text = QTextEdit()
-        self.logs_text.setReadOnly(True)
-        copy_layout.addWidget(self.logs_text)
-
-        self.tab_widget.addTab(copy_tab, "COPY")
-
-        # ── Tab 2: SYMBOLS ──────────────────────────────────────
-        self.symbol_panel = SymbolMapPanel(self.controller.state)
-        self.tab_widget.addTab(self.symbol_panel, "SYMBOLS")
-
-        # ── Tab 3: RISK ─────────────────────────────────────────
-        self.risk_panel = RiskPanel(self.controller.state)
-        self.tab_widget.addTab(self.risk_panel, "RISK")
-
-        # ── Tab 4: TRADES ───────────────────────────────────────
-        self.trades_panel = TradesPanel(self.controller.state)
-        self.tab_widget.addTab(self.trades_panel, "TRADES")
-
-        layout.addWidget(self.tab_widget)
-
-        # ── Session Timer ───────────────────────────────────────
-        self.session_timer = QTimer()
-        self.session_timer.timeout.connect(self._update_session_clock)
-        self.session_timer.start(1000)
-
-        return widget
+        new_header = HeaderStripSlave(master_name=name, status=variant, latency=None)
+        laid.insertWidget(ix, new_header)
+        shell.header = new_header
 
     # ── Slot: UI Update ─────────────────────────────────────────
 
     @Slot()
     def update_ui(self):
-        """Runs strictly on the Main Qt Thread. Syncs data from AppState."""
         if not self.controller:
+            return
+
+        if self.central_widget.currentWidget() is not getattr(
+            self, "dashboard_widget", None
+        ):
+            return
+
+        shell = getattr(self, "shell", None)
+        if shell is None:
             return
 
         state = self.controller.state
 
-        # Update connection status dot
-        connected = state.mt5_connected and state.socket_connected
-        self.lbl_status_dot.setText(
-            "\u25cf  CONNECTED" if connected else "\u25cf  DISCONNECTED"
+        cloud_ok = getattr(state, "mt5_connected", False) and getattr(
+            state, "socket_connected", False
         )
-        dot_color = '#00d4aa' if connected else '#ff4444'
-        self.lbl_status_dot.setStyleSheet(
-            f"color: {dot_color}; font-family: Consolas; font-weight: bold;"
-        )
+        shell.footer.set_connected(cloud_ok, "backend connected" if cloud_ok else "")
 
-        # Update risk slider safely
-        if not self.risk_spinbox.hasFocus() and self.risk_spinbox.value() != state.risk_multiplier:
-            self.risk_spinbox.blockSignals(True)
-            self.risk_spinbox.setValue(state.risk_multiplier)
-            self.risk_spinbox.blockSignals(False)
+        self._slave_sync_header_strip()
 
-        # Update session PnL in status bar
-        pnl = state.session_pnl
-        pnl_color = '#00d4aa' if pnl >= 0 else '#ff4444'
-        self.lbl_session_pnl.setText(f"${pnl:.2f}")
-        self.lbl_session_pnl.setStyleSheet(
-            f"color: {pnl_color}; font-family: Consolas; font-weight: bold;"
-        )
+        pnl_txt = f"${state.session_pnl:.2f}"
+        copied_txt = str(len(getattr(state, "open_trades", [])))
 
-        # Update logs with color coding
-        log_lines = []
-        for line in state.logs:
-            if '[RISK]' in line:
-                log_lines.append(f'<span style="color:#ff9900">{line}</span>')
-            elif 'OPEN SUCCESS' in line:
-                log_lines.append(f'<span style="color:#00d4aa">{line}</span>')
-            elif 'CLOSE SUCCESS' in line:
-                log_lines.append(f'<span style="color:#888888">{line}</span>')
-            elif 'DAILY LOSS' in line or 'FAILED' in line:
-                log_lines.append(f'<span style="color:#ff4444">{line}</span>')
-            elif '[SESSION]' in line:
-                log_lines.append(f'<span style="color:#00d4aa">{line}</span>')
-            else:
-                log_lines.append(f'<span style="color:#666666">{line}</span>')
-
-        html_logs = '<br>'.join(log_lines)
-        self.logs_text.setHtml(html_logs)
-        self.logs_text.verticalScrollBar().setValue(
-            self.logs_text.verticalScrollBar().maximum()
-        )
-
-        # Update sub-panels
-        if hasattr(self, 'risk_panel'):
-            self.risk_panel.refresh_display()
-        if hasattr(self, 'trades_panel'):
-            self.trades_panel.refresh_display()
-
-    # ── Slot: Copy Mode ─────────────────────────────────────────
-
-    def _on_copy_mode_changed(self, button_id):
-        if button_id == 0:
-            self.controller.state.copy_mode = 'MULTIPLIER'
-            self.mode_stack.setCurrentIndex(0)
-        elif button_id == 1:
-            self.controller.state.copy_mode = 'FIXED_LOT'
-            self.mode_stack.setCurrentIndex(1)
-
-    def _on_fixed_lot_changed(self, value):
-        self.controller.state.fixed_lot_size = value
-
-    def _on_reverse_changed(self, checked):
-        self.controller.state.reverse_copy = checked
-
-    def _on_slippage_changed(self, value):
-        self.controller.state.slippage_points = value
-
-    # ── Slot: Session Clock ─────────────────────────────────────
-
-    def _update_session_clock(self):
-        state = self.controller.state
-        if state.session_start_time and state.is_running:
+        eq_txt = "---"
+        if getattr(state, "mt5_connected", False):
             try:
-                now = datetime.now()
-                start = datetime.strptime(state.session_start_time, '%H:%M:%S')
-                start = start.replace(
-                    year=now.year, month=now.month, day=now.day
-                )
-                elapsed = now - start
-                total_secs = int(elapsed.total_seconds())
-                if total_secs < 0:
-                    total_secs = 0
-                h = total_secs // 3600
-                m = (total_secs % 3600) // 60
-                s = total_secs % 60
-                self.lbl_session_time.setText(f"{h:02d}:{m:02d}:{s:02d}")
+                ai = mt5.account_info()
+                if ai is not None:
+                    eq_txt = f"${float(ai.equity):,.2f}"
             except Exception:
-                self.lbl_session_time.setText("--:--:--")
-        elif not state.is_running:
-            self.lbl_session_time.setText("--:--:--")
+                eq_txt = "---"
+
+        shell.kpi.update_kpis(
+            signals="—",
+            copied=copied_txt,
+            session_pnl=pnl_txt,
+            equity=eq_txt,
+            latency="—",
+        )
+
+        logs = state.logs
+        cur = self._slave_log_emit_cursor
+        if len(logs) < cur:
+            cur = len(logs)
+        new_chunk = logs[cur:]
+        for line in new_chunk:
+            shell.event_log.append_log(line, _slave_log_category(line))
+        self._slave_log_emit_cursor = len(logs)
+
+        if hasattr(self, "risk_panel"):
+            self.risk_panel.refresh_display()
+        if hasattr(self, "trades_panel"):
+            self.trades_panel.refresh_display()
 
     # ── Slot: Login ─────────────────────────────────────────────
 
@@ -612,7 +472,9 @@ class SlaveWindow(QMainWindow):
         )
 
         if success:
-            self.central_widget.setCurrentWidget(self.dashboard_widget)
+            self._show_dashboard()
+            btn.setEnabled(True)
+            btn.setText("LOG IN")
         else:
             lc.error_label.setText(
                 "Login failed. Check cloud email (same as web registration), "
@@ -622,31 +484,13 @@ class SlaveWindow(QMainWindow):
             btn.setEnabled(True)
             btn.setText("LOG IN")
 
-    # ── Slot: Listen Toggle ─────────────────────────────────────
-
-    def on_toggle_listen(self):
-        if not self.controller:
-            return
-
-        self.controller.toggle_listening()
-
-        if self.controller.state.is_running:
-            self.toggle_listen_btn.setText("\u25a0  STOP COPYING")
-            self.toggle_listen_btn.setStyleSheet(
-                "padding: 8px; font-size: 10pt; font-weight: bold; "
-                "border: 1px solid #00d4aa; color: #00d4aa;"
-            )
-        else:
-            self.toggle_listen_btn.setText("\u25b6  START COPYING")
-            self.toggle_listen_btn.setStyleSheet(
-                "padding: 8px; font-size: 10pt; font-weight: bold;"
-            )
-
-    # ── Slot: Risk Changed ──────────────────────────────────────
-
-    def on_risk_changed(self, value):
-        if self.controller:
-            self.controller.state.risk_multiplier = value
+    def _show_dashboard(self):
+        """Reset shell sync guards and reveal the scaffold built at startup."""
+        self._slave_header_signature = None
+        self._slave_log_emit_cursor = 0
+        self.central_widget.setCurrentWidget(self.dashboard_widget)
+        QApplication.processEvents()
+        self.update_ui()
 
 
 if __name__ == "__main__":
