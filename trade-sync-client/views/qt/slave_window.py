@@ -1,17 +1,111 @@
 import sys
 from datetime import datetime
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QFormLayout,
-    QLineEdit, QComboBox, QPushButton, QLabel, QTextEdit, QStackedWidget,
-    QDoubleSpinBox, QSpinBox, QTabWidget, QGroupBox, QRadioButton, QCheckBox,
-    QButtonGroup
+    QApplication,
+    QButtonGroup,
+    QCheckBox,
+    QDoubleSpinBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QRadioButton,
+    QSpinBox,
+    QStackedWidget,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
-from PySide6.QtCore import Slot, QTimer
-from views.qt.ui_bridge import UIBridge
+from PySide6.QtCore import Qt, Slot, QTimer
+
 from controllers.ui_controllers.slave_controller import SlaveController
-from views.qt.symbol_map_panel import SymbolMapPanel
+from views.qt.primitives import Btn, Card, FieldLabel, LineInput, MonoInput
 from views.qt.risk_panel import RiskPanel
+from views.qt.symbol_map_panel import SymbolMapPanel
+from views.qt.theme import ACCENT, BG, DANGER, TEXT
 from views.qt.trades_panel import TradesPanel
+from views.qt.ui_bridge import UIBridge
+
+
+def _field_block(title: str, widget: QWidget) -> QWidget:
+    box = QWidget()
+    col = QVBoxLayout(box)
+    col.setContentsMargins(0, 0, 0, 0)
+    col.setSpacing(4)
+    col.addWidget(FieldLabel(title))
+    col.addWidget(widget)
+    return box
+
+
+class SlaveLoginCard(QWidget):
+    """Design-system credential card (~400px) for Slave node."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        self.card_frame = Card()
+        self.card_frame.setFixedWidth(400)
+        inner = QVBoxLayout(self.card_frame)
+        inner.setContentsMargins(24, 24, 24, 24)
+        inner.setSpacing(12)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+
+        logo = QLabel("\u26a1")
+        logo.setFixedSize(20, 20)
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo.setStyleSheet(
+            f"""
+            background: {ACCENT};
+            border-radius: 5px;
+            color: #02110b;
+            font-weight: 700;
+            font-size: 11px;
+            """
+        )
+
+        ttl = QLabel(
+            f"<span style='color:{ACCENT}; font-weight:700'>TradeSync.Pro</span>"
+            f"<span style='color:{TEXT}; font-weight:600'> &middot; Slave Node</span>"
+        )
+        ttl.setTextFormat(Qt.TextFormat.RichText)
+
+        title_row.addWidget(logo)
+        title_row.addWidget(ttl)
+        title_row.addStretch()
+
+        inner.addLayout(title_row)
+
+        self.email_input = LineInput(placeholder="Registered email address")
+        self.mt5_login_input = MonoInput(placeholder="MT5 account login ID")
+        self.mt5_password_input = LineInput(placeholder="MT5 password")
+        self.mt5_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.server_input = LineInput(placeholder="Server string from MT5 broker")
+        self.broker_path_input = LineInput(placeholder="Broker name: XM, Vantage, Exness, …")
+
+        inner.addWidget(_field_block("Registered email", self.email_input))
+        inner.addWidget(_field_block("MT5 account ID", self.mt5_login_input))
+        inner.addWidget(_field_block("MT5 password", self.mt5_password_input))
+        inner.addWidget(_field_block("Server string", self.server_input))
+        inner.addWidget(_field_block("Broker path", self.broker_path_input))
+
+        self.error_label = QLabel("")
+        self.error_label.setWordWrap(True)
+        self.error_label.setStyleSheet(f"color: {DANGER}; font-size: 12px;")
+        self.error_label.hide()
+        inner.addWidget(self.error_label)
+
+        self.login_btn = Btn("LOG IN", kind="primary", size="lg")
+        inner.addWidget(self.login_btn)
+
+        root.addWidget(self.card_frame)
+
 
 # ── Bloomberg Terminal QSS ──────────────────────────────────────
 BLOOMBERG_QSS = """
@@ -174,8 +268,10 @@ class SlaveWindow(QMainWindow):
         self.bridge.ui_update_requested.connect(self.update_ui)
         self.controller = SlaveController(self.bridge.request_update)
 
-        # Apply global theme
-        self.setStyleSheet(BLOOMBERG_QSS)
+        self.setStyleSheet(
+            BLOOMBERG_QSS
+            + f"\nQMainWindow {{ background-color: {BG}; }}\n"
+        )
 
         self.central_widget = QStackedWidget()
         self.setCentralWidget(self.central_widget)
@@ -187,29 +283,26 @@ class SlaveWindow(QMainWindow):
         self.central_widget.addWidget(self.dashboard_widget)
 
     def build_login_screen(self):
-        widget = QWidget()
-        layout = QFormLayout(widget)
+        panel = QWidget()
+        panel.setObjectName("SlaveLoginBackdrop")
+        panel.setStyleSheet(f"#SlaveLoginBackdrop {{ background-color: {BG}; }}")
 
-        self.broker_combo = QComboBox()
-        self.broker_combo.addItems(["XM", "Vantage", "Exness", "Exness Slave"])
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addStretch(1)
 
-        self.mt5_login_input = QLineEdit()
-        self.mt5_password_input = QLineEdit()
-        self.mt5_password_input.setEchoMode(QLineEdit.Password)
-        self.server_input = QLineEdit()
-        self.email_input = QLineEdit()
+        mid = QHBoxLayout()
+        mid.addStretch(1)
 
-        self.login_btn = QPushButton("Login to MT5 & Cloud")
-        self.login_btn.clicked.connect(self.on_login_submit)
+        self.login_card = SlaveLoginCard()
+        mid.addWidget(self.login_card)
+        mid.addStretch(1)
+        v.addLayout(mid)
 
-        layout.addRow(QLabel("Broker:"), self.broker_combo)
-        layout.addRow(QLabel("MT5 Login ID:"), self.mt5_login_input)
-        layout.addRow(QLabel("MT5 Password:"), self.mt5_password_input)
-        layout.addRow(QLabel("Server String:"), self.server_input)
-        layout.addRow(QLabel("TSP Registered Email:"), self.email_input)
-        layout.addRow(self.login_btn)
+        v.addStretch(1)
 
-        return widget
+        self.login_card.login_btn.clicked.connect(self.on_login_submit)
+        return panel
 
     def build_dashboard_screen(self):
         widget = QWidget()
@@ -499,14 +592,19 @@ class SlaveWindow(QMainWindow):
     # ── Slot: Login ─────────────────────────────────────────────
 
     def on_login_submit(self):
-        broker = self.broker_combo.currentText()
-        login = self.mt5_login_input.text().strip()
-        password = self.mt5_password_input.text().strip()
-        server = self.server_input.text().strip()
-        email_identifier = self.email_input.text().strip()
+        lc = self.login_card
 
-        self.login_btn.setEnabled(False)
-        self.login_btn.setText("Connecting...")
+        lc.error_label.hide()
+
+        broker = lc.broker_path_input.text().strip()
+        login = lc.mt5_login_input.text().strip()
+        password = lc.mt5_password_input.text().strip()
+        server = lc.server_input.text().strip()
+        email_identifier = lc.email_input.text().strip()
+
+        btn = lc.login_btn
+        btn.setEnabled(False)
+        btn.setText("Connecting...")
         QApplication.processEvents()
 
         success = self.controller.login_mt5(
@@ -516,8 +614,13 @@ class SlaveWindow(QMainWindow):
         if success:
             self.central_widget.setCurrentWidget(self.dashboard_widget)
         else:
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("Login to MT5 & Cloud")
+            lc.error_label.setText(
+                "Login failed. Check cloud email (same as web registration), "
+                "broker name (XM, Vantage, Exness, …), MT5 credentials, and server."
+            )
+            lc.error_label.show()
+            btn.setEnabled(True)
+            btn.setText("LOG IN")
 
     # ── Slot: Listen Toggle ─────────────────────────────────────
 
