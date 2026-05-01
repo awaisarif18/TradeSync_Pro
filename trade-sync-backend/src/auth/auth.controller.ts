@@ -86,6 +86,17 @@ export class AuthController {
   }
 
   @Public()
+  @Post('node-action/revoke-subscriber')
+  async revokeSubscriber(
+    @Body() body: { masterLicenseKey: string; slaveId: string },
+  ) {
+    return await this.authService.revokeSubscriber(
+      body.masterLicenseKey,
+      body.slaveId,
+    );
+  }
+
+  @Public()
   @Get('masters')
   async getActiveMasters() {
     return await this.authService.getActiveMasters();

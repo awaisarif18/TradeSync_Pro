@@ -277,6 +277,11 @@ Base route prefix: `/auth`
 	- Used by Python node clients before MT5 connection
 	- Calls `AuthService.verifyNode(role, identifier)`
 
+6b. `POST /auth/node-action/revoke-subscriber`
+	- Body: `{ masterLicenseKey, slaveId }`
+	- **Public.** Master desktop Revoke: disables subscriber (`isActive` false) when the slave is subscribed to that master; master proven by license key
+	- Calls `AuthService.revokeSubscriber(masterLicenseKey, slaveId)`
+
 7. `GET /auth/masters`
 	- Fetches active masters for slave marketplace
 	- Calls `AuthService.getActiveMasters()`
@@ -347,25 +352,31 @@ Base route prefix: `/auth`
 	- Returns `{ message: 'Node Verified', role, fullName }`
 	- Response now includes id field for direct master_user_id resolution.
 
-7. `getActiveMasters()`
+7. `revokeSubscriber(masterLicenseKey: string, slaveId: string)`
+	- Looks up active MASTER by `licenseKey`; throws if missing or inactive
+	- Requires slave user exists and `subscribedToId` equals that master’s id; otherwise **403**
+	- Sets `slave.isActive = false` and saves
+	- Returns `{ message: 'Subscriber revoked', slaveId }`
+
+8. `getActiveMasters()`
 	- Filters `role=MASTER` + `isActive=true`
 	- Returns selected fields: `id, fullName, email, createdAt`
 
-8. `updateSubscription(slaveId: string, masterId: string | null)`
+9. `updateSubscription(slaveId: string, masterId: string | null)`
 	- Validates slave user exists (`id + role=SLAVE`)
 	- Sets `slave.subscribedToId = masterId`
 	- Returns message + current subscription target
 
-9. `updateMasterProfile(masterId: string, dto: UpdateMasterProfileDto)`
+10. `updateMasterProfile(masterId: string, dto: UpdateMasterProfileDto)`
 	- Validates master exists (`id + role=MASTER`)
 	- Partially updates public profile fields
 	- Returns updated master object without password
 
-10. `getMasterDashboard(masterId: string)`
+11. `getMasterDashboard(masterId: string)`
 	- Builds master profile + recent trade history snapshot
 	- Returns profile, recentTrades, subscriberCount, openTrades, totalSignalsSent
 
-11. `getTopMasters()`
+12. `getTopMasters()`
 	- Loads active masters only
 	- Computes stats and returns top 3 masters sorted by totalTrades descending
 
@@ -563,6 +574,7 @@ This creates a room-based fanout model where each master has an isolated channel
 - `POST /auth/users/:id/license`
 - `PATCH /auth/users/:id/toggle-status`
 - `POST /auth/verify-node`
+- `POST /auth/node-action/revoke-subscriber`
 - `GET /auth/masters`
 - `PATCH /auth/users/:id/subscribe`
 - `GET /auth/masters/:id/profile`

@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   UnauthorizedException,
@@ -373,6 +374,29 @@ export class AuthService {
       });
       throw error;
     }
+  }
+
+  async revokeSubscriber(
+    masterLicenseKey: string,
+    slaveId: string,
+  ): Promise<{ message: string; slaveId: string }> {
+    const master = await this.userRepository.findOne({
+      where: { licenseKey: masterLicenseKey, role: 'MASTER' },
+    });
+    if (!master || !master.isActive) {
+      throw new UnauthorizedException('Invalid or inactive master license');
+    }
+
+    const slave = await this.userRepository.findOne({
+      where: { id: slaveId },
+    });
+    if (!slave || slave.subscribedToId !== master.id) {
+      throw new ForbiddenException('Slave is not subscribed to this master');
+    }
+
+    slave.isActive = false;
+    await this.userRepository.save(slave);
+    return { message: 'Subscriber revoked', slaveId };
   }
 
   async getSlaveIdByEmail(email: string): Promise<string | null> {

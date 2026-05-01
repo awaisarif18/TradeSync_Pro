@@ -379,8 +379,8 @@ fetch('http://localhost:3000/auth/node-action/revoke-subscriber', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
-    masterLicenseKey: 'TSP-XXXX-XXXX',  // replace with a real license key from admin panel
-    slaveId: 'paste-a-real-slave-uuid-here'  // from admin panel user list
+    masterLicenseKey: 'TSP-XNQX-WNDD',  // replace with a real license key from admin panel
+    slaveId: 'EC3B09C8-A53E-F111-BC82-E0D4E831D953'  // from admin panel user list
   })
 }).then(r => r.json()).then(console.log)
 ```
