@@ -15,11 +15,12 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Slot
 
 from controllers.ui_controllers.slave_controller import SlaveController
-from views.qt.primitives import Btn, Card, FieldLabel, LineInput, MonoInput
+from views.qt.primitives import Btn, Card, DarkDropdown, FieldLabel, LineInput, MonoInput
 from views.qt.shell import HeaderStripSlave, TitleBar, WindowShell
 from views.qt.views.copy_view import CopyView
+from views.qt.views.risk_view import RiskView
 from views.qt.views.symbols_view import SymbolsView
-from views.qt.theme import ACCENT, BG, DANGER, FOOTER_H, HEADER_H, KPI_H, TEXT
+from views.qt.theme import ACCENT, BG, DANGER, FOOTER_H, HEADER_H, KPI_H, TEXT, build_global_qss
 from views.qt.ui_bridge import UIBridge
 
 
@@ -80,7 +81,10 @@ class SlaveLoginCard(QWidget):
         self.mt5_password_input = LineInput(placeholder="MT5 password")
         self.mt5_password_input.setEchoMode(QLineEdit.EchoMode.Password)
         self.server_input = LineInput(placeholder="Server string from MT5 broker")
-        self.broker_path_input = LineInput(placeholder="Broker name: XM, Vantage, Exness, …")
+        self.broker_path_input = DarkDropdown()
+        self.broker_path_input.addItems(
+            ["Auto-detect", "Vantage", "XM", "Exness", "Exness Slave"]
+        )
 
         inner.addWidget(_field_block("Registered email", self.email_input))
         inner.addWidget(_field_block("MT5 account ID", self.mt5_login_input))
@@ -96,6 +100,7 @@ class SlaveLoginCard(QWidget):
 
         self.login_btn = Btn("LOG IN", kind="primary", size="lg")
         inner.addWidget(self.login_btn)
+        inner.addStretch(1)
 
         root.addWidget(self.card_frame)
 
@@ -140,156 +145,6 @@ def _slave_master_display(state):
     return None
 
 
-# ── Bloomberg Terminal QSS ──────────────────────────────────────
-BLOOMBERG_QSS = """
-QMainWindow, QWidget {
-    background-color: #0a0a0a;
-    color: #c8c8c8;
-    font-family: 'Segoe UI';
-    font-size: 9pt;
-}
-QTabWidget::pane {
-    border: 1px solid #2a2a2a;
-    background: #0a0a0a;
-}
-QTabBar::tab {
-    background: #0a0a0a;
-    color: #666666;
-    padding: 6px 18px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    font-size: 9pt;
-    font-weight: bold;
-    letter-spacing: 1px;
-}
-QTabBar::tab:selected {
-    color: #c8c8c8;
-    border-bottom: 2px solid #00d4aa;
-}
-QTabBar::tab:hover {
-    color: #999999;
-}
-QGroupBox {
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    margin-top: 6px;
-    padding: 10px;
-    font-size: 8pt;
-    font-weight: bold;
-    color: #666666;
-    letter-spacing: 1px;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 6px;
-    color: #00d4aa;
-}
-QDoubleSpinBox, QSpinBox, QLineEdit, QComboBox {
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    padding: 3px 6px;
-    color: #c8c8c8;
-    font-family: 'Consolas';
-    selection-background-color: #00d4aa;
-    selection-color: #0a0a0a;
-}
-QDoubleSpinBox:focus, QSpinBox:focus, QLineEdit:focus {
-    border: 1px solid #00d4aa;
-}
-QPushButton {
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    padding: 5px 14px;
-    color: #c8c8c8;
-    font-size: 9pt;
-}
-QPushButton:hover {
-    border: 1px solid #00d4aa;
-    color: #00d4aa;
-}
-QPushButton:pressed {
-    background: #00d4aa;
-    color: #0a0a0a;
-}
-QTextEdit {
-    background: #0a0a0a;
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    color: #888888;
-    font-family: 'Consolas';
-    font-size: 8pt;
-}
-QLabel {
-    color: #888888;
-}
-QListWidget, QTableWidget {
-    background: #0a0a0a;
-    border: 1px solid #2a2a2a;
-    color: #c8c8c8;
-    gridline-color: #1a1a1a;
-    font-family: 'Consolas';
-    font-size: 9pt;
-}
-QTableWidget::item:selected, QListWidget::item:selected {
-    background: #1a1a1a;
-    color: #00d4aa;
-}
-QHeaderView::section {
-    background: #1a1a1a;
-    color: #666666;
-    border: none;
-    border-right: 1px solid #2a2a2a;
-    padding: 4px 8px;
-    font-size: 8pt;
-    font-weight: bold;
-    letter-spacing: 1px;
-}
-QScrollBar:vertical {
-    background: #0a0a0a;
-    width: 6px;
-}
-QScrollBar::handle:vertical {
-    background: #2a2a2a;
-    border-radius: 3px;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-QRadioButton {
-    color: #c8c8c8;
-    spacing: 4px;
-}
-QRadioButton::indicator {
-    width: 12px;
-    height: 12px;
-    border: 1px solid #2a2a2a;
-    border-radius: 6px;
-    background: #1a1a1a;
-}
-QRadioButton::indicator:checked {
-    background: #00d4aa;
-    border: 1px solid #00d4aa;
-}
-QCheckBox {
-    color: #c8c8c8;
-    spacing: 4px;
-}
-QCheckBox::indicator {
-    width: 12px;
-    height: 12px;
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    background: #1a1a1a;
-}
-QCheckBox::indicator:checked {
-    background: #00d4aa;
-    border: 1px solid #00d4aa;
-}
-"""
-
-
 class SlaveWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -307,10 +162,10 @@ class SlaveWindow(QMainWindow):
         self._slave_header_signature = None  # tuple (master_name_or_none, variant)
         self.copy_view: Optional[CopyView] = None
         self.symbols_view: Optional[SymbolsView] = None
+        self.risk_view: Optional[RiskView] = None
 
         self.setStyleSheet(
-            BLOOMBERG_QSS
-            + f"\nQMainWindow {{ background-color: {BG}; }}\n"
+            build_global_qss() + f"\nQMainWindow {{ background-color: {BG}; }}\n"
         )
 
         self.central_widget = QStackedWidget()
@@ -372,11 +227,16 @@ class SlaveWindow(QMainWindow):
         self.symbols_view = SymbolsView(self.controller)
         self._replace_shell_placeholder(self.shell, "symbols", self.symbols_view)
 
+        self.risk_view = RiskView(self.controller)
+        self._replace_shell_placeholder(self.shell, "risk", self.risk_view)
+
         sb_lay = self.shell.sidebar.layout()
         if hasattr(sb_lay, "setContentsMargins"):
             sb_lay.setContentsMargins(0, HEADER_H + KPI_H, 0, FOOTER_H)
 
         v.addWidget(self.shell, 1)
+
+        self.shell.show_view("copy")
 
         return dash
 
@@ -472,8 +332,10 @@ class SlaveWindow(QMainWindow):
         if sv is not None:
             sv.refresh_display()
 
-        if hasattr(self, "risk_panel"):
-            self.risk_panel.refresh_display()
+        rv = getattr(self, "risk_view", None)
+        if rv is not None:
+            rv.refresh_display()
+
         if hasattr(self, "trades_panel"):
             self.trades_panel.refresh_display()
 
@@ -484,7 +346,7 @@ class SlaveWindow(QMainWindow):
 
         lc.error_label.hide()
 
-        broker = lc.broker_path_input.text().strip()
+        broker = lc.broker_path_input.currentText().strip()
         login = lc.mt5_login_input.text().strip()
         password = lc.mt5_password_input.text().strip()
         server = lc.server_input.text().strip()

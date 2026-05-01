@@ -63,10 +63,14 @@ class TitleBar(QWidget):
 
     def __init__(self, role="Slave Node", window=None, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self._window = window
         self._drag_pos = None
         self.setFixedHeight(TITLEBAR_H)
-        self.setStyleSheet(f"background: {SURFACE}; border-bottom: 1px solid {LINE};")
+        _cn = self.__class__.__name__
+        self.setStyleSheet(
+            f"{_cn} {{ background: {SURFACE}; border-bottom: 1px solid {LINE}; }}"
+        )
 
         row = QHBoxLayout(self)
         row.setContentsMargins(12, 0, 8, 0)
@@ -111,6 +115,7 @@ class TitleBar(QWidget):
                 f"""
                 QPushButton {{
                     background: transparent; color: {TEXT3};
+                    font-family: 'Segoe UI Symbol', sans-serif;
                     font-size: 13px; border-radius: 4px;
                 }}
                 QPushButton:hover {{ background: {hover_bg}; color: {hover_fg}; }}
@@ -170,8 +175,12 @@ class Sidebar(QWidget):
 
     def __init__(self, items=None, active="copy", parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedWidth(SIDEBAR_W)
-        self.setStyleSheet(f"background: {SURFACE}; border-right: 1px solid {LINE};")
+        _cn = self.__class__.__name__
+        self.setStyleSheet(
+            f"{_cn} {{ background: {SURFACE}; border-right: 1px solid {LINE}; }}"
+        )
         self._buttons: dict[str, QPushButton] = {}
         self._active = active
 
@@ -230,14 +239,18 @@ class FooterStrip(QWidget):
 
     def __init__(self, version="v2.4.1", parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(FOOTER_H)
-        self.setStyleSheet(f"background: {SURFACE}; border-top: 1px solid {LINE};")
+        _cn = self.__class__.__name__
+        self.setStyleSheet(
+            f"{_cn} {{ background: {SURFACE}; border-top: 1px solid {LINE}; }}"
+        )
         self._row = QHBoxLayout(self)
         self._row.setContentsMargins(12, 0, 12, 0)
         self._row.setSpacing(8)
 
         ver = QLabel(version)
-        ver.setStyleSheet(f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};")
+        ver.setStyleSheet(f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};")
         self._row.addWidget(ver)
 
         sep = QLabel("·")
@@ -250,14 +263,14 @@ class FooterStrip(QWidget):
 
         self._status_lbl = QLabel("Not connected")
         self._status_lbl.setStyleSheet(
-            f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};"
+            f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
         )
         self._row.addWidget(self._status_lbl)
 
         self._row.addStretch()
 
         hint = QLabel("Need a key? trade.sync.pro/account")
-        hint.setStyleSheet(f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};")
+        hint.setStyleSheet(f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};")
         self._row.addWidget(hint)
 
     def set_connected(self, connected: bool, url_tail: str = "") -> None:
@@ -270,12 +283,12 @@ class FooterStrip(QWidget):
         if connected:
             self._status_lbl.setText(url_tail or "Connected")
             self._status_lbl.setStyleSheet(
-                f"font-family: '{FONT_MONO}'; font-size: 11px; color: {ACCENT};"
+                f"font-family: {FONT_MONO}; font-size: 11px; color: {ACCENT};"
             )
         else:
             self._status_lbl.setText("Disconnected")
             self._status_lbl.setStyleSheet(
-                f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};"
+                f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
             )
 
 
@@ -287,11 +300,15 @@ class HeaderStripSlave(QWidget):
 
     def __init__(self, master_name=None, status="idle", latency=None, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(HEADER_H)
+        _cn = self.__class__.__name__
         self.setStyleSheet(
             f"""
-            background: {SURFACE};
-            border-bottom: 1px solid {LINE};
+            {_cn} {{
+                background: {SURFACE};
+                border-bottom: 1px solid {LINE};
+            }}
             """
         )
         row = QHBoxLayout(self)
@@ -331,7 +348,7 @@ class HeaderStripSlave(QWidget):
         if latency is not None:
             lat = QLabel(f"{latency}ms")
             lat.setStyleSheet(
-                f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};"
+                f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
             )
             row.addWidget(lat)
 
@@ -351,8 +368,12 @@ class HeaderStripMaster(QWidget):
         parent=None,
     ):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(HEADER_H)
-        self.setStyleSheet(f"background: {SURFACE}; border-bottom: 1px solid {LINE};")
+        _cn = self.__class__.__name__
+        self.setStyleSheet(
+            f"{_cn} {{ background: {SURFACE}; border-bottom: 1px solid {LINE}; }}"
+        )
         row = QHBoxLayout(self)
         row.setContentsMargins(16, 0, 16, 0)
         row.setSpacing(12)
@@ -376,7 +397,7 @@ class HeaderStripMaster(QWidget):
             key_lbl = QLabel(f"···{license_tail}")
             key_lbl.setStyleSheet(
                 f"""
-                font-family: '{FONT_MONO}'; font-size: 11px; color: {ACCENT};
+                font-family: {FONT_MONO}; font-size: 11px; color: {ACCENT};
                 background: {ACCENT_SOFT}; border-radius: 4px; padding: 2px 6px;
                 """
             )
@@ -387,7 +408,7 @@ class HeaderStripMaster(QWidget):
         if session_elapsed:
             timer = QLabel(session_elapsed)
             timer.setStyleSheet(
-                f"font-family: '{FONT_MONO}'; font-size: 11px; color: {TEXT3};"
+                f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
             )
             row.addWidget(timer)
 
@@ -412,7 +433,7 @@ class KpiTile(QWidget):
 
         self._value_lbl = QLabel(value)
         self._value_lbl.setStyleSheet(
-            f"font-size: 20px; font-weight: 700; color: {value_color}; font-family: '{FONT_MONO}';"
+            f"font-size: 20px; font-weight: 700; color: {value_color}; font-family: {FONT_MONO};"
         )
         col.addWidget(self._value_lbl)
 
@@ -425,7 +446,7 @@ class KpiTile(QWidget):
         self._value_lbl.setText(text)
         c = color if color is not None else self._value_color_default
         self._value_lbl.setStyleSheet(
-            f"font-size: 20px; font-weight: 700; color: {c}; font-family: '{FONT_MONO}';"
+            f"font-size: 20px; font-weight: 700; color: {c}; font-family: {FONT_MONO};"
         )
 
     def set_sub(self, text: str | None) -> None:
@@ -438,8 +459,12 @@ class KpiStripSlave(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(KPI_H)
-        self.setStyleSheet(f"background: {SURFACE}; border-bottom: 1px solid {LINE};")
+        _cn = self.__class__.__name__
+        self.setStyleSheet(
+            f"{_cn} {{ background: {SURFACE}; border-bottom: 1px solid {LINE}; }}"
+        )
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
@@ -488,8 +513,12 @@ class KpiStripMaster(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(KPI_H)
-        self.setStyleSheet(f"background: {SURFACE}; border-bottom: 1px solid {LINE};")
+        _cn = self.__class__.__name__
+        self.setStyleSheet(
+            f"{_cn} {{ background: {SURFACE}; border-bottom: 1px solid {LINE}; }}"
+        )
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.setSpacing(0)
@@ -604,7 +633,7 @@ class EventLog(QWidget):
             QTextEdit {{
                 background: {BG};
                 color: {TEXT3};
-                font-family: '{FONT_MONO}';
+                font-family: {FONT_MONO};
                 font-size: 11px;
                 border: none;
                 padding: 8px;

@@ -3,9 +3,12 @@
 See ``docs/pyside6_translation.md`` § 2.1–2.6.
 """
 
-from PySide6.QtCore import Qt, Signal
+import os
+
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtWidgets import (
     QAbstractSpinBox,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFrame,
@@ -24,6 +27,7 @@ from views.qt.theme import (
     DANGER_SOFT,
     FONT_MONO,
     FONT_SANS,
+    ICONS_DIR,
     LINE,
     LINE2,
     RADIUS_LG,
@@ -108,7 +112,7 @@ class LineInput(QLineEdit):
                 border: 1px solid {border_color};
                 border-radius: {RADIUS_MD}px;
                 color: {TEXT};
-                font-family: "{font_family}";
+                font-family: {font_family};
                 font-size: 13px;
                 padding: 10px 12px;
             }}
@@ -140,6 +144,8 @@ class DarkSpinbox(QDoubleSpinBox):
         self.setSingleStep(step)
         self.setDecimals(2)
         self.setButtonSymbols(QAbstractSpinBox.ButtonSymbols.UpDownArrows)
+        up_icon = QUrl.fromLocalFile(os.path.join(ICONS_DIR, "chevron-up.svg")).toString()
+        down_icon = QUrl.fromLocalFile(os.path.join(ICONS_DIR, "chevron-down.svg")).toString()
         self.setStyleSheet(
             f"""
             DarkSpinbox {{
@@ -147,7 +153,7 @@ class DarkSpinbox(QDoubleSpinBox):
                 border: 1px solid {LINE};
                 border-radius: {RADIUS_MD}px;
                 color: {TEXT};
-                font-family: "{FONT_MONO}";
+                font-family: {FONT_MONO};
                 font-size: 13px;
                 padding: 8px 12px;
             }}
@@ -157,8 +163,8 @@ class DarkSpinbox(QDoubleSpinBox):
                 border: none;
                 width: 18px;
             }}
-            DarkSpinbox::up-arrow  {{ image: url(:/icons/chevron-up.svg); width: 8px; }}
-            DarkSpinbox::down-arrow {{ image: url(:/icons/chevron-down.svg); width: 8px; }}
+            DarkSpinbox::up-arrow  {{ image: url("{up_icon}"); width: 10px; }}
+            DarkSpinbox::down-arrow {{ image: url("{down_icon}"); width: 10px; }}
             """
         )
 
@@ -194,6 +200,37 @@ class DarkDropdown(QComboBox):
                 border-radius: {RADIUS_MD}px;
                 color: {TEXT};
                 selection-background-color: {SURFACE3};
+            }}
+            """
+        )
+
+
+class DarkCheckBox(QCheckBox):
+    """Checkbox for dark panels; 16×16 rounded indicator, accent fill when checked."""
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setStyleSheet(
+            f"""
+            DarkCheckBox {{
+                color: {TEXT};
+                font-family: {FONT_SANS};
+                font-size: 13px;
+                spacing: 10px;
+            }}
+            DarkCheckBox::indicator {{
+                width: 16px;
+                height: 16px;
+                border-radius: 4px;
+            }}
+            DarkCheckBox::indicator:unchecked {{
+                background: transparent;
+                border: 1px solid {LINE2};
+            }}
+            DarkCheckBox::indicator:checked {{
+                background: {ACCENT};
+                border: 1px solid {ACCENT};
             }}
             """
         )
@@ -333,7 +370,7 @@ class StatusPill(QLabel):
                 border: 1px solid {color};
                 border-radius: 999px;
                 padding: 4px 10px;
-                font-family: "{FONT_MONO}";
+                font-family: {FONT_MONO};
                 font-size: 11px;
                 font-weight: 600;
                 letter-spacing: 0.6px;
@@ -421,7 +458,7 @@ class MiniChip(QLabel):
             background: {SURFACE2};
             color: {TEXT2};
             border: 1px solid {LINE};
-            font-family: "{FONT_MONO}";
+            font-family: {FONT_MONO};
             font-size: 11px;
             border-radius: {RADIUS_SM}px;
             padding: 3px 8px;

@@ -99,7 +99,8 @@ trade-sync-client/
 │  │  ├─ views/                             # Shell tab bodies (replacing placeholders)
 │  │  │  ├─ __init__.py                    # Package marker
 │  │  │  ├─ copy_view.py                   # COPY tab: master summary, settings, listen control
-│  │  │  └─ symbols_view.py                 # SYMBOLS tab: presets, map table, unmapped behavior
+│  │  │  ├─ symbols_view.py                 # SYMBOLS tab: presets, map table, unmapped behavior
+│  │  │  └─ risk_view.py                   # RISK tab: guards, daily status, whitelist chips
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
 │  │  ├─ subscribers_panel.py               # SubscribersPanel QWidget
 │  │  ├─ symbol_map_panel.py                # SymbolMapPanel QWidget (dual broker presets)
@@ -634,13 +635,14 @@ Key widgets and controls:
 - **Shell:** Sidebar keys `copy` / `symbols` / `risk` / `trades`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog`.
 - **COPY:** `views/qt/views/copy_view.py` — master status summary, segmented `MULTIPLIER` \| `FIXED_LOT`, spinboxes (`risk_multiplier`, `fixed_lot_size`, `slippage_points`), reverse checkbox, `toggle_listening()` + `SweepBand` when running.
 - **SYMBOLS:** `views/qt/views/symbols_view.py` — same behavior as legacy `symbol_map_panel` (broker presets, manual add/remove rows, `unmapped_symbol_behavior`); stacked as the shell `"symbols"` page. Legacy `symbol_map_panel.py` kept until Phase 1.6 cleanup.
-- **RISK / TRADES:** Shell placeholders until those panels register.
+- **RISK:** `views/qt/views/risk_view.py` — same fields as legacy `risk_panel` (`equity_floor`, `max_concurrent_trades`, `daily_loss_limit`, `max_lot_size`, whitelist, daily P&L / pause / reset). Legacy `risk_panel.py` kept until Phase 1.6 cleanup.
+- **TRADES:** Shell placeholder until the trades view registers.
 
 Methods:
 - `build_login_screen()` / `build_dashboard_screen()`: layouts plus `WindowShell`; `_replace_shell_placeholder()` swaps a stack widget by nav key without editing `shell.py`.
 - `on_login_submit()` calls `SlaveController.login_mt5(...)`.
 - `_show_dashboard()` switches the stack to the dashboard, resets log and header guards, runs `update_ui()`.
-- `update_ui()` (`@Slot()`): footer, `HeaderStripSlave`, KPI strip, tails `state.logs` into `EventLog`; `CopyView.sync_from_state()`; `SymbolsView.refresh_display()`; optional panel hooks when wired.
+- `update_ui()` (`@Slot()`): footer, `HeaderStripSlave`, KPI strip, tails `state.logs` into `EventLog`; `CopyView.sync_from_state()`; `SymbolsView.refresh_display()`; `RiskView.refresh_display()`; optional `TradesPanel` hook when wired.
 
 `_slave_log_category` maps log lines into `EventLog` filter categories.
 

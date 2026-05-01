@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QHeaderView,
     QLabel,
+    QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -37,12 +41,12 @@ BROKER_LIST = [
 
 
 class SymbolsView(QWidget):
-    """Slave symbol map UI; mutations mirror ``SymbolMapPanel`` (state-only, no controller calls)."""
+    """Slave symbol map UI; uses primitives; remove uses ``SlaveController.remove_mapping``."""
 
     def __init__(self, controller, parent=None):
         super().__init__(parent)
         self._controller = controller
-        self._map_sig_cache: tuple[tuple[str, str], ...] = ()
+        self._map_sig_cache: Optional[tuple[tuple[str, str], ...]] = None
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 20, 20, 20)
@@ -55,29 +59,38 @@ class SymbolsView(QWidget):
         p_inner.setSpacing(12)
         p_inner.addWidget(MicroLabel("Broker preset loader"))
 
-        m_row = QWidget()
-        ml = QHBoxLayout(m_row)
-        ml.setContentsMargins(0, 0, 0, 0)
-        ml.setSpacing(12)
-        ml.addWidget(FieldLabel("Master's broker"), stretch=0)
+        preset_row = QHBoxLayout()
+        preset_row.setContentsMargins(0, 0, 0, 0)
+        preset_row.setSpacing(16)
+
+        master_col = QWidget()
+        mv = QVBoxLayout(master_col)
+        mv.setContentsMargins(0, 0, 0, 0)
+        mv.setSpacing(6)
+        mv.addWidget(FieldLabel("Master's broker"))
         self.combo_master_broker = DarkDropdown()
         self.combo_master_broker.addItems(BROKER_LIST)
-        ml.addWidget(self.combo_master_broker, stretch=1)
-        p_inner.addWidget(m_row)
+        mv.addWidget(self.combo_master_broker)
+        preset_row.addWidget(master_col, 1)
 
-        y_row = QWidget()
-        yl = QHBoxLayout(y_row)
-        yl.setContentsMargins(0, 0, 0, 0)
-        yl.setSpacing(12)
-        yl.addWidget(FieldLabel("Your broker"), stretch=0)
+        your_col = QWidget()
+        yv = QVBoxLayout(your_col)
+        yv.setContentsMargins(0, 0, 0, 0)
+        yv.setSpacing(6)
+        yv.addWidget(FieldLabel("Your broker"))
         self.combo_my_broker = DarkDropdown()
         self.combo_my_broker.addItems(BROKER_LIST)
-        yl.addWidget(self.combo_my_broker, stretch=1)
-        p_inner.addWidget(y_row)
+        yv.addWidget(self.combo_my_broker)
+        preset_row.addWidget(your_col, 1)
 
         self.btn_load_preset = Btn("Load Preset", kind="primary", size="md")
         self.btn_load_preset.clicked.connect(self._load_preset)
-        p_inner.addWidget(self.btn_load_preset)
+        preset_row.addWidget(
+            self.btn_load_preset,
+            alignment=Qt.AlignmentFlag.AlignBottom,
+        )
+
+        p_inner.addLayout(preset_row)
 
         help_preset = QLabel(
             "Pick the master's broker and yours. Preset fills standard pairs into your map."
@@ -118,11 +131,15 @@ class SymbolsView(QWidget):
         self.table_symbol_map = QTableWidget()
         self.table_symbol_map.setColumnCount(3)
         self.table_symbol_map.setHorizontalHeaderLabels(
-            ["MASTER SYMBOL", "YOUR SYMBOL", ""],
+            ["Master Symbol", "Your Symbol", ""],
         )
-        self.table_symbol_map.setColumnWidth(0, 160)
-        self.table_symbol_map.setColumnWidth(1, 160)
-        self.table_symbol_map.horizontalHeader().setStretchLastSection(True)
+        hh = self.table_symbol_map.horizontalHeader()
+        hh.setVisible(True)
+        hh.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        hh.setSectionResizeMode(2, QHeaderView.ResizeMode.Fixed)
+        self.table_symbol_map.setColumnWidth(2, 48)
         self.table_symbol_map.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows,
         )
@@ -130,7 +147,12 @@ class SymbolsView(QWidget):
             QTableWidget.EditTrigger.NoEditTriggers,
         )
         self.table_symbol_map.setAlternatingRowColors(False)
+        self.table_symbol_map.setShowGrid(True)
         self.table_symbol_map.verticalHeader().setVisible(False)
+        self.table_symbol_map.setSizePolicy(
+            QSizePolicy.Policy.Expanding,
+            QSizePolicy.Policy.Expanding,
+        )
         t_inner.addWidget(self.table_symbol_map, stretch=1)
 
         hint_tbl = QLabel("Symbol names are case-sensitive.")
@@ -179,11 +201,12 @@ class SymbolsView(QWidget):
         return tuple(sorted(self.state.symbol_map.items()))
 
     def refresh_display(self) -> None:
-        """Rebuild the table when ``state.symbol_map`` changes; sync unmapped dropdown."""
+        """Rebuild table from ``controller.state.symbol_map`` when it changes; sync unmapped."""
         sig = self._symbol_map_signature()
-        if sig != self._map_sig_cache:
+        if self._map_sig_cache is None or sig != self._map_sig_cache:
             self._map_sig_cache = sig
             self._render_table_rows()
+
         um = getattr(self.state, "unmapped_symbol_behavior", "IGNORE")
         want_idx = 1 if um == "COPY_AS_IS" else 0
         cu = self.combo_unmapped
@@ -194,7 +217,8 @@ class SymbolsView(QWidget):
 
     def _render_table_rows(self) -> None:
         self.table_symbol_map.setRowCount(0)
-        for master_sym, slave_sym in self.state.symbol_map.items():
+        smap = self._controller.state.symbol_map
+        for master_sym, slave_sym in smap.items():
             row = self.table_symbol_map.rowCount()
             self.table_symbol_map.insertRow(row)
             self.table_symbol_map.setRowHeight(row, 32)
@@ -209,11 +233,11 @@ class SymbolsView(QWidget):
 
             btn_cell = QWidget()
             brow = QHBoxLayout(btn_cell)
-            brow.setContentsMargins(4, 2, 4, 2)
+            brow.setContentsMargins(2, 2, 2, 2)
             brow.addStretch(1)
             rm = GhostIconBtn("×")
             rm.clicked.connect(
-                lambda _c=False, ms=master_sym: self._remove_mapping(ms),
+                lambda _c=False, ms=master_sym: self._controller.remove_mapping(ms),
             )
             brow.addWidget(rm)
             brow.addStretch(1)
@@ -249,17 +273,9 @@ class SymbolsView(QWidget):
             self.lbl_inline_status.show()
             return
         self.lbl_inline_status.hide()
-        self.state.symbol_map[master] = slave
+        self._controller.add_symbol_mapping(master, slave)
         self.input_master_sym.clear()
         self.input_slave_sym.clear()
-        print(f"[SYMBOL] Added mapping: {master} -> {slave} | map: {self.state.symbol_map}")
-        self.refresh_display()
-
-    def _remove_mapping(self, master_sym: str) -> None:
-        if master_sym in self.state.symbol_map:
-            del self.state.symbol_map[master_sym]
-            print(f"[SYMBOL] Removed mapping: {master_sym} | map: {self.state.symbol_map}")
-            self.refresh_display()
 
     def _on_unmapped_changed(self, index: int) -> None:
         if index == 1:

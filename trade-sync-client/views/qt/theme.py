@@ -8,6 +8,12 @@ import os
 from PySide6.QtGui import QFont, QFontDatabase
 from PySide6.QtWidgets import QApplication
 
+# trade-sync-client/ (this module lives in views/qt/)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+ASSETS_DIR = os.path.join(BASE_DIR, "assets")
+FONTS_DIR = os.path.join(ASSETS_DIR, "fonts")
+ICONS_DIR = os.path.join(ASSETS_DIR, "icons")
+
 # ── Backgrounds ──────────────────────────────────────────────
 BG = "#0a0e0d"  # App-level background (darkest)
 SURFACE = "#11181a"  # Panel surface, sidebar, titlebar, footer
@@ -39,8 +45,8 @@ WARN = "#ffb547"
 WARN_SOFT = "rgba(255,181,71,0.12)"
 
 # ── Typography ────────────────────────────────────────────────
-FONT_SANS = "Inter"
-FONT_MONO = "JetBrains Mono"
+FONT_SANS = '"Inter", system-ui, sans-serif'
+FONT_MONO = '"JetBrains Mono", ui-monospace, monospace'
 
 # ── Sizing ────────────────────────────────────────────────────
 RADIUS_SM = 6  # chip / micro elements
@@ -60,23 +66,20 @@ WINDOW_W = 1400
 WINDOW_H = 900
 
 
-def load_fonts(font_dir: str) -> None:
-    """Load all .ttf / .otf fonts from ``font_dir`` (call once at app startup).
-
-    Skips gracefully if ``font_dir`` is missing or empty.
-    """
-    if not font_dir or not os.path.isdir(font_dir):
+def load_fonts() -> None:
+    if not os.path.isdir(FONTS_DIR):
+        print(f"[THEME] Warning: Fonts dir not found at {FONTS_DIR}")
         return
-    try:
-        for fname in sorted(os.listdir(font_dir)):
-            if fname.lower().endswith((".ttf", ".otf")):
-                QFontDatabase.addApplicationFont(os.path.join(font_dir, fname))
-    except OSError:
-        pass
+    loaded = 0
+    for fname in sorted(os.listdir(FONTS_DIR)):
+        if fname.lower().endswith((".ttf", ".otf")):
+            QFontDatabase.addApplicationFont(os.path.join(FONTS_DIR, fname))
+            loaded += 1
+    print(f"[THEME] Loaded {loaded} custom fonts from {FONTS_DIR}")
 
 
 def apply_app_font(app: QApplication) -> None:
-    font = QFont(FONT_SANS, 13)
+    font = QFont("Inter", 13)
     font.setHintingPreference(QFont.HintingPreference.PreferNoHinting)
     app.setFont(font)
 
@@ -88,7 +91,7 @@ def build_global_qss() -> str:
     QWidget {{
         background: transparent;
         color: {TEXT};
-        font-family: "{FONT_SANS}";
+        font-family: {FONT_SANS};
         font-size: 13px;
         border: none;
     }}
@@ -113,5 +116,22 @@ def build_global_qss() -> str:
         border-radius: {RADIUS_SM}px;
         padding: 4px 8px;
         font-size: 12px;
+    }}
+    QHeaderView::section {{
+        background-color: transparent;
+        color: {TEXT3};
+        font-size: 11px;
+        font-weight: 600;
+        border: none;
+        border-bottom: 1px solid {LINE};
+        padding: 8px 14px;
+    }}
+    QTableWidget {{
+        gridline-color: {LINE};
+        background: transparent;
+    }}
+    QTableWidget::item {{
+        padding: 0px 8px;
+        border: none;
     }}
     """

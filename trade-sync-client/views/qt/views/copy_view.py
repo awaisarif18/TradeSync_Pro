@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QCheckBox,
     QHBoxLayout,
     QLabel,
     QVBoxLayout,
@@ -12,8 +11,16 @@ from PySide6.QtWidgets import (
 )
 
 from views.qt.custom_widgets import SweepBand
-from views.qt.primitives import Btn, Card, DarkSpinbox, FieldLabel, MicroLabel, SegmentedToggle
-from views.qt.theme import TEXT, TEXT3
+from views.qt.primitives import (
+    Btn,
+    Card,
+    DarkCheckBox,
+    DarkSpinbox,
+    FieldLabel,
+    MicroLabel,
+    SegmentedToggle,
+)
+from views.qt.theme import TEXT3
 
 
 class CopyView(QWidget):
@@ -47,61 +54,66 @@ class CopyView(QWidget):
         s_inner.setSpacing(14)
         s_inner.addWidget(MicroLabel("Copy settings"))
 
+        mode_row = QHBoxLayout()
+        mode_row.setContentsMargins(0, 0, 0, 0)
+        mode_row.setSpacing(0)
         self.mode_toggle = SegmentedToggle(
             [("MULTIPLIER", "MULTIPLIER"), ("FIXED LOT", "FIXED_LOT")],
             default=0,
         )
         self.mode_toggle.changed.connect(self._on_copy_mode_changed)
-        s_inner.addWidget(self.mode_toggle)
+        mode_row.addWidget(self.mode_toggle, 0)
+        mode_row.addStretch(1)
+        s_inner.addLayout(mode_row)
 
-        mult_row = QWidget()
-        mh = QHBoxLayout(mult_row)
-        mh.setContentsMargins(0, 0, 0, 0)
-        mh.setSpacing(12)
-        mh.addWidget(FieldLabel("Risk multiplier"))
-        mh.addStretch(1)
+        fields_row = QHBoxLayout()
+        fields_row.setContentsMargins(0, 0, 0, 0)
+        fields_row.setSpacing(16)
+
+        mult_wrap = QWidget()
+        mult_v = QVBoxLayout(mult_wrap)
+        mult_v.setContentsMargins(0, 0, 0, 0)
+        mult_v.setSpacing(6)
+        mult_v.addWidget(FieldLabel("Risk multiplier"))
         self.multiplier_spin = DarkSpinbox(0.01, 10.0, 0.01)
         self.multiplier_spin.setMinimumWidth(120)
         self.multiplier_spin.valueChanged.connect(self._on_multiplier_changed)
-        mh.addWidget(self.multiplier_spin)
-        s_inner.addWidget(mult_row)
+        mult_v.addWidget(self.multiplier_spin)
+        fields_row.addWidget(mult_wrap, 1)
 
-        self.fixed_row = QWidget()
-        fr = QHBoxLayout(self.fixed_row)
-        fr.setContentsMargins(0, 0, 0, 0)
-        fr.setSpacing(12)
-        fr.addWidget(FieldLabel("Fixed lot size"))
-        fr.addStretch(1)
+        self.fixed_col = QWidget()
+        fixed_v = QVBoxLayout(self.fixed_col)
+        fixed_v.setContentsMargins(0, 0, 0, 0)
+        fixed_v.setSpacing(6)
+        fixed_v.addWidget(FieldLabel("Fixed lot size"))
         self.fixed_spin = DarkSpinbox(0.01, 100.0, 0.01)
         self.fixed_spin.setMinimumWidth(120)
         self.fixed_spin.valueChanged.connect(self._on_fixed_lot_changed)
-        fr.addWidget(self.fixed_spin)
-        s_inner.addWidget(self.fixed_row)
+        fixed_v.addWidget(self.fixed_spin)
+        fields_row.addWidget(self.fixed_col, 1)
 
-        slip_row = QWidget()
-        sh = QHBoxLayout(slip_row)
-        sh.setContentsMargins(0, 0, 0, 0)
-        sh.setSpacing(12)
-        sh.addWidget(FieldLabel("Slippage (points)"))
-        sh.addStretch(1)
+        slip_wrap = QWidget()
+        slip_v = QVBoxLayout(slip_wrap)
+        slip_v.setContentsMargins(0, 0, 0, 0)
+        slip_v.setSpacing(6)
+        slip_v.addWidget(FieldLabel("Slippage (points)"))
         self.slippage_spin = DarkSpinbox(0.0, 50.0, 1.0)
         self.slippage_spin.setDecimals(0)
         self.slippage_spin.setMinimumWidth(120)
         self.slippage_spin.valueChanged.connect(self._on_slippage_changed)
-        sh.addWidget(self.slippage_spin)
-        s_inner.addWidget(slip_row)
+        slip_v.addWidget(self.slippage_spin)
+        fields_row.addWidget(slip_wrap, 1)
 
-        rev_row = QWidget()
-        rh = QHBoxLayout(rev_row)
-        rh.setContentsMargins(0, 0, 0, 0)
-        rh.setSpacing(12)
-        rh.addWidget(FieldLabel("Reverse copy"))
-        rh.addStretch(1)
-        self.reverse_chk = QCheckBox("Invert BUY ↔ SELL on execution")
-        self.reverse_chk.setStyleSheet(f"color: {TEXT}; font-size: 12px;")
+        rev_wrap = QWidget()
+        rev_v = QVBoxLayout(rev_wrap)
+        rev_v.setContentsMargins(0, 0, 0, 0)
+        rev_v.setSpacing(6)
+        self.reverse_chk = DarkCheckBox("Invert BUY ↔ SELL on execution")
         self.reverse_chk.toggled.connect(self._on_reverse_toggled)
-        rh.addWidget(self.reverse_chk, alignment=Qt.AlignmentFlag.AlignRight)
-        s_inner.addWidget(rev_row)
+        rev_v.addWidget(self.reverse_chk, alignment=Qt.AlignmentFlag.AlignLeft)
+        fields_row.addWidget(rev_wrap, 0)
+
+        s_inner.addLayout(fields_row)
 
         root.addWidget(settings)
 
@@ -156,7 +168,7 @@ class CopyView(QWidget):
             mt._on_click(want_idx)
             mt.changed.connect(self._on_copy_mode_changed)
 
-        self.fixed_row.setVisible(want_mode == "FIXED_LOT")
+        self.fixed_col.setVisible(want_mode == "FIXED_LOT")
 
         mr = float(getattr(state, "risk_multiplier", 1.0))
         if abs(self.multiplier_spin.value() - mr) > 1e-9:
@@ -195,7 +207,7 @@ class CopyView(QWidget):
         if self._syncing_ui:
             return
         self._state().copy_mode = val
-        self.fixed_row.setVisible(val == "FIXED_LOT")
+        self.fixed_col.setVisible(val == "FIXED_LOT")
 
     def _on_multiplier_changed(self, val: float) -> None:
         if self._syncing_ui:
