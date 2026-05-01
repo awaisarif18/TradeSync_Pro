@@ -590,7 +590,7 @@ Flow:
 Key widgets and controls:
 - **Login entries:** `MasterLoginCard` — MT5 login/password, server, broker `DarkDropdown`, license `MonoInput`, `Btn` submit.
 - **Dashboard — BROADCAST:** `views/qt/views/broadcast_view.py` — start/stop broadcasting, license display, MT5 account summary; syncs from `AppState`.
-- **Dashboard — SUBSCRIBERS:** `SubscribersView` — summary `CountChip` row, roster table (`StatusPill` live/offline, `GhostIconBtn` revoke stub), HTML activity log.
+- **Dashboard — SUBSCRIBERS:** `SubscribersView` — summary `CountChip` row, roster table (`StatusPill` live/offline, `GhostIconBtn` revoke → `MasterController.revoke_subscriber`), HTML activity log.
 - **Dashboard — PERFORMANCE:** `PerformanceView` (`views/qt/views/performance_view.py`) — six KPI cards from profile JSON; optional analytics row (`EquitySparkline`, risk metrics list, `ActiveHoursHistogram`) shown only when both `riskMetrics` and `equitySparkline` are present; **Recent broadcasts** table walks `AppState.recent_signals` with a **list-based queue matcher** so each CLOSE merges into the newest matching OPEN (by ticket when present, else symbol+volume), with P&L shown when closed.
 - **Event log:** `shell.EventLog` filter chips are role-aware: master uses `ALL`, `SIGNAL`, `SESSION`, `MT5`, `ERR`; slave keeps `COPY` instead of `SESSION`.
 
@@ -618,7 +618,7 @@ Socket event:
 - Payload shape: `{ slaveEmail, online, timestamp }`.
 
 UI behavior:
-- `SubscribersView` renders the subscriber list from `AppState.subscribers`.
+- `SubscribersView` renders the subscriber list from `AppState.subscribers` and calls `POST /auth/node-action/revoke-subscriber` on revoke (license key from `AppState.license_key`).
 - The STATUS column reads `AppState.subscriber_online_status` and displays online vs offline via `StatusPill` widgets.
 - The view includes a manual refresh (`Btn` ghost) and a 20-entry activity log for connect/disconnect changes.
 
@@ -717,14 +717,15 @@ This section is critical for preserving cross-project compatibility.
 
 ## A) Client ↔ Backend HTTP contract
 
-Endpoint used:
+Endpoints used:
 
 - `POST http://localhost:3000/auth/verify-node`
+- `POST http://localhost:3000/auth/node-action/revoke-subscriber` (master desktop only; authenticates with `masterLicenseKey` from `AppState.license_key`, no JWT)
 
 Auth boundary note:
 
-- This node-verification endpoint is intentionally public for desktop MASTER/SLAVE bootstrap.
-- JWT bearer authentication is used by web/admin REST flows (frontend to backend), not by this verify-node handshake.
+- Node verification and subscriber revoke are intentionally public for desktop MASTER bootstrap flows.
+- JWT bearer authentication is used by web/admin REST flows (frontend to backend), not by verify-node or revoke-subscriber.
 - After verification, realtime authorization continues through `register_node` role/identifier semantics and backend room routing.
 
 Master request:
@@ -744,6 +745,14 @@ Expected successful response includes at least:
 - `message`
 - `role`
 - `fullName`
+
+Revoke subscriber (master only; body JSON):
+
+```json
+{ "masterLicenseKey": "<TSP-…>", "slaveId": "<subscriber_user_uuid>" }
+```
+
+Success response shape: `{ "message": "Subscriber revoked", "slaveId": "<uuid>" }`.
 
 ## B) Client ↔ Backend Socket contract
 
@@ -793,6 +802,7 @@ Backend currently routes by master room; client behavior depends on backend `reg
 - `MasterController.login_mt5`
 - `MasterController.connect_cloud`
 - `MasterController.fetch_subscribers`
+- `MasterController.revoke_subscriber`
 - `MasterController.toggle_broadcasting`
 - `SlaveController.login_mt5`
 - `SlaveController.connect_cloud`

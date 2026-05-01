@@ -219,12 +219,10 @@ class SubscribersView(QWidget):
             self.table_subscribers.setItem(i, 4, pnl_item)
 
             revoke = GhostIconBtn("×")
-            _revoke_email = email_raw
-
-            def _revoke_clicked(_checked: bool, em: str = _revoke_email) -> None:
-                print(f"Revoke {em}")
-
-            revoke.clicked.connect(_revoke_clicked)
+            slave_id = str(sub.get("id", "") or "")
+            revoke.clicked.connect(
+                lambda _checked, sid=slave_id: self._controller.revoke_subscriber(sid)
+            )
             self.table_subscribers.setCellWidget(i, 5, _center_cell_widget(revoke))
 
         total = len(subs)

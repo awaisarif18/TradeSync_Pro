@@ -236,7 +236,33 @@ class MasterController:
             print(Fore.RED + f"[MASTER] Subscriber fetch error: {e}" + Style.RESET_ALL)
         self.update_ui()
 
-        
+    def revoke_subscriber(self, slave_id: str):
+        """
+        Calls POST /auth/node-action/revoke-subscriber with the master's license key.
+        Updates UI log on success or failure.
+        """
+        license_key = self.state.license_key
+        if not license_key:
+            self.state.add_log('[REVOKE] No license key stored. Login again.')
+            self.update_ui()
+            return
+
+        try:
+            resp = requests.post(
+                'http://localhost:3000/auth/node-action/revoke-subscriber',
+                json={'masterLicenseKey': license_key, 'slaveId': slave_id},
+                timeout=10,
+            )
+            if resp.status_code in (200, 201):
+                self.state.add_log(f'[REVOKE] Subscriber {slave_id[:8]}... revoked.')
+            else:
+                self.state.add_log(f'[REVOKE] Failed: {resp.status_code} {resp.text}')
+        except Exception as e:
+            self.state.add_log(f'[REVOKE] Error: {e}')
+
+        self.update_ui()
+        self.fetch_subscribers()
+
     def toggle_broadcasting(self):
         """Start/Stop the Recorder Loop"""
         if not self.state.is_running:
