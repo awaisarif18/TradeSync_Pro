@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QTableWidget,
     QTableWidgetItem,
@@ -108,17 +109,18 @@ class TradesView(QWidget):
         self.table_open.setHorizontalHeaderLabels(
             ["TICKET", "SYMBOL", "ACTION", "VOLUME", "OPENED"]
         )
-        self.table_open.setColumnWidth(0, 90)
-        self.table_open.setColumnWidth(1, 80)
-        self.table_open.setColumnWidth(2, 72)
-        self.table_open.setColumnWidth(3, 70)
-        self.table_open.setColumnWidth(4, 70)
-        self.table_open.horizontalHeader().setStretchLastSection(True)
+        _oh = self.table_open.horizontalHeader()
+        for i in range(self.table_open.columnCount()):
+            _oh.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
         self.table_open.horizontalHeader().setDefaultAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
-        self.table_open.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table_open.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.table_open.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self.table_open.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table_open.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.table_open.verticalHeader().setVisible(False)
         self.table_open.setAlternatingRowColors(False)
         self.table_open.setShowGrid(False)
@@ -137,19 +139,18 @@ class TradesView(QWidget):
         self.table_closed.setHorizontalHeaderLabels(
             ["TICKET", "SYMBOL", "ACTION", "VOLUME", "P&&L", "OPENED", "CLOSED"]
         )
-        self.table_closed.setColumnWidth(0, 90)
-        self.table_closed.setColumnWidth(1, 80)
-        self.table_closed.setColumnWidth(2, 72)
-        self.table_closed.setColumnWidth(3, 70)
-        self.table_closed.setColumnWidth(4, 70)
-        self.table_closed.setColumnWidth(5, 70)
-        self.table_closed.setColumnWidth(6, 70)
-        self.table_closed.horizontalHeader().setStretchLastSection(True)
+        _ch = self.table_closed.horizontalHeader()
+        for i in range(self.table_closed.columnCount()):
+            _ch.setSectionResizeMode(i, QHeaderView.ResizeMode.Stretch)
         self.table_closed.horizontalHeader().setDefaultAlignment(
             Qt.AlignmentFlag.AlignCenter
         )
-        self.table_closed.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.table_closed.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.table_closed.setSelectionMode(QTableWidget.SelectionMode.NoSelection)
         self.table_closed.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.table_closed.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.table_closed.verticalHeader().setVisible(False)
         self.table_closed.setAlternatingRowColors(False)
         self.table_closed.setShowGrid(False)

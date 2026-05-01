@@ -6,8 +6,10 @@ See ``docs/pyside6_translation.md`` § 4.1–4.5, § 4.7.
 from __future__ import annotations
 
 import html
+import os
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -27,6 +29,7 @@ from views.qt.theme import (
     DANGER,
     FOOTER_H,
     HEADER_H,
+    ICONS_DIR,
     KPI_H,
     LINE,
     LOG_W,
@@ -190,10 +193,18 @@ class Sidebar(QWidget):
         col.addStretch()
 
         for key, icon, label in (items or NAV_ITEMS_SLAVE):
-            btn = QPushButton(icon)
+            btn = QPushButton()
             btn.setFixedSize(48, 48)
             btn.setToolTip(label)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            icon_abs = os.path.join(ICONS_DIR, f"{key}.svg")
+            icon_path = icon_abs.replace("\\", "/")
+            if os.path.isfile(icon_abs):
+                btn.setIcon(QIcon(icon_path))
+                btn.setIconSize(QSize(20, 20))
+            else:
+                btn.setText(icon)
 
             def _clicked(checked: bool, k: str = key) -> None:
                 self._on_click(k)
@@ -218,7 +229,6 @@ class Sidebar(QWidget):
                 QPushButton {{
                     background: {'rgba(0,195,137,0.12)' if active else 'transparent'};
                     color: {ACCENT if active else TEXT3};
-                    font-size: 16px;
                     border: none;
                     border-right: {'2px solid ' + ACCENT if active else '2px solid transparent'};
                 }}
@@ -455,7 +465,7 @@ class KpiTile(QWidget):
 
 
 class KpiStripSlave(QWidget):
-    """Five tiles: Signals, Copied, Session P&L, Equity, Latency (``KPI_H`` tall)."""
+    """Four tiles: Session time, Session P&L, Open trades, Closed trades (``KPI_H``)."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -470,11 +480,10 @@ class KpiStripSlave(QWidget):
         row.setSpacing(0)
         self._tiles: dict[str, KpiTile] = {}
         specs = [
-            ("signals", "Signals", "—", None, TEXT),
-            ("copied", "Copied", "—", None, TEXT),
+            ("session", "Session", "--:--:--", None, TEXT),
             ("session_pnl", "Session P&L", "$0.00", None, TEXT),
-            ("equity", "Equity", "$0.00", None, TEXT),
-            ("latency", "Latency", "—", None, TEXT3),
+            ("open_trades", "Open", "0", None, TEXT),
+            ("closed_trades", "Closed", "0", None, TEXT),
         ]
         for i, (key, label, val, sub, vc) in enumerate(specs):
             tile = KpiTile(label, val, sub, vc)
@@ -627,6 +636,7 @@ class EventLog(QWidget):
         self._refresh_filter_styles()
 
         self._log_widget = QTextEdit()
+        self._log_widget.document().setDocumentMargin(14)
         self._log_widget.setReadOnly(True)
         self._log_widget.setStyleSheet(
             f"""
@@ -636,7 +646,7 @@ class EventLog(QWidget):
                 font-family: {FONT_MONO};
                 font-size: 11px;
                 border: none;
-                padding: 8px;
+                padding: 12px 16px;
             }}
             """
         )

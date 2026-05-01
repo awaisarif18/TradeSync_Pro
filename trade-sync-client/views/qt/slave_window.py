@@ -1,7 +1,6 @@
 import sys
 from typing import Optional
 
-import MetaTrader5 as mt5
 from PySide6.QtWidgets import (
     QApplication,
     QHBoxLayout,
@@ -12,7 +11,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, QTimer, Slot
 
 from controllers.ui_controllers.slave_controller import SlaveController
 from views.qt.primitives import Btn, Card, DarkDropdown, FieldLabel, LineInput, MonoInput
@@ -179,6 +178,10 @@ class SlaveWindow(QMainWindow):
         self.central_widget.addWidget(self.login_widget)
         self.central_widget.addWidget(self.dashboard_widget)
 
+        self.session_timer = QTimer(self)
+        self.session_timer.timeout.connect(self._tick_session_clock)
+        self.session_timer.start(1000)
+
     def build_login_screen(self):
         panel = QWidget()
         panel.setObjectName("SlaveLoginBackdrop")
@@ -275,6 +278,30 @@ class SlaveWindow(QMainWindow):
         laid.insertWidget(ix, new_header)
         shell.header = new_header
 
+    def _update_session_clock(self) -> str:
+        state = self.controller.state
+        if getattr(state, "is_running", False) and getattr(
+            state, "session_start_time", None
+        ):
+            try:
+                from datetime import datetime
+
+                start = datetime.strptime(state.session_start_time, "%H:%M:%S")
+                now = datetime.now()
+                elapsed = now - start.replace(
+                    year=now.year, month=now.month, day=now.day
+                )
+                return str(elapsed).split(".")[0]
+            except Exception:
+                return "--:--:--"
+        return "--:--:--"
+
+    @Slot()
+    def _tick_session_clock(self) -> None:
+        if hasattr(self, "shell") and hasattr(self.shell, "kpi"):
+            session_time = self._update_session_clock()
+            self.shell.kpi.update_kpis(session=session_time)
+
     # ── Slot: UI Update ─────────────────────────────────────────
 
     @Slot()
@@ -301,23 +328,10 @@ class SlaveWindow(QMainWindow):
         self._slave_sync_header_strip()
 
         pnl_txt = f"${state.session_pnl:.2f}"
-        copied_txt = str(len(getattr(state, "open_trades", [])))
-
-        eq_txt = "---"
-        if getattr(state, "mt5_connected", False):
-            try:
-                ai = mt5.account_info()
-                if ai is not None:
-                    eq_txt = f"${float(ai.equity):,.2f}"
-            except Exception:
-                eq_txt = "---"
-
         shell.kpi.update_kpis(
-            signals="—",
-            copied=copied_txt,
             session_pnl=pnl_txt,
-            equity=eq_txt,
-            latency="—",
+            open_trades=str(len(getattr(state, "open_trades", []))),
+            closed_trades=str(len(getattr(state, "closed_trades", []))),
         )
 
         logs = state.logs
