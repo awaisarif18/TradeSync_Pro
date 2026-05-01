@@ -41,20 +41,21 @@ from views.qt.theme import (
     TEXT3,
     TITLEBAR_H,
     FONT_MONO,
+    FONT_SANS,
     WARN,
 )
 
 NAV_ITEMS_SLAVE = [
-    ("copy", "⊗", "COPY"),
-    ("symbols", "≈", "SYMBOLS"),
-    ("risk", "◈", "RISK"),
-    ("trades", "⊞", "TRADES"),
+    {"id": "copy", "label": "COPY", "icon": "⚡"},
+    {"id": "symbols", "label": "SYMBOLS", "icon": "⊞"},
+    {"id": "risk", "label": "RISK", "icon": "❖"},
+    {"id": "trades", "label": "TRADES", "icon": "≡"},
 ]
 
 NAV_ITEMS_MASTER = [
-    ("broadcast", "⚡", "BROADCAST"),
-    ("subscribers", "⊞", "SUBSCRIBERS"),
-    ("performance", "◈", "PERFORMANCE"),
+    {"id": "broadcast", "label": "BROADCAST", "icon": "radio"},
+    {"id": "subscribers", "label": "SUBSCRIBERS", "icon": "users"},
+    {"id": "performance", "label": "PERFORMANCE", "icon": "activity"},
 ]
 
 
@@ -185,6 +186,7 @@ class Sidebar(QWidget):
             f"{_cn} {{ background: {SURFACE}; border-right: 1px solid {LINE}; }}"
         )
         self._buttons: dict[str, QPushButton] = {}
+        self._icon_labels: dict[str, QLabel] = {}
         self._active = active
 
         col = QVBoxLayout(self)
@@ -192,19 +194,43 @@ class Sidebar(QWidget):
         col.setSpacing(0)
         col.addStretch()
 
-        for key, icon, label in (items or NAV_ITEMS_SLAVE):
+        raw = items if items is not None else NAV_ITEMS_SLAVE
+
+        for item in raw:
+            if isinstance(item, dict):
+                key = item["id"]
+                icon_spec = item["icon"]
+                tip = item["label"]
+                svg_base = icon_spec
+                svg_by_id = os.path.join(ICONS_DIR, f"{key}.svg")
+                svg_by_icon = os.path.join(ICONS_DIR, f"{svg_base}.svg")
+            else:
+                key, icon_spec, tip = item
+                svg_by_id = os.path.join(ICONS_DIR, f"{key}.svg")
+                svg_by_icon = ""
+
             btn = QPushButton()
             btn.setFixedSize(48, 48)
-            btn.setToolTip(label)
+            btn.setToolTip(tip)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
 
-            icon_abs = os.path.join(ICONS_DIR, f"{key}.svg")
-            icon_path = icon_abs.replace("\\", "/")
-            if os.path.isfile(icon_abs):
+            icon_abs = svg_by_id if os.path.isfile(svg_by_id) else (
+                svg_by_icon if svg_by_icon and os.path.isfile(svg_by_icon) else ""
+            )
+            if icon_abs:
+                icon_path = icon_abs.replace("\\", "/")
                 btn.setIcon(QIcon(icon_path))
                 btn.setIconSize(QSize(20, 20))
             else:
-                btn.setText(icon)
+                icon_label = QLabel(icon_spec)
+                icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                self._icon_labels[key] = icon_label
+                inner = QVBoxLayout()
+                inner.setContentsMargins(0, 0, 0, 0)
+                inner.addStretch(1)
+                inner.addWidget(icon_label)
+                inner.addStretch(1)
+                btn.setLayout(inner)
 
             def _clicked(checked: bool, k: str = key) -> None:
                 self._on_click(k)
@@ -238,6 +264,15 @@ class Sidebar(QWidget):
                 }}
                 """
             )
+            lab = self._icon_labels.get(key)
+            if lab is not None:
+                lab.setStyleSheet(
+                    f"""
+                    font-family: 'Segoe UI Emoji', 'Apple Color Emoji', 'Noto Color Emoji', sans-serif;
+                    font-size: 18px;
+                    color: {ACCENT if active else TEXT3};
+                    """
+                )
 
     def set_active(self, key: str) -> None:
         self._active = key
@@ -367,12 +402,11 @@ class HeaderStripSlave(QWidget):
 
 
 class HeaderStripMaster(QWidget):
-    """Master strip: account identity, license tail, session timer, StatusPill."""
+    """Master strip: account identity, tick, profile details, session timer, StatusPill."""
 
     def __init__(
         self,
         name=None,
-        license_tail=None,
         status="idle",
         session_elapsed=None,
         parent=None,
@@ -399,19 +433,75 @@ class HeaderStripMaster(QWidget):
                 """
             )
             row.addWidget(av)
-            name_lbl = QLabel(name)
-            name_lbl.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT};")
-            row.addWidget(name_lbl)
 
-        if license_tail:
-            key_lbl = QLabel(f"···{license_tail}")
-            key_lbl.setStyleSheet(
+            name_col = QVBoxLayout()
+            name_col.setSpacing(2)
+
+            name_row = QHBoxLayout()
+            name_row.setContentsMargins(0, 0, 0, 0)
+            name_row.setSpacing(6)
+
+            self.lbl_name = QLabel(name)
+            self.lbl_name.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT};")
+            name_row.addWidget(self.lbl_name)
+
+            tick = QLabel("✓")
+            tick.setStyleSheet(f"color: {ACCENT}; font-size: 12px; font-weight: bold;")
+            name_row.addWidget(tick)
+
+            master_badge = QLabel("MASTER")
+            master_badge.setStyleSheet(
                 f"""
-                font-family: {FONT_MONO}; font-size: 11px; color: {ACCENT};
-                background: {ACCENT_SOFT}; border-radius: 4px; padding: 2px 6px;
+                font-family: {FONT_SANS}; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+                color: {ACCENT}; background: {ACCENT_SOFT};
+                padding: 1px 7px; border-radius: 4px;
                 """
             )
-            row.addWidget(key_lbl)
+            name_row.addWidget(master_badge)
+            name_row.addStretch()
+            name_col.addLayout(name_row)
+
+            details_row = QHBoxLayout()
+            details_row.setContentsMargins(0, 0, 0, 0)
+            details_row.setSpacing(8)
+
+            default_handle = f"@{name.split()[0].lower()}_fx" if name else "@master"
+            self.lbl_handle = QLabel(default_handle)
+            self.lbl_handle.setStyleSheet(f"font-family: {FONT_MONO}; font-size: 12px; color: {TEXT2};")
+            details_row.addWidget(self.lbl_handle)
+
+            sep1 = QLabel("·")
+            sep1.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
+            details_row.addWidget(sep1)
+
+            self.lbl_instruments = QLabel("Forex / Gold")
+            self.lbl_instruments.setStyleSheet(f"font-size: 12px; color: {TEXT3};")
+            details_row.addWidget(self.lbl_instruments)
+
+            sep2 = QLabel("·")
+            sep2.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
+            details_row.addWidget(sep2)
+
+            self.lbl_risk = QLabel("Med risk")
+            self.lbl_risk.setStyleSheet(f"font-size: 12px; color: {WARN};")
+            details_row.addWidget(self.lbl_risk)
+
+            sep3 = QLabel("·")
+            sep3.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
+            details_row.addWidget(sep3)
+
+            self.lbl_roi = QLabel()
+            self.lbl_roi.setTextFormat(Qt.TextFormat.RichText)
+            self.lbl_roi.setText(
+                f"30d ROI <span style='color: {ACCENT}; font-family: JetBrains Mono, monospace'>+0.0%</span>"
+            )
+            self.lbl_roi.setStyleSheet(f"font-size: 12px; color: {TEXT3};")
+            details_row.addWidget(self.lbl_roi)
+
+            details_row.addStretch()
+            name_col.addLayout(details_row)
+
+            row.addLayout(name_col)
 
         row.addStretch()
 
@@ -424,6 +514,32 @@ class HeaderStripMaster(QWidget):
 
         pill = StatusPill(variant=status, label=status.upper())
         row.addWidget(pill)
+
+    def set_profile_data(self, handle: str, instruments: str, risk: str, roi_pct: float):
+        """Updates the bottom row with backend profile data (GET /auth/masters/:id/profile)."""
+        if not hasattr(self, "lbl_handle"):
+            return
+
+        if handle:
+            self.lbl_handle.setText(handle)
+
+        self.lbl_instruments.setText(instruments or "Mixed")
+
+        risk_clean = (risk or "Unknown").capitalize() + " risk"
+        self.lbl_risk.setText(risk_clean)
+        if risk_clean.startswith("High"):
+            self.lbl_risk.setStyleSheet(f"font-size: 12px; color: {DANGER};")
+        elif risk_clean.startswith("Low"):
+            self.lbl_risk.setStyleSheet(f"font-size: 12px; color: {ACCENT};")
+        else:
+            self.lbl_risk.setStyleSheet(f"font-size: 12px; color: {WARN};")
+
+        roi_color = ACCENT if roi_pct >= 0 else DANGER
+        sign = "+" if roi_pct >= 0 else ""
+        self.lbl_roi.setText(
+            f"30d ROI <span style='color: {roi_color}; font-family: JetBrains Mono, monospace'>"
+            f"{sign}{roi_pct:.2f}%</span>"
+        )
 
 
 # ── § 4.4 — KPI strips ──────────────────────────────────────────
@@ -708,6 +824,7 @@ class WindowShell(QWidget):
     def __init__(self, role="slave", parent=None):
         super().__init__(parent)
         self._role = role
+        role_norm = (role or "slave").strip().lower()
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
@@ -717,15 +834,21 @@ class WindowShell(QWidget):
         center_row.setContentsMargins(0, 0, 0, 0)
         center_row.setSpacing(0)
 
-        nav_items = NAV_ITEMS_SLAVE if role == "slave" else NAV_ITEMS_MASTER
-        self.sidebar = Sidebar(items=nav_items)
+        if role_norm == "master":
+            nav_items = list(NAV_ITEMS_MASTER)
+            nav_active = nav_items[0]["id"] if nav_items else "broadcast"
+        else:
+            nav_items = list(NAV_ITEMS_SLAVE)
+            nav_active = nav_items[0]["id"] if nav_items else "copy"
+
+        self.sidebar = Sidebar(items=nav_items, active=nav_active)
         self.sidebar.nav_changed.connect(self._on_nav)
 
         center_col = QVBoxLayout()
         center_col.setContentsMargins(0, 0, 0, 0)
         center_col.setSpacing(0)
 
-        if role == "slave":
+        if role_norm == "slave":
             self.header = HeaderStripSlave()
             self.kpi = KpiStripSlave()
         else:
@@ -741,7 +864,7 @@ class WindowShell(QWidget):
         center_widget = QWidget()
         center_widget.setLayout(center_col)
 
-        self.event_log = EventLog(role=role)
+        self.event_log = EventLog(role=role_norm)
 
         center_row.addWidget(self.sidebar)
         center_row.addWidget(center_widget, 1)
@@ -757,14 +880,17 @@ class WindowShell(QWidget):
 
         self._views: dict[str, QWidget] = {}
 
-        for key, _icon, nav_label in nav_items:
+        for item in nav_items:
+            key = item["id"] if isinstance(item, dict) else item[0]
+            nav_label = item["label"] if isinstance(item, dict) else item[2]
             placeholder = QLabel(f"{nav_label}\n(placeholder)")
             placeholder.setAlignment(Qt.AlignmentFlag.AlignCenter)
             placeholder.setStyleSheet(f"color: {TEXT3}; font-size: 13px;")
             self.register_view(key, placeholder)
 
         if nav_items:
-            self.show_view(nav_items[0][0])
+            first_key = nav_items[0]["id"] if isinstance(nav_items[0], dict) else nav_items[0][0]
+            self.show_view(first_key)
 
     def register_view(self, key: str, widget: QWidget) -> None:
         self._views[key] = widget

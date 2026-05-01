@@ -449,23 +449,16 @@ class MasterWindow(QMainWindow):
         name = str(getattr(ai, "name", "") or "").strip()
         return name or None
 
-    def _master_license_tail(self, state):
-        key = str(getattr(state, "license_key", "") or "").strip()
-        if len(key) >= 4:
-            return key[-4:]
-        return None
-
     def _master_sync_header_strip(self) -> None:
         shell = getattr(self, "shell", None)
         if shell is None or not isinstance(shell.header, HeaderStripMaster):
             return
         state = self.controller.state
         name = self._master_display_name()
-        tail = self._master_license_tail(state)
         variant = self._master_header_variant(state)
         elapsed = self._update_session_clock()
         elapsed_val = elapsed if elapsed != "--:--:--" else None
-        sig = (name, tail, variant, elapsed_val)
+        sig = (name, variant, elapsed_val)
         if getattr(self, "_master_header_signature", None) == sig:
             return
         self._master_header_signature = sig
@@ -483,12 +476,25 @@ class MasterWindow(QMainWindow):
 
         new_header = HeaderStripMaster(
             name=name,
-            license_tail=tail,
             status=variant,
             session_elapsed=elapsed_val,
         )
         laid.insertWidget(ix, new_header)
         shell.header = new_header
+
+    def _apply_master_header_profile(self) -> None:
+        shell = getattr(self, "shell", None)
+        if shell is None or not isinstance(shell.header, HeaderStripMaster):
+            return
+        stats = self.performance_data or {}
+        full = str(stats.get("fullName") or "").strip()
+        first = full.split()[0].lower() if full else ""
+        handle = f"@{first}_fx" if first else "@master"
+        instruments = str(stats.get("instruments") or "").strip() or "Mixed"
+        risk = str(stats.get("riskLevel") or "medium").strip()
+        # Header shows “30d ROI”; profile has no ROI field yet — use winRate as the displayed %.
+        roi_pct = float(stats.get("winRate", 0) or 0)
+        shell.header.set_profile_data(handle, instruments, risk, roi_pct)
 
     def _master_log_category(self, line: str) -> str:
         up = line.upper()
@@ -518,6 +524,7 @@ class MasterWindow(QMainWindow):
         )
         shell.footer.set_connected(cloud_ok, "backend connected" if cloud_ok else "")
         self._master_sync_header_strip()
+        self._apply_master_header_profile()
 
         stats = self.performance_data or {}
         wr = float(stats.get("winRate", 0.0) or 0.0)

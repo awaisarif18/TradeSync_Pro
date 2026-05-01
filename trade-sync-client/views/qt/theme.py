@@ -55,7 +55,7 @@ RADIUS_LG = 12  # full cards
 
 # ── Layout ────────────────────────────────────────────────────
 SIDEBAR_W = 48  # collapsed sidebar width
-HEADER_H = 48  # HeaderStrip height
+HEADER_H = 56  # HeaderStrip height (master strip uses two rows)
 KPI_H = 56  # KpiStrip height
 FOOTER_H = 24  # Footer strip height
 LOG_W = 260  # EventLog panel width

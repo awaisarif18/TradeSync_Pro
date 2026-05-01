@@ -96,7 +96,7 @@ trade-sync-client/
 │  │  ├─ theme.py                           # Design tokens, fonts, global QSS builder
 │  │  ├─ primitives.py                       # Styled atoms and molecules (cards, inputs, chips)
 │  │  ├─ custom_widgets.py                   # Custom paint: PulseDot, sparkline, histogram, sweep
-│  │  ├─ shell.py                            # TitleBar, Sidebar, KPI/header strips, FooterStrip, EventLog (role-aware filters), WindowShell
+│  │  ├─ shell.py                            # TitleBar, Sidebar (role + NAV_ITEMS_*; master SVGs radio/users/activity), HeaderStripMaster (handle/instruments/risk/ROI + `set_profile_data`), KPI/header strips, FooterStrip, EventLog, WindowShell
 │  │  ├─ master_window.py                   # PySide6 Master desktop UI
 │  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (WindowShell scaffold)
 │  │  ├─ views/                             # Shell tab bodies (replacing placeholders)
@@ -637,7 +637,7 @@ Flow:
 
 Key widgets and controls:
 - **Login:** `SlaveLoginCard` — email, MT5 login/password, server, broker name (`LineInput` / `MonoInput`).
-- **Shell:** Sidebar keys `copy` / `symbols` / `risk` / `trades`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog` (filters: ALL, SIGNAL, COPY, MT5, ERR).
+- **Shell:** Sidebar keys slave `copy` / `symbols` / `risk` / `trades` (emoji fallbacks or `assets/icons/{id}.svg`), master `broadcast` / `subscribers` / `performance` with SVG assets `radio.svg`, `users.svg`, `activity.svg`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog` (filters: ALL, SIGNAL, COPY, MT5, ERR).
 - **COPY:** `views/qt/views/copy_view.py` — master status summary, segmented `MULTIPLIER` \| `FIXED_LOT`, spinboxes (`risk_multiplier`, `fixed_lot_size`, `slippage_points`), reverse checkbox, `toggle_listening()` + `SweepBand` when running.
 - **SYMBOLS:** `views/qt/views/symbols_view.py` — broker presets, mapping table, and `unmapped_symbol_behavior`; stacked as the shell `"symbols"` page.
 - **RISK:** `views/qt/views/risk_view.py` — guards and controls (`equity_floor`, `max_concurrent_trades`, `daily_loss_limit`, `max_lot_size`, whitelist, daily P&L / pause / reset).
