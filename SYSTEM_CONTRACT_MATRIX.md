@@ -11,7 +11,7 @@ Use this file to prevent drift when adding features with AI or human contributor
 
 ## Current Delivery Scope (Locked)
 
-This repository is currently locked to Phase 1 from README_NEXT_STEPS.md: Immediate Priority: Stabilization.
+This repository currently includes implemented Phase 1 stabilization and Phase 2 desktop UI shell/view refactor work.
 
 In scope now:
 - End-to-end contract tests for critical flows only
@@ -19,12 +19,9 @@ In scope now:
 - Reconnect and health-state handling across client and backend
 
 Out of scope for now (deferred):
-- High-Value Product Features
-- Backend Feature Track items
-- Frontend Feature Track items
-- Python Client Feature Track items
-- Delivery Approach expansion items beyond stabilization
-- 30/60/90 day items beyond the 30-day stabilization essentials
+- Contract-breaking API/socket changes
+- Backend/Frontend feature tracks not merged in this repo yet
+- Delivery expansion items beyond current stabilization + UI refactor scope
 
 Compatibility rule for this phase:
 - No contract-breaking changes are allowed while implementing stabilization.
@@ -36,6 +33,9 @@ Implemented stabilization notes:
 4. `/auth/verify-node` now returns `id` for direct master/slave user resolution.
 5. `TradeLogs.slaveId` supports per-subscriber copied count and P&L once new rows are tagged.
 6. `node_registered` confirms socket room assignment back to the registering client.
+7. Master desktop shell migration delivered: custom `TitleBar` + `WindowShell` navigation for `broadcast`, `subscribers`, and `performance` views.
+8. Master subscriber UI now uses design-system `SubscribersView` (`StatusPill`, activity log, table actions) instead of legacy panel wiring.
+9. Master performance UI now uses unified trade aggregation by `master_ticket` so OPEN/CLOSE lifecycle renders as one row with final P&L state.
 
 ---
 

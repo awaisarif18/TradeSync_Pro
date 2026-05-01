@@ -7,7 +7,7 @@ It is written so humans and AI coding models can extend the client safely withou
 
 ## Scope Lock (Current Phase)
 
-Current implementation scope is Phase 1 only from README_NEXT_STEPS.md: Immediate Priority: Stabilization.
+Current implementation scope includes Phase 1 stabilization and implemented Phase 2 desktop UI refactor milestones.
 
 Client work allowed in this phase:
 1. Critical-flow contract stabilization (MASTER/SLAVE verify + socket registration + OPEN/CLOSE handling)
@@ -15,9 +15,9 @@ Client work allowed in this phase:
 3. Reconnect and health-state handling for practical runtime resilience
 
 Client work deferred for later phases:
-1. Profile management for multiple MT5 and node setups
+1. Multi-profile MT5/node management at scale
 2. Persistent local settings for advanced preferences
-3. Telemetry buffering platform features beyond basic stabilization
+3. Telemetry buffering platform features beyond current delivery
 4. Full graceful-shutdown hardening expansion beyond immediate recorder/socket safety
 
 Lightweight testing policy for this project stage:
@@ -25,13 +25,16 @@ Lightweight testing policy for this project stage:
 - Prefer a small reliable suite over extensive coverage
 - Ensure no contract drift from SYSTEM_CONTRACT_MATRIX.md
 
-Implemented in current Phase 1 client scope:
+Implemented in Phase 1 and Phase 2 client scope:
 1. `SocketManager` reconnect/backoff configuration with health callbacks
 2. Auto `register_node` on every connect/reconnect
 3. Duplicate listener protection via `register_handler`
 4. Trace-aware logs and `trace_id` propagation in master/slave paths
 5. Shared state includes `health_state` in `models/app_state.py`
 6. Minimal client tests in `tests/test_slave_controller.py` for OPEN/CLOSE ticket-map behavior
+7. Master shell refactor delivered: frameless `TitleBar` + `WindowShell(role='master')` with injected `BroadcastView`, `SubscribersView`, and `PerformanceView`
+8. Master `EventLog` filters are role-aware (`ALL`, `SIGNAL`, `SESSION`, `MT5`, `ERR`), while slave keeps copy-centric filters
+9. `PerformanceView` now aggregates recent raw signals by `master_ticket`, so OPEN/CLOSE lifecycle updates one row with final closed P&L
 
 Manual smoke expectation (client side):
 1. Clients move through `CONNECTED`, `RECONNECTING`, `DISCONNECTED` transitions in logs
