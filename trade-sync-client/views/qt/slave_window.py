@@ -20,6 +20,7 @@ from views.qt.shell import HeaderStripSlave, TitleBar, WindowShell
 from views.qt.views.copy_view import CopyView
 from views.qt.views.risk_view import RiskView
 from views.qt.views.symbols_view import SymbolsView
+from views.qt.views.trades_view import TradesView
 from views.qt.theme import ACCENT, BG, DANGER, FOOTER_H, HEADER_H, KPI_H, TEXT, build_global_qss
 from views.qt.ui_bridge import UIBridge
 
@@ -163,6 +164,7 @@ class SlaveWindow(QMainWindow):
         self.copy_view: Optional[CopyView] = None
         self.symbols_view: Optional[SymbolsView] = None
         self.risk_view: Optional[RiskView] = None
+        self.trades_view: Optional[TradesView] = None
 
         self.setStyleSheet(
             build_global_qss() + f"\nQMainWindow {{ background-color: {BG}; }}\n"
@@ -229,6 +231,9 @@ class SlaveWindow(QMainWindow):
 
         self.risk_view = RiskView(self.controller)
         self._replace_shell_placeholder(self.shell, "risk", self.risk_view)
+
+        self.trades_view = TradesView(self.controller)
+        self._replace_shell_placeholder(self.shell, "trades", self.trades_view)
 
         sb_lay = self.shell.sidebar.layout()
         if hasattr(sb_lay, "setContentsMargins"):
@@ -336,8 +341,9 @@ class SlaveWindow(QMainWindow):
         if rv is not None:
             rv.refresh_display()
 
-        if hasattr(self, "trades_panel"):
-            self.trades_panel.refresh_display()
+        tv = getattr(self, "trades_view", None)
+        if tv is not None:
+            tv.refresh_display()
 
     # ── Slot: Login ─────────────────────────────────────────────
 
