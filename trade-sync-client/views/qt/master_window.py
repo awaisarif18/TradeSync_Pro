@@ -28,9 +28,11 @@ from PySide6.QtGui import QColor
 
 from controllers.ui_controllers.master_controller import MasterController
 from views.qt.primitives import Btn, Card, DarkDropdown, FieldLabel, LineInput, MonoInput
+from views.qt.shell import HeaderStripMaster, WindowShell
 from views.qt.subscribers_panel import SubscribersPanel
 from views.qt.theme import ACCENT, BG, DANGER, TEXT, build_global_qss
 from views.qt.ui_bridge import UIBridge
+from views.qt.views.broadcast_view import BroadcastView
 
 
 def _field_block(title: str, widget: QWidget) -> QWidget:
@@ -122,7 +124,8 @@ class MasterWindow(QMainWindow):
 
         self.performance_data = {}
         self._last_subscriber_status = {}
-        self._rendered_log_count = 0
+        self._master_log_emit_cursor = 0
+        self._master_header_signature = None
 
         self.bridge = UIBridge()
         self.bridge.ui_update_requested.connect(self.update_ui)
@@ -169,23 +172,36 @@ class MasterWindow(QMainWindow):
         return panel
 
     def build_dashboard_screen(self):
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(4, 4, 4, 4)
+        dash = QWidget()
+        v = QVBoxLayout(dash)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(0)
 
-        self.tab_widget = QTabWidget()
-        self.tab_widget.addTab(self._build_broadcast_tab(), "BROADCAST")
+        self.shell = WindowShell(role="master")
+
+        self.broadcast_view = BroadcastView(self.controller)
+        self._replace_shell_placeholder(self.shell, "broadcast", self.broadcast_view)
 
         self.subscribers_panel = SubscribersPanel(
             self.controller.state,
             refresh_callback=self.controller.fetch_subscribers,
         )
-        self.tab_widget.addTab(self.subscribers_panel, "SUBSCRIBERS")
+        self._replace_shell_placeholder(self.shell, "subscribers", self.subscribers_panel)
 
-        self.tab_widget.addTab(self._build_performance_tab(), "PERFORMANCE")
-        layout.addWidget(self.tab_widget)
+        self.performance_view = self._build_performance_tab()
+        self._replace_shell_placeholder(self.shell, "performance", self.performance_view)
 
-        return widget
+        v.addWidget(self.shell, 1)
+        self.shell.show_view("broadcast")
+        return dash
+
+    def _replace_shell_placeholder(self, shell: WindowShell, key: str, widget: QWidget) -> None:
+        old = shell._views[key]
+        ix = shell.stack.indexOf(old)
+        shell.stack.removeWidget(old)
+        old.deleteLater()
+        shell._views[key] = widget
+        shell.stack.insertWidget(ix, widget)
 
     def _build_broadcast_tab(self):
         tab = QWidget()
@@ -394,9 +410,12 @@ class MasterWindow(QMainWindow):
 
     def show_dashboard(self):
         self.central_widget.setCurrentWidget(self.dashboard_widget)
-        self._refresh_account_info()
+        self._master_header_signature = None
+        self._master_log_emit_cursor = 0
         self.load_performance_stats()
         QTimer.singleShot(1000, self.controller.fetch_subscribers)
+        QApplication.processEvents()
+        self.update_ui()
 
     def on_login_submit(self):
         lc = self.login_card
@@ -549,55 +568,122 @@ class MasterWindow(QMainWindow):
                 self.subscribers_panel.log_activity(email, online)
         self._last_subscriber_status = current
 
+    def _master_header_variant(self, state) -> str:
+        if getattr(state, "mt5_connected", False) and getattr(state, "socket_connected", False):
+            return "broadcasting" if getattr(state, "is_running", False) else "idle"
+        hs = getattr(state, "health_state", "DISCONNECTED")
+        if getattr(state, "mt5_connected", False) and not getattr(state, "socket_connected", False):
+            return "reconnect" if hs == "RECONNECTING" else "error"
+        return "error"
+
+    def _master_display_name(self):
+        try:
+            ai = mt5.account_info()
+        except Exception:
+            ai = None
+        if ai is None:
+            return None
+        name = str(getattr(ai, "name", "") or "").strip()
+        return name or None
+
+    def _master_license_tail(self, state):
+        key = str(getattr(state, "license_key", "") or "").strip()
+        if len(key) >= 4:
+            return key[-4:]
+        return None
+
+    def _master_sync_header_strip(self) -> None:
+        shell = getattr(self, "shell", None)
+        if shell is None or not isinstance(shell.header, HeaderStripMaster):
+            return
+        state = self.controller.state
+        name = self._master_display_name()
+        tail = self._master_license_tail(state)
+        variant = self._master_header_variant(state)
+        elapsed = self._update_session_clock()
+        elapsed_val = elapsed if elapsed != "--:--:--" else None
+        sig = (name, tail, variant, elapsed_val)
+        if getattr(self, "_master_header_signature", None) == sig:
+            return
+        self._master_header_signature = sig
+
+        old_header = shell.header
+        container = old_header.parentWidget()
+        laid = container.layout()
+        if laid is None:
+            return
+        ix = laid.indexOf(old_header)
+        if ix < 0:
+            ix = 0
+        laid.removeWidget(old_header)
+        old_header.deleteLater()
+
+        new_header = HeaderStripMaster(
+            name=name,
+            license_tail=tail,
+            status=variant,
+            session_elapsed=elapsed_val,
+        )
+        laid.insertWidget(ix, new_header)
+        shell.header = new_header
+
+    def _master_log_category(self, line: str) -> str:
+        up = line.upper()
+        if "ERROR" in up or "FAILED" in up or "REJECTED" in up:
+            return "ERR"
+        if "[RISK]" in up:
+            return "MT5"
+        if "SOCKET" in up or "CONNECTED" in up or "DISCONNECTED" in up:
+            return "SESSION"
+        if "OPEN" in up or "CLOSE" in up or "SIGNAL" in up:
+            return "SIGNAL"
+        return "INFO"
+
     @Slot()
     def update_ui(self):
-        """Runs strictly on the Main Qt Thread. Syncs data from AppState."""
         if not self.controller:
+            return
+        if self.central_widget.currentWidget() is not getattr(self, "dashboard_widget", None):
+            return
+        shell = getattr(self, "shell", None)
+        if shell is None:
             return
 
         state = self.controller.state
-        is_running = state.is_running
-
-        self.lbl_broadcast_status.setText(
-            "STATUS  ● BROADCASTING" if is_running else "STATUS  ● IDLE"
+        cloud_ok = getattr(state, "mt5_connected", False) and getattr(
+            state, "socket_connected", False
         )
-        status_color = "#00d4aa" if is_running else "#444444"
-        self.lbl_broadcast_status.setStyleSheet(
-            f"color: {status_color}; font-family: Consolas; font-weight: bold;"
+        shell.footer.set_connected(cloud_ok, "backend connected" if cloud_ok else "")
+        self._master_sync_header_strip()
+
+        stats = self.performance_data or {}
+        wr = float(stats.get("winRate", 0.0) or 0.0)
+        pnl = float(stats.get("totalPnL", 0.0) or 0.0)
+        shell.kpi.update_kpis(
+            signals=str(getattr(state, "signals_sent", 0)),
+            subscribers=str(len(getattr(state, "subscribers", []))),
+            win_rate=(f"{wr:.1f}%", ACCENT if wr >= 50 else DANGER),
+            total_pnl=(f"${pnl:.2f}", ACCENT if pnl >= 0 else DANGER),
+            avg_volume=f"{float(stats.get('avgVolume', 0.0) or 0.0):.2f}",
         )
 
-        self.lbl_signals_sent.setText(f"SIGNALS  {state.signals_sent}")
+        logs = state.logs
+        cur = self._master_log_emit_cursor
+        if len(logs) < cur:
+            cur = len(logs)
+        for line in logs[cur:]:
+            shell.event_log.append_log(line, self._master_log_category(line))
+        self._master_log_emit_cursor = len(logs)
 
-        if is_running:
-            self.toggle_broadcast_btn.setText("■  STOP BROADCASTING")
-            self.toggle_broadcast_btn.setStyleSheet(
-                self._broadcast_button_style(True)
-            )
-        else:
-            self.toggle_broadcast_btn.setText("▶  START BROADCASTING")
-            self.toggle_broadcast_btn.setStyleSheet(
-                self._broadcast_button_style(False)
-            )
-
-        if self._rendered_log_count > len(state.logs):
-            self.logs_text.clear()
-            self._rendered_log_count = 0
-
-        for line in state.logs[self._rendered_log_count:]:
-            self._append_log_message(line)
-        self._rendered_log_count = len(state.logs)
-
-        self.logs_text.verticalScrollBar().setValue(
-            self.logs_text.verticalScrollBar().maximum()
-        )
+        bv = getattr(self, "broadcast_view", None)
+        if bv is not None:
+            bv.sync_from_state()
 
         self._sync_subscriber_activity()
-        if hasattr(self, 'subscribers_panel'):
+        if hasattr(self, "subscribers_panel"):
             self.subscribers_panel.refresh_display()
-        if hasattr(self, 'refresh_recent_signals'):
+        if hasattr(self, "refresh_recent_signals"):
             self.refresh_recent_signals()
-
-        self._update_session_clock()
 
     def _update_session_clock(self):
         state = self.controller.state
@@ -613,13 +699,10 @@ class MasterWindow(QMainWindow):
                     month=now.month,
                     day=now.day,
                 )
-                self.lbl_session_time.setText(
-                    f"SESSION  {str(elapsed).split('.')[0]}"
-                )
+                return str(elapsed).split(".")[0]
             except Exception:
-                self.lbl_session_time.setText("SESSION  --:--:--")
-        else:
-            self.lbl_session_time.setText("SESSION  --:--:--")
+                return "--:--:--"
+        return "--:--:--"
 
 
 if __name__ == "__main__":
