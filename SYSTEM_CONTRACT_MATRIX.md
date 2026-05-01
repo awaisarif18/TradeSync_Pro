@@ -11,7 +11,7 @@ Use this file to prevent drift when adding features with AI or human contributor
 
 ## Current Delivery Scope (Locked)
 
-This repository currently includes implemented Phase 1 stabilization, Phase 2 desktop UI shell/view refactor work, and **Phase 3 backend** features: master profile **analytics** (`riskMetrics`, `equitySparkline`, `activeHoursSummary` from capped CLOSED `TradeLogs`) and the **public** `POST /auth/node-action/revoke-subscriber` endpoint (master auth via license key, no JWT).
+This repository currently includes implemented Phase 1 stabilization, Phase 2 desktop UI shell/view refactor work, and **Phase 3 backend** features: master profile **analytics** (`riskMetrics`, `equitySparkline`, `activeHoursSummary` from capped CLOSED `TradeLogs`) and the **public** `POST /auth/node-action/revoke-subscriber` endpoint (master auth via license key; unsubscribes slave from master, no JWT).
 
 In scope now:
 - End-to-end contract tests for critical flows only
@@ -38,7 +38,7 @@ Implemented stabilization notes:
 8. Master subscriber UI now uses design-system `SubscribersView` (`StatusPill`, activity log, table actions) instead of legacy panel wiring.
 9. Master performance UI now uses unified trade aggregation by `master_ticket` so OPEN/CLOSE lifecycle renders as one row with final P&L state.
 10. **Phase 3 (backend):** `GET /auth/masters/:id/profile` includes implemented `riskMetrics`, `equitySparkline`, and `activeHoursSummary` when the capped CLOSED `TradeLogs` sample has data.
-11. **Phase 3 (backend):** `POST /auth/node-action/revoke-subscriber` lets an active master revoke a subscriber using `masterLicenseKey` + `slaveId` (public route, no JWT).
+11. **Phase 3 (backend):** `POST /auth/node-action/revoke-subscriber` lets an active master remove a subscriber’s subscription using `masterLicenseKey` + `slaveId` (clears `subscribedToId`; public route, no JWT).
 
 ---
 
@@ -90,7 +90,7 @@ JWT enforcement contract for web REST:
 | /auth/users/:id/license | POST | AuthController.generateLicense | Frontend admin page | none | { message, licenseKey } | **JWT required.** Role ADMIN only |
 | /auth/users/:id/toggle-status | PATCH | AuthController.toggleStatus | Frontend admin page | none | { message, isActive } | **JWT required.** Role ADMIN only |
 | /auth/verify-node | POST | AuthController.verifyNode | Python Master/Slave controllers | { role, identifier, trace_id? } | { message, role, fullName, id, trace_id? } | **Public.** Pre-flight gate before MT5 operations |
-| /auth/node-action/revoke-subscriber | POST | AuthController.revokeSubscriber | Python MasterController (SubscribersView revoke button) | { masterLicenseKey: string, slaveId: string } | { message, slaveId } | **Public.** Desktop-auth via license key. Sets slave.isActive=false. No JWT. |
+| /auth/node-action/revoke-subscriber | POST | AuthController.revokeSubscriber | Python MasterController (SubscribersView revoke button) | { masterLicenseKey: string, slaveId: string } | { message, slaveId } | **Public.** Desktop-auth via license key. Clears `Users.subscribedToId` for that slave (unsubscribe from this master). Does not change `isActive`. No JWT. |
 | /auth/masters | GET | AuthController.getActiveMasters | Frontend SlaveDashboard | none | active master[] | **Public.** Marketplace source |
 | /auth/masters/live | GET | AuthController.getLiveMasters | Frontend trader cards | none | { liveIds: string[] } | **Public.** Returns currently connected master socket user IDs. Used for real LIVE badges. |
 | /auth/users/:id/subscribe | PATCH | AuthController.updateSubscription | Frontend SlaveDashboard | { masterId: string|null } | { message, subscribedToId } | **JWT required.** Authenticated user id must match `:id`, or caller is ADMIN. null means unsubscribe |

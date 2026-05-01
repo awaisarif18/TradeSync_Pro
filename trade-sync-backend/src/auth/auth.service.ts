@@ -394,7 +394,7 @@ export class AuthService {
       throw new ForbiddenException('Slave is not subscribed to this master');
     }
 
-    slave.isActive = false;
+    slave.subscribedToId = null;
     await this.userRepository.save(slave);
     return { message: 'Subscriber revoked', slaveId };
   }

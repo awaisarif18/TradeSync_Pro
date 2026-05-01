@@ -226,7 +226,7 @@ Phase 9 Note on slaveId:
 
 ## 6) Auth Module Deep Dive
 
-**Phase 3 (backend):** Analytics engine implemented. `GET /auth/masters/:id/profile` returns live `riskMetrics`, `equitySparkline`, and `activeHoursSummary` when closed trades exist (from the capped CLOSED `TradeLogs` sample). Public endpoint `POST /auth/node-action/revoke-subscriber` supports desktop master clients; it authenticates with the master license key and does not use JWT.
+**Phase 3 (backend):** Analytics engine implemented. `GET /auth/masters/:id/profile` returns live `riskMetrics`, `equitySparkline`, and `activeHoursSummary` when closed trades exist (from the capped CLOSED `TradeLogs` sample). Public endpoint `POST /auth/node-action/revoke-subscriber` lets masters unsubscribe a slave from their roster (`subscribedToId` cleared); authenticates with the master license key and does not use JWT.
 
 ### File: `src/auth/auth.module.ts`
 
@@ -281,7 +281,7 @@ Base route prefix: `/auth`
 
 6b. `POST /auth/node-action/revoke-subscriber`
 	- Body: `{ masterLicenseKey, slaveId }`
-	- **Public.** Master desktop Revoke: disables subscriber (`isActive` false) when the slave is subscribed to that master; master proven by license key
+	- **Public.** Master desktop Revoke: clears the slave’s subscription (`subscribedToId` null) when they were subscribed to that master; master proven by license key; account stays active
 	- Calls `AuthService.revokeSubscriber(masterLicenseKey, slaveId)`
 
 7. `GET /auth/masters`
@@ -357,7 +357,7 @@ Base route prefix: `/auth`
 7. `revokeSubscriber(masterLicenseKey: string, slaveId: string)`
 	- Looks up active MASTER by `licenseKey`; throws if missing or inactive
 	- Requires slave user exists and `subscribedToId` equals that master’s id; otherwise **403**
-	- Sets `slave.isActive = false` and saves
+	- Sets `slave.subscribedToId = null` and saves (unsubscribe only; does not disable the account)
 	- Returns `{ message: 'Subscriber revoked', slaveId }`
 
 8. `getActiveMasters()`

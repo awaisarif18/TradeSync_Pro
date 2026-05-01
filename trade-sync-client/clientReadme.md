@@ -752,7 +752,7 @@ Revoke subscriber (master only; body JSON):
 { "masterLicenseKey": "<TSP-…>", "slaveId": "<subscriber_user_uuid>" }
 ```
 
-Success response shape: `{ "message": "Subscriber revoked", "slaveId": "<uuid>" }`.
+Success response shape: `{ "message": "Subscriber revoked", "slaveId": "<uuid>" }`. Backend clears that slave’s `subscribedToId` for this master (unsubscribe); it does not disable the slave account.
 
 ## B) Client ↔ Backend Socket contract
 
