@@ -6,157 +6,110 @@ import MetaTrader5 as mt5
 import requests
 from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QFormLayout, QFrame, QGridLayout, QGroupBox,
-    QHBoxLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QStackedWidget,
-    QSizePolicy, QTableWidget, QTableWidgetItem, QTabWidget, QTextEdit,
-    QVBoxLayout, QWidget
+    QApplication,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QPushButton,
+    QStackedWidget,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 from PySide6.QtGui import QColor
 
 from controllers.ui_controllers.master_controller import MasterController
+from views.qt.primitives import Btn, Card, DarkDropdown, FieldLabel, LineInput, MonoInput
 from views.qt.subscribers_panel import SubscribersPanel
+from views.qt.theme import ACCENT, BG, DANGER, TEXT, build_global_qss
 from views.qt.ui_bridge import UIBridge
 
 
-BLOOMBERG_QSS = """
-QMainWindow, QWidget {
-    background-color: #0a0a0a;
-    color: #c8c8c8;
-    font-family: 'Segoe UI';
-    font-size: 9pt;
-}
-QFrame#login_card {
-    background: #101010;
-    border: 1px solid #2a2a2a;
-    border-radius: 4px;
-}
-QTabWidget::pane {
-    border: 1px solid #2a2a2a;
-    background: #0a0a0a;
-}
-QTabBar::tab {
-    background: #0a0a0a;
-    color: #666666;
-    padding: 6px 18px;
-    border: none;
-    border-bottom: 2px solid transparent;
-    font-size: 9pt;
-    font-weight: bold;
-    letter-spacing: 1px;
-}
-QTabBar::tab:selected {
-    color: #c8c8c8;
-    border-bottom: 2px solid #00d4aa;
-}
-QTabBar::tab:hover {
-    color: #999999;
-}
-QGroupBox {
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    margin-top: 6px;
-    padding: 10px;
-    font-size: 8pt;
-    font-weight: bold;
-    color: #666666;
-    letter-spacing: 1px;
-}
-QGroupBox::title {
-    subcontrol-origin: margin;
-    left: 6px;
-    color: #00d4aa;
-}
-QLineEdit, QComboBox {
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    padding: 5px 8px;
-    color: #c8c8c8;
-    font-family: 'Consolas';
-    selection-background-color: #00d4aa;
-    selection-color: #0a0a0a;
-}
-QLineEdit:focus {
-    border: 1px solid #00d4aa;
-}
-QPushButton {
-    background: #1a1a1a;
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    padding: 6px 14px;
-    color: #c8c8c8;
-    font-size: 9pt;
-}
-QPushButton:hover {
-    border: 1px solid #00d4aa;
-    color: #00d4aa;
-}
-QPushButton:pressed {
-    background: #00d4aa;
-    color: #0a0a0a;
-}
-QPushButton:disabled {
-    border: 1px solid #2a2a2a;
-    color: #333333;
-}
-QFrame[frameShape="4"],
-QFrame[frameShape="5"] {
-    color: #1a1a1a;
-}
-QTextEdit {
-    background: #0a0a0a;
-    border: 1px solid #2a2a2a;
-    border-radius: 2px;
-    color: #888888;
-    font-family: 'Consolas';
-    font-size: 8pt;
-}
-QLabel {
-    color: #888888;
-}
-QTableWidget {
-    background: #0a0a0a;
-    border: 1px solid #2a2a2a;
-    color: #c8c8c8;
-    gridline-color: #1a1a1a;
-    font-family: 'Consolas';
-    font-size: 9pt;
-    selection-background-color: #1a1a1a;
-    selection-color: #00d4aa;
-}
-QTableWidget::item {
-    padding: 4px 8px;
-    border: none;
-}
-QTableWidget::item:hover {
-    background: #111111;
-}
-QTableWidget::item:selected {
-    background: #1a1a1a;
-    color: #00d4aa;
-}
-QHeaderView::section {
-    background: #1a1a1a;
-    color: #666666;
-    border: none;
-    border-right: 1px solid #2a2a2a;
-    padding: 4px 8px;
-    font-size: 8pt;
-    font-weight: bold;
-    letter-spacing: 1px;
-}
-QScrollBar:vertical {
-    background: #0a0a0a;
-    width: 6px;
-}
-QScrollBar::handle:vertical {
-    background: #2a2a2a;
-    border-radius: 3px;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-"""
+def _field_block(title: str, widget: QWidget) -> QWidget:
+    box = QWidget()
+    col = QVBoxLayout(box)
+    col.setContentsMargins(0, 0, 0, 0)
+    col.setSpacing(4)
+    col.addWidget(FieldLabel(title))
+    col.addWidget(widget)
+    return box
+
+
+class MasterLoginCard(QWidget):
+    """Design-system credential card (~400px) for Master node."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        root = QVBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+
+        self.card_frame = Card()
+        self.card_frame.setFixedWidth(400)
+        inner = QVBoxLayout(self.card_frame)
+        inner.setContentsMargins(24, 24, 24, 24)
+        inner.setSpacing(12)
+
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+
+        logo = QLabel("\u26a1")
+        logo.setFixedSize(20, 20)
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo.setStyleSheet(
+            f"""
+            background: {ACCENT};
+            border-radius: 5px;
+            color: #02110b;
+            font-weight: 700;
+            font-size: 11px;
+            """
+        )
+
+        ttl = QLabel(
+            f"<span style='color:{ACCENT}; font-weight:700'>TradeSync.Pro</span>"
+            f"<span style='color:{TEXT}; font-weight:600'> &middot; Master Node</span>"
+        )
+        ttl.setTextFormat(Qt.TextFormat.RichText)
+
+        title_row.addWidget(logo)
+        title_row.addWidget(ttl)
+        title_row.addStretch()
+        inner.addLayout(title_row)
+
+        self.license_key_input = MonoInput(placeholder="TSP-XXXX-XXXX")
+        self.mt5_login_input = MonoInput(placeholder="MT5 account login ID")
+        self.mt5_password_input = LineInput(placeholder="MT5 password")
+        self.mt5_password_input.setEchoMode(QLineEdit.EchoMode.Password)
+        self.server_input = LineInput(placeholder="Server string from MT5 broker")
+        self.broker_path_input = DarkDropdown()
+        self.broker_path_input.addItems(
+            ["Vantage", "XM", "Exness", "Exness Slave", "Auto-Detect"]
+        )
+
+        inner.addWidget(_field_block("License key", self.license_key_input))
+        inner.addWidget(_field_block("MT5 account ID", self.mt5_login_input))
+        inner.addWidget(_field_block("MT5 password", self.mt5_password_input))
+        inner.addWidget(_field_block("Server string", self.server_input))
+        inner.addWidget(_field_block("Broker path", self.broker_path_input))
+
+        self.error_label = QLabel("")
+        self.error_label.setWordWrap(True)
+        self.error_label.setStyleSheet(f"color: {DANGER}; font-size: 12px;")
+        self.error_label.hide()
+        inner.addWidget(self.error_label)
+
+        self.login_btn = Btn("LOG IN", kind="primary", size="lg")
+        inner.addWidget(self.login_btn)
+        inner.addStretch(1)
+
+        root.addWidget(self.card_frame)
 
 
 class MasterWindow(QMainWindow):
@@ -164,7 +117,7 @@ class MasterWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("TradeSync Pro - Master Node")
         self.setMinimumSize(900, 650)
-        self.setStyleSheet(BLOOMBERG_QSS)
+        self.setStyleSheet(build_global_qss() + f"\nQMainWindow {{ background-color: {BG}; }}\n")
 
         self.performance_data = {}
         self._last_subscriber_status = {}
@@ -193,87 +146,26 @@ class MasterWindow(QMainWindow):
         self.session_timer.start(1000)
 
     def build_login_screen(self):
-        widget = QWidget()
-        root_layout = QVBoxLayout(widget)
-        root_layout.addStretch()
+        panel = QWidget()
+        panel.setObjectName("MasterLoginBackdrop")
+        panel.setStyleSheet(f"#MasterLoginBackdrop {{ background-color: {BG}; }}")
 
-        card = QFrame()
-        card.setObjectName("login_card")
-        card.setFrameShape(QFrame.NoFrame)
-        card.setFixedWidth(420)
-        card.setStyleSheet(
-            "QFrame#login_card { background: #101010; border: none; "
-            "border-radius: 4px; }"
-        )
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(28, 28, 28, 28)
-        card_layout.setSpacing(12)
+        v = QVBoxLayout(panel)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.addStretch(1)
 
-        title = QLabel("TRADESYNC PRO")
-        title.setAlignment(Qt.AlignCenter)
-        title.setStyleSheet(
-            "color: #00d4aa; font-family: Consolas; font-size: 14pt; "
-            "font-weight: bold; letter-spacing: 2px; background: transparent; "
-            "border: none;"
-        )
-        card_layout.addWidget(title)
+        mid = QHBoxLayout()
+        mid.addStretch(1)
 
-        subtitle = QLabel("MASTER NODE")
-        subtitle.setAlignment(Qt.AlignCenter)
-        subtitle.setStyleSheet(
-            "color: #444444; font-size: 9pt; font-weight: bold; "
-            "letter-spacing: 1px;"
-        )
-        card_layout.addWidget(subtitle)
+        self.login_card = MasterLoginCard()
+        mid.addWidget(self.login_card)
+        mid.addStretch(1)
+        v.addLayout(mid)
 
-        form_layout = QFormLayout()
-        form_layout.setLabelAlignment(Qt.AlignRight)
-        form_layout.setVerticalSpacing(10)
+        v.addStretch(1)
 
-        self.broker_combo = QComboBox()
-        self.broker_combo.addItems([
-            "Vantage", "XM", "Exness", "Exness Slave", "Auto-Detect"
-        ])
-
-        self.mt5_login_input = QLineEdit()
-        self.mt5_password_input = QLineEdit()
-        self.mt5_password_input.setEchoMode(QLineEdit.Password)
-        self.server_input = QLineEdit()
-        self.license_key_input = QLineEdit()
-
-        form_layout.addRow(QLabel("Broker:"), self.broker_combo)
-        form_layout.addRow(QLabel("MT5 Login ID:"), self.mt5_login_input)
-        form_layout.addRow(QLabel("MT5 Password:"), self.mt5_password_input)
-        form_layout.addRow(QLabel("Server String:"), self.server_input)
-        form_layout.addRow(QLabel("License Key:"), self.license_key_input)
-        card_layout.addLayout(form_layout)
-
-        self.login_btn = QPushButton("CONNECT TO MT5 & CLOUD")
-        self.login_btn.setMinimumHeight(36)
-        self.login_btn.setStyleSheet(
-            "QPushButton { background: transparent; border: 1px solid #00d4aa; "
-            "color: #00d4aa; padding: 10px; font-family: Consolas; "
-            "font-size: 10pt; font-weight: bold; letter-spacing: 2px; }"
-            "QPushButton:hover { background: #00d4aa; color: #0a0a0a; }"
-            "QPushButton:pressed { background: #009980; color: #0a0a0a; }"
-            "QPushButton:disabled { border: 1px solid #2a2a2a; color: #333333; }"
-        )
-        self.login_btn.clicked.connect(self.on_login_submit)
-        card_layout.addWidget(self.login_btn)
-
-        self.lbl_error = QLabel("")
-        self.lbl_error.setObjectName("lbl_error")
-        self.lbl_error.setWordWrap(True)
-        self.lbl_error.setStyleSheet(
-            "color: #ff4444; font-family: Segoe UI; font-size: 8pt; "
-            "background: transparent; border: none;"
-        )
-        self.lbl_error.setVisible(False)
-        card_layout.addWidget(self.lbl_error)
-
-        root_layout.addWidget(card, alignment=Qt.AlignCenter)
-        root_layout.addStretch()
-        return widget
+        self.login_card.login_btn.clicked.connect(self.on_login_submit)
+        return panel
 
     def build_dashboard_screen(self):
         widget = QWidget()
@@ -506,14 +398,15 @@ class MasterWindow(QMainWindow):
         QTimer.singleShot(1000, self.controller.fetch_subscribers)
 
     def on_login_submit(self):
-        self.lbl_error.setVisible(False)
-        self.lbl_error.setText("")
+        lc = self.login_card
+        lc.error_label.hide()
+        lc.error_label.setText("")
 
-        broker = self.broker_combo.currentText()
-        login = self.mt5_login_input.text().strip()
-        password = self.mt5_password_input.text().strip()
-        server = self.server_input.text().strip()
-        license_key = self.license_key_input.text().strip()
+        broker = lc.broker_path_input.currentText().strip()
+        login = lc.mt5_login_input.text().strip()
+        password = lc.mt5_password_input.text().strip()
+        server = lc.server_input.text().strip()
+        license_key = lc.license_key_input.text().strip()
 
         validation_error = None
         if not login:
@@ -528,12 +421,13 @@ class MasterWindow(QMainWindow):
             validation_error = "License Key must match TSP-XXXX-XXXX."
 
         if validation_error:
-            self.lbl_error.setText(validation_error)
-            self.lbl_error.setVisible(True)
+            lc.error_label.setText(validation_error)
+            lc.error_label.show()
             return
 
-        self.login_btn.setEnabled(False)
-        self.login_btn.setText("CONNECTING...")
+        btn = lc.login_btn
+        btn.setEnabled(False)
+        btn.setText("Connecting...")
         QApplication.processEvents()
 
         success = self.controller.login_mt5(
@@ -541,12 +435,12 @@ class MasterWindow(QMainWindow):
         )
 
         if success:
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("CONNECT TO MT5 & CLOUD")
+            btn.setEnabled(True)
+            btn.setText("LOG IN")
             self.show_dashboard()
         else:
-            self.login_btn.setEnabled(True)
-            self.login_btn.setText("CONNECT TO MT5 & CLOUD")
+            btn.setEnabled(True)
+            btn.setText("LOG IN")
 
     def on_toggle_broadcast(self):
         if not self.controller:
