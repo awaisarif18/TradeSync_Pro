@@ -17,16 +17,18 @@ class MasterSignalTrackingSocket:
     def emit_signal(self, signal_dict):
         self.state.signals_sent += 1
         result = self.socket_manager.emit_signal(signal_dict)
-        if signal_dict.get('event') == 'OPEN':
-            signal_entry = {
-                'time': datetime.now().strftime('%H:%M:%S'),
-                'symbol': signal_dict.get('symbol', ''),
-                'action': signal_dict.get('action', ''),
-                'volume': signal_dict.get('volume', ''),
-            }
-            self.state.recent_signals.append(signal_entry)
-            if len(self.state.recent_signals) > 20:
-                self.state.recent_signals.pop(0)
+
+        # Capture BOTH Open and Close events, keeping the full dictionary
+        # so the UI has access to 'ticket', 'pnl', and 'event'.
+        signal_entry = signal_dict.copy()
+        signal_entry['time'] = datetime.now().strftime('%H:%M:%S')
+
+        self.state.recent_signals.append(signal_entry)
+
+        # Bump the history limit to 50 so we don't pop OPENs before their CLOSEs arrive
+        if len(self.state.recent_signals) > 50:
+            self.state.recent_signals.pop(0)
+
         return result
 
 class MasterController:

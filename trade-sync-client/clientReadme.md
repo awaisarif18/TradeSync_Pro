@@ -475,6 +475,10 @@ Flow:
 	- `register_node` payload `{ role: 'MASTER', identifier }`
 4. marks socket connected state
 
+### `MasterSignalTrackingSocket.emit_signal(signal_dict)`
+
+When the master recorder emits through the tracking wrapper, each **OPEN** and **CLOSE** payload is appended to `AppState.recent_signals` as a **full copy** of `signal_dict` plus a UI `time` stamp (`HH:MM:SS`). The ring buffer caps at **50** entries so an OPEN typically remains available when its matching CLOSE arrives. `PerformanceView` pairs these rows for the Recent Broadcasts table.
+
 ### `toggle_broadcasting()`
 
 - Starts/stops recorder thread and updates state/logs.
@@ -587,7 +591,7 @@ Key widgets and controls:
 - **Login entries:** `MasterLoginCard` — MT5 login/password, server, broker `DarkDropdown`, license `MonoInput`, `Btn` submit.
 - **Dashboard — BROADCAST:** `views/qt/views/broadcast_view.py` — start/stop broadcasting, license display, MT5 account summary; syncs from `AppState`.
 - **Dashboard — SUBSCRIBERS:** `SubscribersView` — summary `CountChip` row, roster table (`StatusPill` live/offline, `GhostIconBtn` revoke stub), HTML activity log.
-- **Dashboard — PERFORMANCE:** `PerformanceView` (`views/qt/views/performance_view.py`) — six KPI cards from profile JSON; optional analytics row (`EquitySparkline`, risk metrics list, `ActiveHoursHistogram`) shown only when both `riskMetrics` and `equitySparkline` are present; **Recent broadcasts** table merges raw `AppState.recent_signals` by `master_ticket` so OPEN and CLOSE update the same row (P&L shown when closed).
+- **Dashboard — PERFORMANCE:** `PerformanceView` (`views/qt/views/performance_view.py`) — six KPI cards from profile JSON; optional analytics row (`EquitySparkline`, risk metrics list, `ActiveHoursHistogram`) shown only when both `riskMetrics` and `equitySparkline` are present; **Recent broadcasts** table walks `AppState.recent_signals` with a **list-based queue matcher** so each CLOSE merges into the newest matching OPEN (by ticket when present, else symbol+volume), with P&L shown when closed.
 - **Event log:** `shell.EventLog` filter chips are role-aware: master uses `ALL`, `SIGNAL`, `SESSION`, `MT5`, `ERR`; slave keeps `COPY` instead of `SESSION`.
 
 Methods:

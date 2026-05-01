@@ -217,34 +217,59 @@ class PerformanceView(QWidget):
                 )
             self.histogram.set_values(values)
 
-        # 1. Unify raw signals into a stateful trade map based on master_ticket
-        unified_trades = {}
+        # 1. Unify raw signals using a List-Based Queue Matcher
+        unified_trades = []
         for sig in recent_signals:
-            tkt = sig.get("master_ticket", id(sig))
-            if tkt not in unified_trades:
-                unified_trades[tkt] = sig.copy()
+            action = str(sig.get("action", "")).upper()
+            event = str(sig.get("event", "")).upper()
+            is_close = action == "CLOSE" or event == "CLOSE"
+            tkt = str(sig.get("master_ticket", sig.get("ticket", "")))
+
+            if not is_close:
+                # Add a new open trade
+                new_trade = sig.copy()
+                new_trade["_is_closed"] = False
+                unified_trades.append(new_trade)
             else:
-                evt = str(sig.get("event", "")).upper()
-                if evt == "CLOSE":
-                    unified_trades[tkt]["event"] = "CLOSE"
-                    unified_trades[tkt]["pnl"] = sig.get("pnl", 0.0)
-                elif evt == "OPEN":
-                    unified_trades[tkt]["action"] = sig.get(
-                        "action",
-                        unified_trades[tkt].get("action", "BUY"),
-                    )
-                    unified_trades[tkt]["volume"] = sig.get(
-                        "volume",
-                        unified_trades[tkt].get("volume", 0.0),
-                    )
-                    unified_trades[tkt]["time"] = sig.get(
-                        "time",
-                        unified_trades[tkt].get("time", ""),
-                    )
+                # Find the matching OPEN trade
+                match_idx = -1
+
+                # Reverse iterate to match the most recent unmatched OPEN first
+                for i in range(len(unified_trades) - 1, -1, -1):
+                    t = unified_trades[i]
+                    if t.get("_is_closed"):
+                        continue
+
+                    t_tkt = str(t.get("master_ticket", t.get("ticket", "")))
+
+                    # Match by ticket if available
+                    if tkt and t_tkt and tkt == t_tkt:
+                        match_idx = i
+                        break
+
+                    # Fallback match by symbol and volume if ticket is missing
+                    if not tkt or not t_tkt:
+                        if t.get("symbol") == sig.get("symbol") and str(t.get("volume")) == str(sig.get("volume")):
+                            match_idx = i
+                            break
+
+                if match_idx != -1:
+                    # Merge the CLOSE data into the existing OPEN row
+                    unified_trades[match_idx]["_is_closed"] = True
+                    unified_trades[match_idx]["pnl"] = sig.get("pnl", 0.0)
+                    unified_trades[match_idx]["close_time"] = sig.get("time", "")
+                    if "acked" in sig or "ack" in sig:
+                        unified_trades[match_idx]["acked"] = sig.get("acked", sig.get("ack", False))
+                else:
+                    # Orphaned close (trade was opened before the app started)
+                    orphan = sig.copy()
+                    orphan["_is_closed"] = True
+                    unified_trades.append(orphan)
 
         # 2. Extract the 10 most recent unified trades
-        display_signals = list(reversed(list(unified_trades.values())))[:10]
+        display_signals = list(reversed(unified_trades))[:10]
         self.table_recent.setRowCount(len(display_signals))
+
         for i, sig in enumerate(display_signals):
             self.table_recent.setRowHeight(i, 32)
 
@@ -258,23 +283,22 @@ class PerformanceView(QWidget):
             sym_item.setForeground(QColor(TEXT3))
             self.table_recent.setItem(i, 1, sym_item)
 
-            # Prevent "CLOSE" action labels when OPEN payload was missing
-            action = str(sig.get("action", "BUY") or "BUY").upper()
-            if action == "CLOSE":
-                action = "BUY"
-            self.table_recent.setCellWidget(i, 2, _center_widget(TradeChip(action)))
+            # Ensure the action chip shows BUY/SELL, not CLOSE
+            action_val = str(sig.get("action", "BUY")).upper()
+            if action_val not in ["BUY", "SELL"]:
+                action_val = "BUY"
+            self.table_recent.setCellWidget(i, 2, _center_widget(TradeChip(action_val)))
 
             vol_item = QTableWidgetItem(str(sig.get("volume", "") or ""))
             vol_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
             vol_item.setForeground(QColor(TEXT3))
             self.table_recent.setItem(i, 3, vol_item)
 
-            event = str(sig.get("event", "") or "OPEN").upper()
-            is_closed = event == "CLOSE"
+            is_closed = sig.get("_is_closed", False)
             status_kind = "CLOSED" if is_closed else "OPEN"
             self.table_recent.setCellWidget(i, 4, _center_widget(StatusChip(status_kind)))
 
-            # P&L formatting: dash for OPEN, signed value for CLOSED
+            # P&L formatting: blank dash for OPEN, colored value for CLOSED
             if is_closed:
                 pnl = float(sig.get("pnl", 0.0) or 0.0)
                 pnl_text = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
