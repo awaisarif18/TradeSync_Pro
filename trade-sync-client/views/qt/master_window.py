@@ -32,6 +32,7 @@ from views.qt.shell import HeaderStripMaster, WindowShell
 from views.qt.theme import ACCENT, BG, DANGER, TEXT, build_global_qss
 from views.qt.ui_bridge import UIBridge
 from views.qt.views.broadcast_view import BroadcastView
+from views.qt.views.performance_view import PerformanceView
 from views.qt.views.subscribers_view import SubscribersView
 
 
@@ -185,7 +186,7 @@ class MasterWindow(QMainWindow):
         self.subscribers_view = SubscribersView(self.controller)
         self._replace_shell_placeholder(self.shell, "subscribers", self.subscribers_view)
 
-        self.performance_view = self._build_performance_tab()
+        self.performance_view = PerformanceView(self.controller)
         self._replace_shell_placeholder(self.shell, "performance", self.performance_view)
 
         v.addWidget(self.shell, 1)
@@ -311,97 +312,6 @@ class MasterWindow(QMainWindow):
             f'{message}</span>'
         )
 
-    def _build_performance_tab(self):
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.setSpacing(8)
-
-        stats_grid = QGridLayout()
-        stats_grid.setHorizontalSpacing(8)
-        stats_grid.setVerticalSpacing(8)
-
-        total_card, self.stat_total_trades = self._create_stat_card(
-            "TOTAL TRADES",
-            "#c8c8c8",
-        )
-        closed_card, self.stat_closed_trades = self._create_stat_card(
-            "CLOSED TRADES",
-            "#c8c8c8",
-        )
-        win_card, self.stat_win_rate = self._create_stat_card(
-            "WIN RATE",
-            "#00d4aa",
-        )
-        pnl_card, self.stat_total_pnl = self._create_stat_card(
-            "TOTAL PNL",
-            "#00d4aa",
-        )
-        avg_card, self.stat_avg_volume = self._create_stat_card(
-            "AVG VOLUME",
-            "#c8c8c8",
-        )
-        subs_card, self.stat_subscribers = self._create_stat_card(
-            "SUBSCRIBERS",
-            "#c8c8c8",
-        )
-
-        stats_grid.addWidget(total_card, 0, 0)
-        stats_grid.addWidget(closed_card, 0, 1)
-        stats_grid.addWidget(win_card, 1, 0)
-        stats_grid.addWidget(pnl_card, 1, 1)
-        stats_grid.addWidget(avg_card, 2, 0)
-        stats_grid.addWidget(subs_card, 2, 1)
-
-        layout.addLayout(stats_grid)
-
-        signals_group = QGroupBox("RECENT SIGNALS")
-        signals_layout = QVBoxLayout(signals_group)
-
-        self.table_recent_signals = QTableWidget()
-        self.table_recent_signals.setObjectName("table_recent_signals")
-        self.table_recent_signals.setColumnCount(4)
-        self.table_recent_signals.setHorizontalHeaderLabels(
-            ["TIME", "SYMBOL", "ACTION", "VOLUME"]
-        )
-        self.table_recent_signals.setColumnWidth(0, 85)
-        self.table_recent_signals.setColumnWidth(1, 80)
-        self.table_recent_signals.setColumnWidth(2, 60)
-        self.table_recent_signals.setColumnWidth(3, 70)
-        self.table_recent_signals.setMaximumHeight(200)
-        self.table_recent_signals.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_recent_signals.verticalHeader().setVisible(False)
-        self.table_recent_signals.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_recent_signals.setAlternatingRowColors(False)
-        signals_layout.addWidget(self.table_recent_signals)
-
-        layout.addWidget(signals_group)
-        layout.addStretch()
-        return tab
-
-    def _create_stat_card(self, label_text, value_color):
-        card = QFrame()
-        card.setStyleSheet(
-            "QFrame { border: 1px solid #1a1a1a; background: #0d0d0d; "
-            "border-radius: 2px; padding: 8px 10px; }"
-        )
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(10, 8, 10, 8)
-        card_layout.setSpacing(4)
-
-        value = QLabel("0")
-        value.setStyleSheet(
-            f"color: {value_color}; font-family: Consolas; font-size: 16pt;"
-        )
-        label = QLabel(label_text)
-        label.setStyleSheet(
-            "color: #444444; font-family: Segoe UI; font-size: 7pt; "
-            "font-weight: bold;"
-        )
-
-        card_layout.addWidget(value)
-        card_layout.addWidget(label)
-        return card, value
-
     def show_login(self):
         self.central_widget.setCurrentWidget(self.login_widget)
 
@@ -498,62 +408,10 @@ class MasterWindow(QMainWindow):
 
         self.refresh_performance(self.performance_data)
 
-    def _render_performance_stats(self):
-        self.refresh_performance(self.performance_data)
-
     def refresh_performance(self, stats: dict):
-        self.stat_total_trades.setText(str(stats.get('totalTrades', 0)))
-        self.stat_closed_trades.setText(str(stats.get('closedTrades', 0)))
-
-        wr = stats.get('winRate', 0.0)
-        self.stat_win_rate.setText(f"{wr:.1f}%")
-        self.stat_win_rate.setStyleSheet(
-            f"color: {'#00d4aa' if wr >= 50 else '#ff4444'}; "
-            "font-family: Consolas; font-size: 16pt;"
-        )
-
-        pnl = stats.get('totalPnL', 0.0)
-        self.stat_total_pnl.setText(f"${pnl:.2f}")
-        self.stat_total_pnl.setStyleSheet(
-            f"color: {'#00d4aa' if pnl >= 0 else '#ff4444'}; "
-            "font-family: Consolas; font-size: 16pt;"
-        )
-
-        self.stat_avg_volume.setText(f"{stats.get('avgVolume', 0.0):.2f} lots")
-
-        subs = stats.get('subscriberCount', 0)
-        self.stat_subscribers.setText(str(subs))
-        self.stat_subscribers.setStyleSheet(
-            f"color: {'#00d4aa' if subs > 0 else '#c8c8c8'}; "
-            "font-family: Consolas; font-size: 16pt;"
-        )
-
-    def refresh_recent_signals(self):
-        signals = list(reversed(getattr(self.controller.state, 'recent_signals', [])))[:10]
-        self.table_recent_signals.setRowCount(len(signals))
-        for i, sig in enumerate(signals):
-            self.table_recent_signals.setRowHeight(i, 26)
-            self.table_recent_signals.setItem(
-                i,
-                0,
-                QTableWidgetItem(sig.get('time', '')),
-            )
-            self.table_recent_signals.setItem(
-                i,
-                1,
-                QTableWidgetItem(sig.get('symbol', '')),
-            )
-            action = sig.get('action', '')
-            action_item = QTableWidgetItem(action)
-            action_item.setForeground(
-                QColor('#00d4aa') if action == 'BUY' else QColor('#ff4444')
-            )
-            self.table_recent_signals.setItem(i, 2, action_item)
-            self.table_recent_signals.setItem(
-                i,
-                3,
-                QTableWidgetItem(str(sig.get('volume', ''))),
-            )
+        if hasattr(self, "performance_view"):
+            recent = getattr(self.controller.state, "recent_signals", [])
+            self.performance_view.sync_from_state(stats or {}, recent)
 
     def _sync_subscriber_activity(self):
         if not hasattr(self, "subscribers_view"):
@@ -675,12 +533,11 @@ class MasterWindow(QMainWindow):
         bv = getattr(self, "broadcast_view", None)
         if bv is not None:
             bv.sync_from_state()
+        self.refresh_performance(self.performance_data)
 
         self._sync_subscriber_activity()
         if hasattr(self, "subscribers_view"):
             self.subscribers_view.refresh_display()
-        if hasattr(self, "refresh_recent_signals"):
-            self.refresh_recent_signals()
 
     def _update_session_clock(self):
         state = self.controller.state
