@@ -11,17 +11,18 @@ Use this file to prevent drift when adding features with AI or human contributor
 
 ## Current Delivery Scope (Locked)
 
-This repository currently includes implemented Phase 1 stabilization and Phase 2 desktop UI shell/view refactor work.
+This repository currently includes implemented Phase 1 stabilization, Phase 2 desktop UI shell/view refactor work, and **Phase 3 backend** features: master profile **analytics** (`riskMetrics`, `equitySparkline`, `activeHoursSummary` from capped CLOSED `TradeLogs`) and the **public** `POST /auth/node-action/revoke-subscriber` endpoint (master auth via license key, no JWT).
 
 In scope now:
 - End-to-end contract tests for critical flows only
 - Structured logging with trace IDs across master, backend, and slave
 - Reconnect and health-state handling across client and backend
+- Phase 3 master profile analytics and desktop subscriber revoke (as implemented in backend)
 
 Out of scope for now (deferred):
 - Contract-breaking API/socket changes
 - Backend/Frontend feature tracks not merged in this repo yet
-- Delivery expansion items beyond current stabilization + UI refactor scope
+- Delivery expansion items beyond current stabilization + UI refactor + Phase 3 backend scope
 
 Compatibility rule for this phase:
 - No contract-breaking changes are allowed while implementing stabilization.
@@ -36,6 +37,8 @@ Implemented stabilization notes:
 7. Master desktop shell migration delivered: custom `TitleBar` + `WindowShell` navigation for `broadcast`, `subscribers`, and `performance` views.
 8. Master subscriber UI now uses design-system `SubscribersView` (`StatusPill`, activity log, table actions) instead of legacy panel wiring.
 9. Master performance UI now uses unified trade aggregation by `master_ticket` so OPEN/CLOSE lifecycle renders as one row with final P&L state.
+10. **Phase 3 (backend):** `GET /auth/masters/:id/profile` includes implemented `riskMetrics`, `equitySparkline`, and `activeHoursSummary` when the capped CLOSED `TradeLogs` sample has data.
+11. **Phase 3 (backend):** `POST /auth/node-action/revoke-subscriber` lets an active master revoke a subscriber using `masterLicenseKey` + `slaveId` (public route, no JWT).
 
 ---
 
@@ -87,11 +90,11 @@ JWT enforcement contract for web REST:
 | /auth/users/:id/license | POST | AuthController.generateLicense | Frontend admin page | none | { message, licenseKey } | **JWT required.** Role ADMIN only |
 | /auth/users/:id/toggle-status | PATCH | AuthController.toggleStatus | Frontend admin page | none | { message, isActive } | **JWT required.** Role ADMIN only |
 | /auth/verify-node | POST | AuthController.verifyNode | Python Master/Slave controllers | { role, identifier, trace_id? } | { message, role, fullName, id, trace_id? } | **Public.** Pre-flight gate before MT5 operations |
-| /auth/node-action/revoke-subscriber | POST | AuthController.revokeSubscriber | Python Master SubscribersView (Revoke) | { masterLicenseKey, slaveId } | { message: 'Subscriber revoked', slaveId } | **Public.** Master authenticated by license key (no JWT). Sets slave `isActive` false when `subscribedToId` matches that master. **401** if license invalid or master inactive. **403** if slave not subscribed to that master. |
+| /auth/node-action/revoke-subscriber | POST | AuthController.revokeSubscriber | Python MasterController (SubscribersView revoke button) | { masterLicenseKey: string, slaveId: string } | { message, slaveId } | **Public.** Desktop-auth via license key. Sets slave.isActive=false. No JWT. |
 | /auth/masters | GET | AuthController.getActiveMasters | Frontend SlaveDashboard | none | active master[] | **Public.** Marketplace source |
 | /auth/masters/live | GET | AuthController.getLiveMasters | Frontend trader cards | none | { liveIds: string[] } | **Public.** Returns currently connected master socket user IDs. Used for real LIVE badges. |
 | /auth/users/:id/subscribe | PATCH | AuthController.updateSubscription | Frontend SlaveDashboard | { masterId: string|null } | { message, subscribedToId } | **JWT required.** Authenticated user id must match `:id`, or caller is ADMIN. null means unsubscribe |
-| /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend SlaveDashboard (MasterProfileCard) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive, riskMetrics?, equitySparkline?, activeHoursSummary? } | **Public.** Returns aggregate stats, live socket status, and public profile fields for one active master. Added Phase 6, isLive added Phase 9. When the master has closed trades, optional analytics are added from the last **2000** CLOSED `TradeLogs` (newest by `COALESCE(closedAt, createdAt)`): `riskMetrics` `{ maxDrawdownPercent, avgTradesPerDay, longestLosingStreakTrades, bestDayPnl }`, `equitySparkline` (downsampled cumulative PnL), `activeHoursSummary` (UTC window string from histogram). Omitted or sparse when there are no closed rows in that cap. |
+| /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend SlaveDashboard (MasterProfileCard) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive, riskMetrics?, equitySparkline?, activeHoursSummary? } | **Public.** Returns aggregate stats, live socket status, and public profile fields for one active master. Added Phase 6, isLive added Phase 9. **Phase 3:** When the capped CLOSED sample is non-empty, `riskMetrics`, `equitySparkline`, and `activeHoursSummary` are **implemented** (from the last **2000** CLOSED `TradeLogs`, newest by `COALESCE(closedAt, createdAt)`, via `buildAnalytics`). Fields omitted when there are no rows in that sample or when a given analytic has insufficient data (e.g. sparkline needs ≥2 closes). |
 | /auth/masters/:masterId/subscribers | GET | AuthController.getMasterSubscribers | Python MasterController.fetch_subscribers | none | { id, fullName, email, isActive, totalCopied, totalPnL }[] | **Public.** Returns per-slave trade summary using TradeLogs.slaveId. Historical records show 0 until slaveId is populated. |
 | /auth/masters/:id/profile | PATCH | AuthController.updateMasterProfile | Frontend MasterProfileSetup | { bio?, tradingPlatform?, instruments?, strategyDescription?, riskLevel?, typicalHoldTime? } | updated user object | **JWT required.** Caller must be master `:id` or ADMIN |
 | /auth/masters/:id/dashboard | GET | AuthController.getMasterDashboard | Frontend MasterDashboard | none | { profile, recentTrades, subscriberCount, openTrades, totalSignalsSent } | **JWT required.** Caller must be master `:id` or ADMIN |

@@ -84,7 +84,7 @@ trade-sync-backend/
 │  │  ├─ dto/
 │  │  │  └─ auth.dto.ts        # Auth response interfaces and profile update DTO
 │  │  ├─ auth.service.ts       # Auth business logic + admin + marketplace
-│  │  └─ master-analytics.util.ts  # Capped TradeLog-derived risk + sparkline helpers for profiles
+│  │  └─ master-analytics.util.ts  # Implements computeRiskMetrics, computeEquitySparkline, computeActiveHours, buildAnalytics — called from getMasterProfile (capped CLOSED TradeLogs sample)
 │  ├─ trade/
 │  │  ├─ trade.module.ts       # Trade module + providers
 │  │  ├─ trade.controller.ts   # REST routes under /trades
@@ -226,6 +226,8 @@ Phase 9 Note on slaveId:
 
 ## 6) Auth Module Deep Dive
 
+**Phase 3 (backend):** Analytics engine implemented. `GET /auth/masters/:id/profile` returns live `riskMetrics`, `equitySparkline`, and `activeHoursSummary` when closed trades exist (from the capped CLOSED `TradeLogs` sample). Public endpoint `POST /auth/node-action/revoke-subscriber` supports desktop master clients; it authenticates with the master license key and does not use JWT.
+
 ### File: `src/auth/auth.module.ts`
 
 - Registers TypeORM repository for `User` and `TradeLog`
@@ -294,7 +296,7 @@ Base route prefix: `/auth`
 	- Path param: `id` (masterId)
 	- Calls `AuthService.getMasterProfile(id)`
 	- Returns aggregate master statistics plus public identity fields (Phase 6)
-	- Response shape: `{ id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive }` plus optional analytics when closed trades exist: loads up to **2000** newest CLOSED rows by `COALESCE(closedAt, createdAt)` and merges `riskMetrics`, `equitySparkline`, `activeHoursSummary` from `master-analytics.util.ts`
+	- Response shape: `{ id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive }` plus, when the master has closed trades in the sample, **implemented** analytics from `buildAnalytics` / `master-analytics.util.ts`: loads up to **2000** newest CLOSED rows by `COALESCE(closedAt, createdAt)`, then `riskMetrics`, `equitySparkline`, and `activeHoursSummary` (omitted when that capped sample has no rows)
 
 10. `PATCH /auth/masters/:id/profile`
 	- Path param: `id` (masterId)
