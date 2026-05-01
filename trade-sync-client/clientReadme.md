@@ -101,9 +101,11 @@ trade-sync-client/
 │  │  │  ├─ copy_view.py                   # COPY tab: master summary, settings, listen control
 │  │  │  ├─ symbols_view.py                 # SYMBOLS tab: presets, map table, unmapped behavior
 │  │  │  ├─ risk_view.py                   # RISK tab: guards, daily status, whitelist chips
-│  │  │  └─ trades_view.py                 # TRADES tab: session summary, open + history tables
+│  │  │  ├─ trades_view.py                 # TRADES tab: session summary, open + history tables
+│  │  │  ├─ broadcast_view.py               # Master BROADCAST tab: toggle, license, account
+│  │  │  └─ subscribers_view.py            # Master SUBSCRIBERS tab: roster, activity (design-system)
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
-│  │  ├─ subscribers_panel.py               # SubscribersPanel QWidget
+│  │  ├─ subscribers_panel.py               # Legacy SubscribersPanel (retained; not used by WindowShell)
 └─ __pycache__/ + nested __pycache__/       # Compiled Python bytecode
 ```
 
@@ -584,7 +586,7 @@ Key widgets and controls:
   - Account group: MT5 account name, server, and balance
   - Event Log (`QTextEdit`, color-coded HTML output)
 - **Dashboard (Tab 2: SUBSCRIBERS):**
-  - `SubscribersPanel` with subscriber table, live/offline status, copied count, and PnL summary
+  - `SubscribersView` (`views/qt/views/subscribers_view.py`): summary chips, subscriber table (`StatusPill`, `GhostIconBtn` revoke stub), copied count and PnL coloring, activity log
 - **Dashboard (Tab 3: PERFORMANCE):**
   - Trading stats from `GET /auth/masters/:id/profile`: total trades, closed trades, win rate, total PnL, average volume, and subscribers (the JSON may also include optional analytics fields such as `riskMetrics`, `equitySparkline`, and `activeHoursSummary`; the PySide UI continues to read only the known keys)
 
@@ -595,7 +597,7 @@ Methods:
 - `on_toggle_broadcast()`: Triggers controller broadcast state and updates the UI.
 - `load_performance_stats()`: Fetches master aggregate stats from the backend.
 - `_update_session_clock()`: QTimer-driven 1s updates for elapsed broadcast time.
-- `update_ui()`: Thread-safe `@Slot()` that reads `AppState`, updates color-coded logs, and refreshes `SubscribersPanel`.
+- `update_ui()`: Thread-safe `@Slot()` that reads `AppState`, updates color-coded logs, shell header/KPI/footer, and refreshes `SubscribersView`.
 
 ## Master Subscriber System
 
@@ -611,9 +613,9 @@ Socket event:
 - Payload shape: `{ slaveEmail, online, timestamp }`.
 
 UI behavior:
-- `SubscribersPanel` renders the subscriber list from `AppState.subscribers`.
-- The STATUS column reads `AppState.subscriber_online_status` and displays `● LIVE` or `○ OFFLINE`.
-- The panel includes a manual refresh button and a 20-entry activity log for connect/disconnect changes.
+- `SubscribersView` renders the subscriber list from `AppState.subscribers`.
+- The STATUS column reads `AppState.subscriber_online_status` and displays online vs offline via `StatusPill` widgets.
+- The view includes a manual refresh (`Btn` ghost) and a 20-entry activity log for connect/disconnect changes.
 
 ## `views/qt/slave_window.py`
 

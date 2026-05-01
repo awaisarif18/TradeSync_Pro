@@ -29,10 +29,10 @@ from PySide6.QtGui import QColor
 from controllers.ui_controllers.master_controller import MasterController
 from views.qt.primitives import Btn, Card, DarkDropdown, FieldLabel, LineInput, MonoInput
 from views.qt.shell import HeaderStripMaster, WindowShell
-from views.qt.subscribers_panel import SubscribersPanel
 from views.qt.theme import ACCENT, BG, DANGER, TEXT, build_global_qss
 from views.qt.ui_bridge import UIBridge
 from views.qt.views.broadcast_view import BroadcastView
+from views.qt.views.subscribers_view import SubscribersView
 
 
 def _field_block(title: str, widget: QWidget) -> QWidget:
@@ -182,11 +182,8 @@ class MasterWindow(QMainWindow):
         self.broadcast_view = BroadcastView(self.controller)
         self._replace_shell_placeholder(self.shell, "broadcast", self.broadcast_view)
 
-        self.subscribers_panel = SubscribersPanel(
-            self.controller.state,
-            refresh_callback=self.controller.fetch_subscribers,
-        )
-        self._replace_shell_placeholder(self.shell, "subscribers", self.subscribers_panel)
+        self.subscribers_view = SubscribersView(self.controller)
+        self._replace_shell_placeholder(self.shell, "subscribers", self.subscribers_view)
 
         self.performance_view = self._build_performance_tab()
         self._replace_shell_placeholder(self.shell, "performance", self.performance_view)
@@ -559,13 +556,13 @@ class MasterWindow(QMainWindow):
             )
 
     def _sync_subscriber_activity(self):
-        if not hasattr(self, 'subscribers_panel'):
+        if not hasattr(self, "subscribers_view"):
             return
 
         current = dict(self.controller.state.subscriber_online_status)
         for email, online in current.items():
             if self._last_subscriber_status.get(email) != online:
-                self.subscribers_panel.log_activity(email, online)
+                self.subscribers_view.log_activity(email, online)
         self._last_subscriber_status = current
 
     def _master_header_variant(self, state) -> str:
@@ -680,8 +677,8 @@ class MasterWindow(QMainWindow):
             bv.sync_from_state()
 
         self._sync_subscriber_activity()
-        if hasattr(self, "subscribers_panel"):
-            self.subscribers_panel.refresh_display()
+        if hasattr(self, "subscribers_view"):
+            self.subscribers_view.refresh_display()
         if hasattr(self, "refresh_recent_signals"):
             self.refresh_recent_signals()
 
