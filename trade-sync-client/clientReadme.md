@@ -104,9 +104,6 @@ trade-sync-client/
 │  │  │  └─ trades_view.py                 # TRADES tab: session summary, open + history tables
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
 │  │  ├─ subscribers_panel.py               # SubscribersPanel QWidget
-│  │  ├─ symbol_map_panel.py                # SymbolMapPanel QWidget (dual broker presets)
-│  │  ├─ risk_panel.py                      # RiskPanel QWidget (equity + limits + loss + whitelist)
-│  │  └─ trades_panel.py                    # TradesPanel QWidget (open + closed trade tables)
 └─ __pycache__/ + nested __pycache__/       # Compiled Python bytecode
 ```
 
@@ -635,9 +632,9 @@ Key widgets and controls:
 - **Login:** `SlaveLoginCard` — email, MT5 login/password, server, broker name (`LineInput` / `MonoInput`).
 - **Shell:** Sidebar keys `copy` / `symbols` / `risk` / `trades`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog`.
 - **COPY:** `views/qt/views/copy_view.py` — master status summary, segmented `MULTIPLIER` \| `FIXED_LOT`, spinboxes (`risk_multiplier`, `fixed_lot_size`, `slippage_points`), reverse checkbox, `toggle_listening()` + `SweepBand` when running.
-- **SYMBOLS:** `views/qt/views/symbols_view.py` — same behavior as legacy `symbol_map_panel` (broker presets, manual add/remove rows, `unmapped_symbol_behavior`); stacked as the shell `"symbols"` page. Legacy `symbol_map_panel.py` kept until Phase 1.6 cleanup.
-- **RISK:** `views/qt/views/risk_view.py` — same fields as legacy `risk_panel` (`equity_floor`, `max_concurrent_trades`, `daily_loss_limit`, `max_lot_size`, whitelist, daily P&L / pause / reset). Legacy `risk_panel.py` kept until Phase 1.6 cleanup.
-- **TRADES:** `views/qt/views/trades_view.py` — open positions and session history tables (`TradesView`); legacy `trades_panel.py` kept until Phase 1.6 cleanup.
+- **SYMBOLS:** `views/qt/views/symbols_view.py` — broker presets, mapping table, and `unmapped_symbol_behavior`; stacked as the shell `"symbols"` page.
+- **RISK:** `views/qt/views/risk_view.py` — guards and controls (`equity_floor`, `max_concurrent_trades`, `daily_loss_limit`, `max_lot_size`, whitelist, daily P&L / pause / reset).
+- **TRADES:** `views/qt/views/trades_view.py` — open positions and session history tables (`TradesView`).
 
 Methods:
 - `build_login_screen()` / `build_dashboard_screen()`: layouts plus `WindowShell`; `_replace_shell_placeholder()` swaps a stack widget by nav key without editing `shell.py`.
@@ -683,7 +680,7 @@ Additional copy features:
 - `close_trade_record()` is called after each successful CLOSE. Moves the trade from `open_trades` to `closed_trades`, adds `pnl` and `close_time`, and accumulates `session_pnl`.
 - When listening stops, `toggle_listening()` logs `[SESSION] Ended. Session PnL: $X.XX`.
 
-`views/qt/trades_panel.py` (`TradesPanel`) remains as a reference implementation.
+`TradesView` is the active TRADES UI; legacy panel files were removed in Phase 1.6.
 
 `views/qt/views/trades_view.py` (`TradesView`) is the design-system slave TRADES tab wired into `WindowShell`; it displays:
 - Session summary bar: open count, closed count, session P&L, session start time (when set)
@@ -695,9 +692,9 @@ Additional copy features:
 
 `data/broker_symbols.py` contains `BROKER_PRESETS` — a dict of broker names to symbol translation dicts. Supported brokers: Vantage, XM, Exness, IC Markets, Pepperstone.
 
-`views/qt/symbol_map_panel.py` (`SymbolMapPanel`) provides:
+`views/qt/views/symbols_view.py` (`SymbolsView`) provides:
 - Dual broker dropdown: "Master's broker" + "Your broker" for cross-broker preset loading
-- When "Load Preset Mappings" clicked: iterates `BROKER_PRESETS[master_broker]` keys, looks up corresponding slave symbol from `BROKER_PRESETS[my_broker]`, and adds to `symbol_map` if not already present
+- When "Load Preset" is clicked: iterates `BROKER_PRESETS[master_broker]` keys, looks up corresponding slave symbol from `BROKER_PRESETS[my_broker]`, and adds to `symbol_map` if not already present
 - Input row for manual master→slave symbol entry
 - `QTableWidget` showing all active mappings with per-row Remove buttons
 - Unmapped symbol behavior dropdown:

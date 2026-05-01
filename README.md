@@ -115,6 +115,9 @@ The system is distributed across three distinct environments:
     * Structured trace_id logging across backend and client layers
     * Reconnect behavior with auto re-registration on socket reconnect
     * Manual smoke test validation with backend restart simulation
+* **Phase 1.6: Slave UI cleanup (COMPLETED - May 2026)**
+    * Removed deprecated slave panel files: `symbol_map_panel.py`, `risk_panel.py`, `trades_panel.py`
+    * Confirmed slave uses design-system views under `views/qt/views/` (COPY / SYMBOLS / RISK / TRADES) with no legacy imports
 * **Phase 6: Master Profile & Trading History (COMPLETED - April 2026)**
     * Backend: Added `GET /auth/masters/:id/profile` returning aggregate master stats (totalTrades, winRate, totalPnL, avgVolume)
     * Backend: Added `GET /trades/master/:masterId/history` returning last 50 trades per master
