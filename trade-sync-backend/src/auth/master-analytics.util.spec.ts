@@ -1,6 +1,5 @@
 import {
   computeMasterAnalytics,
-  EQUITY_SPARKLINE_POINTS,
   MASTER_ANALYTICS_CLOSED_CAP,
   type ClosedTradeRow,
 } from './master-analytics.util';
@@ -23,8 +22,8 @@ describe('computeMasterAnalytics', () => {
     const out = computeMasterAnalytics([row(50, t, t)]);
     expect(out.riskMetrics?.longestLosingStreakTrades).toBe(0);
     expect(out.riskMetrics?.bestDayPnl).toBe(50);
-    expect(out.equitySparkline?.length).toBeLessThanOrEqual(EQUITY_SPARKLINE_POINTS);
-    expect(out.equitySparkline?.[out.equitySparkline.length - 1]).toBe(50);
+    // Phase 3.1: sparkline requires at least two closed rows
+    expect(out.equitySparkline).toBeUndefined();
   });
 
   it('computes longest losing streak', () => {
