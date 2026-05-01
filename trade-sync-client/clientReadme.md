@@ -93,7 +93,7 @@ trade-sync-client/
 │  │  ├─ theme.py                           # Design tokens, fonts, global QSS builder
 │  │  ├─ primitives.py                       # Styled atoms and molecules (cards, inputs, chips)
 │  │  ├─ custom_widgets.py                   # Custom paint: PulseDot, sparkline, histogram, sweep
-│  │  ├─ shell.py                            # TitleBar, Sidebar, FooterStrip; NAV_ITEMS_* constants
+│  │  ├─ shell.py                            # TitleBar, Sidebar, KPI/header strips, FooterStrip, EventLog (role-aware filters), WindowShell
 │  │  ├─ master_window.py                   # PySide6 Master desktop UI
 │  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (WindowShell scaffold)
 │  │  ├─ views/                             # Shell tab bodies (replacing placeholders)
@@ -103,7 +103,8 @@ trade-sync-client/
 │  │  │  ├─ risk_view.py                   # RISK tab: guards, daily status, whitelist chips
 │  │  │  ├─ trades_view.py                 # TRADES tab: session summary, open + history tables
 │  │  │  ├─ broadcast_view.py               # Master BROADCAST tab: toggle, license, account
-│  │  │  └─ subscribers_view.py            # Master SUBSCRIBERS tab: roster, activity (design-system)
+│  │  │  ├─ subscribers_view.py            # Master SUBSCRIBERS tab: roster, activity (design-system)
+│  │  │  └─ performance_view.py              # Master PERFORMANCE tab: KPIs, optional analytics, recent broadcasts
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
 │  │  ├─ subscribers_panel.py               # Legacy SubscribersPanel (retained; not used by WindowShell)
 └─ __pycache__/ + nested __pycache__/       # Compiled Python bytecode
@@ -168,15 +169,17 @@ The client has two operational roles:
 import sys
 from PySide6.QtWidgets import QApplication
 from views.qt.master_window import MasterWindow
+from views.qt.theme import load_fonts
 
 if __name__ == "__main__":
 	app = QApplication(sys.argv)
+	load_fonts()
 	window = MasterWindow()
 	window.show()
 	sys.exit(app.exec())
 ```
 
-- Starts the PySide6 master terminal UI.
+- Starts the PySide6 master terminal UI (loads design fonts before creating the window).
 
 ## `main_slave.py`
 
@@ -184,15 +187,18 @@ if __name__ == "__main__":
 import sys
 from PySide6.QtWidgets import QApplication
 from views.qt.slave_window import SlaveWindow
+from views.qt.theme import apply_app_font, load_fonts
 
 if __name__ == "__main__":
 	app = QApplication(sys.argv)
+	load_fonts()
+	apply_app_font(app)
 	window = SlaveWindow()
 	window.show()
 	sys.exit(app.exec())
 ```
 
-- Starts the PySide6 slave terminal UI.
+- Starts the PySide6 slave terminal UI (loads fonts then applies app-wide font).
 
 ## `main.py` (Legacy)
 
@@ -564,40 +570,32 @@ The UI layer has been migrated to PySide6. To ensure thread safety between the c
 
 Class: `MasterWindow(QMainWindow)`
 
-Design: Bloomberg Terminal-inspired minimal dark theme.
-Dashboard layout: 3-tab `QTabWidget` with `BROADCAST`, `SUBSCRIBERS`, and `PERFORMANCE`.
+Design: Bloomberg Terminal-inspired minimal dark theme (global QSS via `theme.build_global_qss()`). Post-login chrome matches the Slave pattern: frameless window (`Qt.WindowType.FramelessWindowHint`) plus custom `TitleBar`, then `WindowShell(role='master')`.
+
+Dashboard layout (not `QTabWidget`): sidebar navigation keys `broadcast`, `subscribers`, `performance`; center column is header strip + KPI strip + `QStackedWidget` pages; right column is `EventLog`. Placeholder stack pages are swapped for real views via `_replace_shell_placeholder()`. The master sidebar top margin is adjusted when the `TitleBar` sits outside the shell (same idea as `SlaveWindow`).
 
 Flow:
-1. Login screen rendered via `QStackedWidget`.
+1. Login screen rendered via `QStackedWidget` (`MasterLoginCard`).
 2. `on_login_submit()` extracts MT5 credentials plus master license key and calls `MasterController.login_mt5()`.
-3. On success, `show_dashboard()` switches to the dashboard, refreshes MT5 account info, loads master performance stats, and schedules subscriber fetch.
-4. `update_ui()` runs every 500ms and refreshes status, logs, signal count, session timer, and subscriber display.
+3. On success, `show_dashboard()` switches to the dashboard, loads master performance stats (`GET /auth/masters/:id/profile`), and schedules subscriber fetch.
+4. `update_ui()` runs every 500ms and refreshes shell header/KPI/footer, event log tail, `BroadcastView`, `SubscribersView`, and `PerformanceView` (via `refresh_performance` + `state.recent_signals`).
 
 Key widgets and controls:
-- **Login entries:**
-  - MT5 Login ID (`QLineEdit`)
-  - MT5 Password (`QLineEdit`, masked)
-  - Server string (`QLineEdit`)
-  - Broker dropdown (`QComboBox`: `Vantage`, `XM`, `Exness`, `Exness Slave`, `Auto-Detect`)
-  - License key input (`QLineEdit`)
-- **Dashboard (Tab 1: BROADCAST):**
-  - Status bar: broadcast state, elapsed session time, signals sent
-  - START/STOP BROADCASTING button
-  - Account group: MT5 account name, server, and balance
-  - Event Log (`QTextEdit`, color-coded HTML output)
-- **Dashboard (Tab 2: SUBSCRIBERS):**
-  - `SubscribersView` (`views/qt/views/subscribers_view.py`): summary chips, subscriber table (`StatusPill`, `GhostIconBtn` revoke stub), copied count and PnL coloring, activity log
-- **Dashboard (Tab 3: PERFORMANCE):**
-  - Trading stats from `GET /auth/masters/:id/profile`: total trades, closed trades, win rate, total PnL, average volume, and subscribers (the JSON may also include optional analytics fields such as `riskMetrics`, `equitySparkline`, and `activeHoursSummary`; the PySide UI continues to read only the known keys)
+- **Login entries:** `MasterLoginCard` — MT5 login/password, server, broker `DarkDropdown`, license `MonoInput`, `Btn` submit.
+- **Dashboard — BROADCAST:** `views/qt/views/broadcast_view.py` — start/stop broadcasting, license display, MT5 account summary; syncs from `AppState`.
+- **Dashboard — SUBSCRIBERS:** `SubscribersView` — summary `CountChip` row, roster table (`StatusPill` live/offline, `GhostIconBtn` revoke stub), HTML activity log.
+- **Dashboard — PERFORMANCE:** `PerformanceView` (`views/qt/views/performance_view.py`) — six KPI cards from profile JSON; optional analytics row (`EquitySparkline`, risk metrics list, `ActiveHoursHistogram`) shown only when both `riskMetrics` and `equitySparkline` are present; **Recent broadcasts** table merges raw `AppState.recent_signals` by `master_ticket` so OPEN and CLOSE update the same row (P&L shown when closed).
+- **Event log:** `shell.EventLog` filter chips are role-aware: master uses `ALL`, `SIGNAL`, `SESSION`, `MT5`, `ERR`; slave keeps `COPY` instead of `SESSION`.
 
 Methods:
-- `build_login_screen()` / `build_dashboard_screen()`: UI layout generation.
+- `build_login_screen()` / `build_dashboard_screen()`: UI layout generation (TitleBar + shell + view injection).
 - `show_login()` / `show_dashboard()`: Switch stacked views and load dashboard data.
 - `on_login_submit()`: Extracts text from Qt inputs and triggers `MasterController.login_mt5()`.
-- `on_toggle_broadcast()`: Triggers controller broadcast state and updates the UI.
-- `load_performance_stats()`: Fetches master aggregate stats from the backend.
-- `_update_session_clock()`: QTimer-driven 1s updates for elapsed broadcast time.
-- `update_ui()`: Thread-safe `@Slot()` that reads `AppState`, updates color-coded logs, shell header/KPI/footer, and refreshes `SubscribersView`.
+- `on_toggle_broadcast()`: Legacy hook; broadcasting is driven from `BroadcastView` → controller.
+- `load_performance_stats()`: HTTP fetch of `/auth/masters/:id/profile` into `performance_data`; calls `refresh_performance`.
+- `refresh_performance(stats)`: Delegates KPI + signals table to `PerformanceView.sync_from_state`.
+- `_update_session_clock()`: Computes elapsed broadcast time string for header refresh.
+- `update_ui()`: Thread-safe `@Slot()` that tails logs into `EventLog`, syncs shell chrome, broadcast/subscribers views, and performance view.
 
 ## Master Subscriber System
 
@@ -632,7 +630,7 @@ Flow:
 
 Key widgets and controls:
 - **Login:** `SlaveLoginCard` — email, MT5 login/password, server, broker name (`LineInput` / `MonoInput`).
-- **Shell:** Sidebar keys `copy` / `symbols` / `risk` / `trades`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog`.
+- **Shell:** Sidebar keys `copy` / `symbols` / `risk` / `trades`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog` (filters: ALL, SIGNAL, COPY, MT5, ERR).
 - **COPY:** `views/qt/views/copy_view.py` — master status summary, segmented `MULTIPLIER` \| `FIXED_LOT`, spinboxes (`risk_multiplier`, `fixed_lot_size`, `slippage_points`), reverse checkbox, `toggle_listening()` + `SweepBand` when running.
 - **SYMBOLS:** `views/qt/views/symbols_view.py` — broker presets, mapping table, and `unmapped_symbol_behavior`; stacked as the shell `"symbols"` page.
 - **RISK:** `views/qt/views/risk_view.py` — guards and controls (`equity_floor`, `max_concurrent_trades`, `daily_loss_limit`, `max_lot_size`, whitelist, daily P&L / pause / reset).

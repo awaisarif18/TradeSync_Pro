@@ -127,7 +127,7 @@ Compatibility recommendation:
 | node_registered | backend -> client | Backend TradeGateway | Python SocketManager | Confirms successful room join after register_node |
 | test_signal | client -> backend | Python Master node (MasterRecorder) | Backend TradeGateway | Raw trade lifecycle signal ingestion |
 | trade_execution | backend -> clients | Backend TradeGateway | Python Slave + Frontend LiveTradeTable | Fanout execution signal stream |
-| subscriber_update | backend -> master client | Backend TradeGateway | Python SubscribersPanel via MasterController | Notifies master when a subscribed slave connects or disconnects |
+| subscriber_update | backend -> master client | Backend TradeGateway | Python MasterController (+ `MasterWindow` / `SubscribersView`) | Notifies master when a subscribed slave connects or disconnects |
 
 ### 4.2 Payload Schemas
 
@@ -262,7 +262,7 @@ Breaking impact warning:
 | Session tracking | Python AppState (session_pnl, open_trades, closed_trades) | SlaveController toggle_listening + on_trade_signal | TradesPanel display |
 | Equity protection | Python AppState.equity_floor | RiskPanel equity section | Guard -1 in on_trade_signal() |
 | Unmapped symbol behavior | Python AppState.unmapped_symbol_behavior | SymbolMapPanel dropdown | on_trade_signal() symbol mapping logic |
-| Subscriber online status | Python AppState.subscriber_online_status | MasterController on_subscriber_update handler | SubscribersPanel STATUS column |
+| Subscriber online status | Python AppState.subscriber_online_status | MasterController on_subscriber_update handler | `SubscribersView` STATUS column (design-system `StatusPill`) |
 
 ---
 
