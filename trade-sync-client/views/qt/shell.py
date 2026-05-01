@@ -619,7 +619,10 @@ class EventLog(QWidget):
         frow = QHBoxLayout(filters)
         frow.setContentsMargins(8, 4, 8, 4)
         frow.setSpacing(4)
-        filter_labels = ["ALL", "SIGNAL", "COPY", "MT5", "ERR"]
+        if role == "master":
+            filter_labels = ["ALL", "SIGNAL", "SESSION", "MT5", "ERR"]
+        else:
+            filter_labels = ["ALL", "SIGNAL", "COPY", "MT5", "ERR"]
         self._filter_btns: dict[str, QPushButton] = {}
         for filt in filter_labels:
             btn = QPushButton(filt)

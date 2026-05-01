@@ -361,6 +361,8 @@ class StatusPill(QLabel):
 
     def __init__(self, variant="idle", label="", parent=None):
         super().__init__(parent)
+        self.setMinimumWidth(85)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         color, dot = self.VARIANTS.get(variant, (TEXT3, "○"))
         self.setText(f"{dot}  {label.upper()}")
         self.setStyleSheet(

@@ -25,22 +25,7 @@ from views.qt.primitives import (
     MicroLabel,
     StatusPill,
 )
-from views.qt.theme import ACCENT, BG, DANGER, FONT_MONO, LINE, TEXT3
-
-
-def _count_chip_style(filled: bool) -> str:
-    if filled:
-        return f"""
-            background: rgba(0,195,137,0.12);
-            color: {ACCENT};
-            font-size: 10px; font-weight: 600;
-            border-radius: 4px; padding: 1px 6px;
-        """
-    return f"""
-        border: 1px solid {LINE}; color: {TEXT3};
-        font-size: 10px; font-weight: 600;
-        border-radius: 4px; padding: 1px 6px;
-    """
+from views.qt.theme import ACCENT, BG, DANGER, FONT_MONO, TEXT3
 
 
 def _center_cell_widget(inner: QWidget) -> QWidget:
@@ -247,10 +232,7 @@ class SubscribersView(QWidget):
         signals_sent = int(getattr(state, "signals_sent", 0) or 0)
 
         self._chip_total.setText(str(total))
-        self._chip_total.setStyleSheet(_count_chip_style(total > 0))
 
         self._chip_online.setText(str(online_count))
-        self._chip_online.setStyleSheet(_count_chip_style(online_count > 0))
 
         self._chip_signals.setText(str(signals_sent))
-        self._chip_signals.setStyleSheet(_count_chip_style(signals_sent > 0))

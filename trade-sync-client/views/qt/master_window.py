@@ -28,8 +28,8 @@ from PySide6.QtGui import QColor
 
 from controllers.ui_controllers.master_controller import MasterController
 from views.qt.primitives import Btn, Card, DarkDropdown, FieldLabel, LineInput, MonoInput
-from views.qt.shell import HeaderStripMaster, WindowShell
-from views.qt.theme import ACCENT, BG, DANGER, TEXT, build_global_qss
+from views.qt.shell import HeaderStripMaster, TitleBar, WindowShell
+from views.qt.theme import ACCENT, BG, DANGER, FOOTER_H, HEADER_H, KPI_H, TEXT, build_global_qss
 from views.qt.ui_bridge import UIBridge
 from views.qt.views.broadcast_view import BroadcastView
 from views.qt.views.performance_view import PerformanceView
@@ -121,6 +121,7 @@ class MasterWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("TradeSync Pro - Master Node")
         self.setMinimumSize(900, 650)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Window)
         self.setStyleSheet(build_global_qss() + f"\nQMainWindow {{ background-color: {BG}; }}\n")
 
         self.performance_data = {}
@@ -178,6 +179,9 @@ class MasterWindow(QMainWindow):
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(0)
 
+        self.title_bar = TitleBar(role="Master Node", window=self)
+        v.addWidget(self.title_bar)
+
         self.shell = WindowShell(role="master")
 
         self.broadcast_view = BroadcastView(self.controller)
@@ -188,6 +192,10 @@ class MasterWindow(QMainWindow):
 
         self.performance_view = PerformanceView(self.controller)
         self._replace_shell_placeholder(self.shell, "performance", self.performance_view)
+
+        sb_lay = self.shell.sidebar.layout()
+        if hasattr(sb_lay, "setContentsMargins"):
+            sb_lay.setContentsMargins(0, HEADER_H + KPI_H, 0, FOOTER_H)
 
         v.addWidget(self.shell, 1)
         self.shell.show_view("broadcast")

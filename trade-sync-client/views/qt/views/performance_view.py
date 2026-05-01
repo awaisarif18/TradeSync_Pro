@@ -217,9 +217,35 @@ class PerformanceView(QWidget):
                 )
             self.histogram.set_values(values)
 
-        signals = list(reversed(recent_signals))[:10]
-        self.table_recent.setRowCount(len(signals))
-        for i, sig in enumerate(signals):
+        # 1. Unify raw signals into a stateful trade map based on master_ticket
+        unified_trades = {}
+        for sig in recent_signals:
+            tkt = sig.get("master_ticket", id(sig))
+            if tkt not in unified_trades:
+                unified_trades[tkt] = sig.copy()
+            else:
+                evt = str(sig.get("event", "")).upper()
+                if evt == "CLOSE":
+                    unified_trades[tkt]["event"] = "CLOSE"
+                    unified_trades[tkt]["pnl"] = sig.get("pnl", 0.0)
+                elif evt == "OPEN":
+                    unified_trades[tkt]["action"] = sig.get(
+                        "action",
+                        unified_trades[tkt].get("action", "BUY"),
+                    )
+                    unified_trades[tkt]["volume"] = sig.get(
+                        "volume",
+                        unified_trades[tkt].get("volume", 0.0),
+                    )
+                    unified_trades[tkt]["time"] = sig.get(
+                        "time",
+                        unified_trades[tkt].get("time", ""),
+                    )
+
+        # 2. Extract the 10 most recent unified trades
+        display_signals = list(reversed(list(unified_trades.values())))[:10]
+        self.table_recent.setRowCount(len(display_signals))
+        for i, sig in enumerate(display_signals):
             self.table_recent.setRowHeight(i, 32)
 
             t_item = QTableWidgetItem(str(sig.get("time", "") or ""))
@@ -232,7 +258,10 @@ class PerformanceView(QWidget):
             sym_item.setForeground(QColor(TEXT3))
             self.table_recent.setItem(i, 1, sym_item)
 
+            # Prevent "CLOSE" action labels when OPEN payload was missing
             action = str(sig.get("action", "BUY") or "BUY").upper()
+            if action == "CLOSE":
+                action = "BUY"
             self.table_recent.setCellWidget(i, 2, _center_widget(TradeChip(action)))
 
             vol_item = QTableWidgetItem(str(sig.get("volume", "") or ""))
@@ -240,19 +269,23 @@ class PerformanceView(QWidget):
             vol_item.setForeground(QColor(TEXT3))
             self.table_recent.setItem(i, 3, vol_item)
 
-            event = str(sig.get("event", "") or "").upper()
-            if event == "OPEN":
-                status_kind = "OPEN"
-            elif event == "CLOSE":
-                status_kind = "CLOSED"
-            else:
-                status_kind = "CLOSED"
+            event = str(sig.get("event", "") or "OPEN").upper()
+            is_closed = event == "CLOSE"
+            status_kind = "CLOSED" if is_closed else "OPEN"
             self.table_recent.setCellWidget(i, 4, _center_widget(StatusChip(status_kind)))
 
-            pnl = float(sig.get("pnl", 0.0) or 0.0)
-            pnl_item = QTableWidgetItem(f"${pnl:.2f}")
+            # P&L formatting: dash for OPEN, signed value for CLOSED
+            if is_closed:
+                pnl = float(sig.get("pnl", 0.0) or 0.0)
+                pnl_text = f"+${pnl:.2f}" if pnl >= 0 else f"-${abs(pnl):.2f}"
+                pnl_color = ACCENT if pnl >= 0 else DANGER
+            else:
+                pnl_text = "—"
+                pnl_color = TEXT3
+
+            pnl_item = QTableWidgetItem(pnl_text)
             pnl_item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-            pnl_item.setForeground(QColor(ACCENT if pnl >= 0 else DANGER))
+            pnl_item.setForeground(QColor(pnl_color))
             self.table_recent.setItem(i, 5, pnl_item)
 
             acked_val = sig.get("acked", sig.get("ack", False))
@@ -262,8 +295,8 @@ class PerformanceView(QWidget):
             ack_item.setForeground(QColor(TEXT if ack_text == "YES" else TEXT3))
             self.table_recent.setItem(i, 6, ack_item)
 
-        has_rows = len(signals) > 0
-        self.tbl_count.setText(str(len(signals)))
+        has_rows = len(display_signals) > 0
+        self.tbl_count.setText(str(len(display_signals)))
         self.tbl_count.setStyleSheet(
             (
                 f"background: rgba(0,195,137,0.12); color: {ACCENT}; "
