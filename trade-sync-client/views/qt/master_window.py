@@ -7,6 +7,7 @@ import requests
 from PySide6.QtCore import Qt, QTimer, Slot
 from PySide6.QtWidgets import (
     QApplication,
+    QFrame,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
