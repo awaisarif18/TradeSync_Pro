@@ -18,6 +18,7 @@ from controllers.ui_controllers.slave_controller import SlaveController
 from views.qt.primitives import Btn, Card, FieldLabel, LineInput, MonoInput
 from views.qt.shell import HeaderStripSlave, TitleBar, WindowShell
 from views.qt.views.copy_view import CopyView
+from views.qt.views.symbols_view import SymbolsView
 from views.qt.theme import ACCENT, BG, DANGER, FOOTER_H, HEADER_H, KPI_H, TEXT
 from views.qt.ui_bridge import UIBridge
 
@@ -305,6 +306,7 @@ class SlaveWindow(QMainWindow):
         self._slave_log_emit_cursor = 0
         self._slave_header_signature = None  # tuple (master_name_or_none, variant)
         self.copy_view: Optional[CopyView] = None
+        self.symbols_view: Optional[SymbolsView] = None
 
         self.setStyleSheet(
             BLOOMBERG_QSS
@@ -366,6 +368,9 @@ class SlaveWindow(QMainWindow):
 
         self.copy_view = CopyView(self.controller)
         self._replace_shell_placeholder(self.shell, "copy", self.copy_view)
+
+        self.symbols_view = SymbolsView(self.controller)
+        self._replace_shell_placeholder(self.shell, "symbols", self.symbols_view)
 
         sb_lay = self.shell.sidebar.layout()
         if hasattr(sb_lay, "setContentsMargins"):
@@ -462,6 +467,10 @@ class SlaveWindow(QMainWindow):
         cv = getattr(self, "copy_view", None)
         if cv is not None:
             cv.sync_from_state()
+
+        sv = getattr(self, "symbols_view", None)
+        if sv is not None:
+            sv.refresh_display()
 
         if hasattr(self, "risk_panel"):
             self.risk_panel.refresh_display()

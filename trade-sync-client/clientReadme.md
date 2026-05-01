@@ -98,7 +98,8 @@ trade-sync-client/
 │  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (WindowShell scaffold)
 │  │  ├─ views/                             # Shell tab bodies (replacing placeholders)
 │  │  │  ├─ __init__.py                    # Package marker
-│  │  │  └─ copy_view.py                   # COPY tab: master summary, settings, listen control
+│  │  │  ├─ copy_view.py                   # COPY tab: master summary, settings, listen control
+│  │  │  └─ symbols_view.py                 # SYMBOLS tab: presets, map table, unmapped behavior
 │  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
 │  │  ├─ subscribers_panel.py               # SubscribersPanel QWidget
 │  │  ├─ symbol_map_panel.py                # SymbolMapPanel QWidget (dual broker presets)
@@ -632,13 +633,14 @@ Key widgets and controls:
 - **Login:** `SlaveLoginCard` — email, MT5 login/password, server, broker name (`LineInput` / `MonoInput`).
 - **Shell:** Sidebar keys `copy` / `symbols` / `risk` / `trades`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog`.
 - **COPY:** `views/qt/views/copy_view.py` — master status summary, segmented `MULTIPLIER` \| `FIXED_LOT`, spinboxes (`risk_multiplier`, `fixed_lot_size`, `slippage_points`), reverse checkbox, `toggle_listening()` + `SweepBand` when running.
-- **SYMBOLS / RISK / TRADES:** Shell placeholders until panels are reattached.
+- **SYMBOLS:** `views/qt/views/symbols_view.py` — same behavior as legacy `symbol_map_panel` (broker presets, manual add/remove rows, `unmapped_symbol_behavior`); stacked as the shell `"symbols"` page. Legacy `symbol_map_panel.py` kept until Phase 1.6 cleanup.
+- **RISK / TRADES:** Shell placeholders until those panels register.
 
 Methods:
 - `build_login_screen()` / `build_dashboard_screen()`: layouts plus `WindowShell`; `_replace_shell_placeholder()` swaps a stack widget by nav key without editing `shell.py`.
 - `on_login_submit()` calls `SlaveController.login_mt5(...)`.
 - `_show_dashboard()` switches the stack to the dashboard, resets log and header guards, runs `update_ui()`.
-- `update_ui()` (`@Slot()`): footer, `HeaderStripSlave`, KPI strip, tails `state.logs` into `EventLog`; optional panel refresh hooks when wired; `CopyView.sync_from_state()`.
+- `update_ui()` (`@Slot()`): footer, `HeaderStripSlave`, KPI strip, tails `state.logs` into `EventLog`; `CopyView.sync_from_state()`; `SymbolsView.refresh_display()`; optional panel hooks when wired.
 
 `_slave_log_category` maps log lines into `EventLog` filter categories.
 
