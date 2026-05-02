@@ -66,7 +66,6 @@ function validateLoginForm(formData: { email: string; password: string }): Login
 export default function LoginPage() {
   const dispatch = useDispatch();
   const router = useRouter();
-  const [activeRole, setActiveRole] = useState<"copier" | "provider">("copier");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<LoginFieldErrors>({});
@@ -126,71 +125,6 @@ export default function LoginPage() {
           <p style={{ fontSize: 15, color: "var(--color-text-2)", margin: "0 0 28px" }}>
             Sign in to your TradeSync account to mirror trades or publish your strategy.
           </p>
-
-          {/* TODO: Decorative only. Login is role-agnostic; the real role comes from /auth/login. */}
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 4,
-              background: "var(--color-surface)",
-              padding: 4,
-              borderRadius: 12,
-              border: "1px solid var(--color-line)",
-              marginBottom: 24,
-            }}
-          >
-            {[
-              { value: "copier" as const, label: "Copier", description: "Mirror providers", color: "var(--color-violet)" },
-              { value: "provider" as const, label: "Provider", description: "Publish strategies", color: "var(--color-mint)" },
-            ].map((option) => {
-              const active = activeRole === option.value;
-              return (
-                <span
-                  key={option.value}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => setActiveRole(option.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") setActiveRole(option.value);
-                  }}
-                  style={{
-                    background: active ? "var(--color-surface-2)" : "transparent",
-                    padding: "12px 14px",
-                    cursor: "pointer",
-                    borderRadius: 8,
-                    color: active ? "var(--color-text)" : "var(--color-text-2)",
-                    textAlign: "left",
-                    borderLeft: active ? `2px solid ${option.color}` : "2px solid transparent",
-                    transition: "background .12s",
-                  }}
-                >
-                  <div style={{ fontSize: 13, fontWeight: 600, color: active ? option.color : "var(--color-text)" }}>
-                    {option.label}
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--color-text-3)", marginTop: 2 }}>
-                    {option.description}
-                  </div>
-                </span>
-              );
-            })}
-          </div>
-
-          <Button
-            variant="ghost"
-            fullWidth
-            disabled
-            title="Coming soon"
-            leftIcon={<span style={{ fontWeight: 700 }}>G</span>}
-          >
-            Continue with Google
-          </Button>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "20px 0 16px", color: "var(--color-text-3)", fontSize: 12 }}>
-            <div style={{ flex: 1, height: 1, background: "var(--color-line)" }} />
-            or with email
-            <div style={{ flex: 1, height: 1, background: "var(--color-line)" }} />
-          </div>
 
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <Input

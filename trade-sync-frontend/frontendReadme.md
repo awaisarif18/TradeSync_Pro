@@ -232,7 +232,7 @@ Key client components:
 - Calls `authService.login(email, password)` and dispatches `loginSuccess(user)` on success
 - Redirects to `/dashboard` after login
 - Uses `toast.success` / `toast.error` from Sonner instead of `alert()`
-- Includes decorative role tabs only; login remains role-agnostic and uses the backend response role
+- Email and password only; login is role-agnostic and the role comes from the `/auth/login` response
 - Validates required fields, email format, and password length inline before calling `POST /auth/login`
 
 ## `/register` — Registration page (`src/app/(auth)/register/page.tsx`)
@@ -393,7 +393,7 @@ These endpoints are aligned with the backend behavior documented in `trade-sync-
 
 ## `LoginForm` (`src/components/auth/LoginForm.tsx`)
 
-The active `/login` route now owns the split-screen login UI directly. This legacy form is retained for compatibility if reused elsewhere.
+The active `/login` route (`src/app/(auth)/login/page.tsx`) owns the split-screen login UI: email, password, and Sign in (no OAuth or decorative role picker). This legacy `LoginForm` is retained for compatibility if reused elsewhere.
 
 Hooks used:
 
