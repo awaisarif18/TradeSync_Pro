@@ -10,7 +10,7 @@ export class TradeLog {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column()
+  @Column({nullable: true})
   masterId: string; // Who placed the trade
 
   @Column({ type: 'varchar', nullable: true })

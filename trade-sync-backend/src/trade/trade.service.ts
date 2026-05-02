@@ -35,7 +35,7 @@ export class TradeService {
       const result = await this.dataSource.query(
         `INSERT INTO TradeLog (MasterID, Symbol, ActionType, Price, Volume) 
          VALUES (1, @0, @1, @2, @3); SELECT SCOPE_IDENTITY() AS id`,
-        [data.symbol, data.action, data.price || 0, data.volume],
+        [data.symbol, data.action, data?.price || 0, data.volume],
       );
 
       const signalId = result[0].id;

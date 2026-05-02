@@ -652,7 +652,7 @@ Subheading: "Have questions about TradeSync Pro? Send us a message."
 ### Submission logic
 POST to Formspree endpoint (hardcode the string):
 ```typescript
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/YOUR_FORMSPREE_ENDPOINT';
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xojrjvoj';
 
 const handleSubmit = async (e: React.FormEvent) => {
   e.preventDefault();

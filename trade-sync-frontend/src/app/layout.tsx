@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter, JetBrains_Mono } from 'next/font/google';
 import "./globals.css";
 import Navbar from "../components/navigation/Navbar";
-import Footer from "../components/layout/Footer";
 import ReduxProvider from "../components/layout/ReduxProvider";
 import { Toaster } from 'sonner';
 
@@ -38,7 +37,6 @@ export default function RootLayout({
           <main className="flex-grow container mx-auto px-4 py-8">
             {children}
           </main>
-          <Footer />
         </ReduxProvider>
         <Toaster richColors position="top-right" theme="dark" />
       </body>
