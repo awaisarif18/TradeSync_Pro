@@ -104,7 +104,7 @@ JWT enforcement contract for web REST:
 
 | Route | Method | Backend Handler | Called By | Request Body | Response | Notes |
 |---|---|---|---|---|---|---|
-| /trades/history | GET | TradeController.getTradeHistory | Frontend dashboards (potential) | none | latest logs array | **Public.** Returns top 50 via TradeService |
+| /trades/history | GET | TradeController.getTradeHistory | Frontend landing page `LiveTradeFeedCard` (server-side fetch, 60s revalidation); dashboards (potential) | none | latest logs array | **Public.** Returns top 50 via TradeService (`getLatestLogs`; legacy raw `TradeLog` table shape may differ from `TradeLogs` entity rows) |
 | /trades/stats | GET | TradeController.getStats | Frontend dashboards (potential) | none | placeholder stats object | **Public.** Currently stub/static |
 | /trades/master/:masterId/history | GET | TradeController.getMasterHistory | Frontend SlaveDashboard (TradeHistoryModal) | none | { symbol, action, status, pnl, createdAt, closedAt }[] | **Public.** Returns last 50 trades per master (OPEN + CLOSED). Added Phase 6. |
 

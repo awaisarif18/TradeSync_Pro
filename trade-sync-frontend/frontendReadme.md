@@ -81,7 +81,7 @@ trade-sync-frontend/
 └─ src/
 	├─ app/
 	│  ├─ globals.css                  # Global CSS + Tailwind theme tokens
-	│  ├─ layout.tsx                   # Root app shell: Provider + Navbar + Footer
+	│  ├─ layout.tsx                   # Root app shell: Provider + Navbar + main (no global footer; landing uses FooterStrip)
 	│  ├─ not-found.tsx                # Token-based 404 page
 	│  ├─ error.tsx                    # Token-based route error boundary
 	│  ├─ global-error.tsx             # Root error boundary (imports globals for tokens)
@@ -109,14 +109,14 @@ trade-sync-frontend/
 	│  ├─ layout/
 	│  │  ├─ ReduxProvider.tsx         # App-level Redux Provider wrapper
 	│  │  ├─ Navbar.tsx                # Legacy top nav retained for reference
-	│  │  └─ Footer.tsx                # Footer bar
+	│  │  └─ Footer.tsx                # Optional/legacy layout footer (not used in root layout; see FooterStrip on landing)
 	│  ├─ navigation/
 	│  │  └─ Navbar.tsx                # Token-based top nav with role/auth-aware links
 	│  ├─ charts/
 	│  │  └─ EquityCurve.tsx           # SVG equity curve for cards and marketing previews
 	│  ├─ feed/
 	│  │  ├─ TradeRow.tsx              # Typed live-trade row display
-	│  │  └─ MarketTicker.tsx          # Decorative horizontal market ticker
+	│  │  └─ MarketTicker.tsx          # Client ticker: CoinGecko + Frankfurter; 60s refresh (see Phase 4)
 	│  ├─ marketplace/
 	│  │  ├─ TraderCard.tsx            # Provider profile card for marketplace/showcase contexts
 	│  │  ├─ TraderCardSkeleton.tsx    # Loading skeleton for provider cards
@@ -131,8 +131,9 @@ trade-sync-frontend/
 	│  │  ├─ HowItWorks.tsx            # Three-card explainer section
 	│  │  ├─ ProviderShowcase.tsx      # Landing provider card grid (`totalProviderCount` for “See all”)
 	│  │  ├─ VerifiedProviderShowcaseBlock.tsx  # Client: top masters + active count strip + showcase
-	│  │  ├─ LiveTradeFeedCard.tsx     # Decorative live-trade feed strip
-	│  │  └─ FooterStrip.tsx           # Minimal landing footer strip
+	│  │  ├─ LiveTradeFeedCard.tsx     # Landing trade table; server-fed from GET /trades/history (see Phase 4)
+	│  │  ├─ ContactSection.tsx       # 'use client' contact form; POSTs to Formspree; landing page only
+	│  │  └─ FooterStrip.tsx           # Full 3-column footer with brand, product links, company links; dynamic copyright year
 	│  ├─ auth/
 	│  │  ├─ LoginForm.tsx
 	│  │  ├─ RegisterMasterForm.tsx
@@ -176,8 +177,9 @@ Global app shell (`src/app/layout.tsx`) wraps all routes with:
 1. `ReduxProvider` (global Redux store context + auth hydration)
 2. `Navbar` (always visible)
 3. Central main container (`<main>`)
-4. `Footer` (always visible)
-5. `Toaster` from `sonner` for dark top-right toast notifications
+4. `Toaster` from `sonner` for dark top-right toast notifications
+
+The legacy `components/layout/Footer.tsx` is not rendered by the root layout; the marketing landing page (`/`) includes `FooterStrip` instead.
 
 Admin routes (`/admin/*`) have a nested layout (`src/app/admin/layout.tsx`) that keeps admin content full-width while the page owns the tab UI.
 
@@ -193,6 +195,7 @@ Key client components:
 - `admin/page.tsx`
 - `ReduxProvider.tsx`
 - `Navbar.tsx`
+- `MarketTicker.tsx`, `ContactSection.tsx`, `VerifiedProviderShowcaseBlock.tsx`
 - all auth forms
 - all dashboard widgets including live table
 
@@ -202,10 +205,12 @@ Key client components:
 
 ## `/` — Landing (`src/app/page.tsx`)
 
-- Server component landing page using the Phase 2 marketing composites
-- Renders the hero/product preview, market ticker, decorative online status strip, how-it-works section, provider showcase, live feed card, and footer strip
-- Provider showcase currently uses three mock providers; future real wiring should use `GET /auth/masters` plus per-master profile calls
-- Decorative online counts are mock values; only total active providers is currently derivable from existing backend endpoints
+- Async server component; composes Phase 2 marketing sections plus Phase 4 dynamism
+- **Hero**, **MarketTicker**, **VerifiedProviderShowcaseBlock** (`GET /auth/top-masters`, `GET /auth/masters`, counts), **LiveTradeFeedCard**, **ContactSection**, **FooterStrip**
+- **MarketTicker** (client): live prices from CoinGecko (BTC, ETH, SOL, XRP, ADA, DOGE) and Frankfurter (EUR/USD, GBP/USD derived from USD→EUR/GBP rates); refreshes every **60s**; footnote when live quotes may be stale; no separate npm deps
+- **LiveTradeFeedCard**: server `fetch` to **`GET /trades/history`** (`http://localhost:3000`) with **`next.revalidate: 60`**; normalizes rows and keeps only **CLOSED** trades whose **action** is **BUY** or **SELL** (matches dashboard-style semantics); shows up to **5** rows; **6-column** table (Time, Symbol, Action, Volume, P&amp;L as dollars, Status); falls back to static demo rows if the fetch fails or yields no matching rows (legacy **`TradeLog`** SQL responses often lack `TradeLogs` fields, so empty matches are common until backend aligns)
+- **ContactSection**: Formspree POST for `{ name, email, message }` (see component for endpoint); success replaces form with inline confirmation
+- Provider showcase block uses live master APIs; hero decorative rails may still use sample trade rows for visuals
 
 ## `/traders` — Master Trader Marketplace (`src/app/traders/page.tsx`)
 
@@ -565,14 +570,14 @@ Other details:
 ## Composite UI Components
 
 - `EquityCurve` renders the deterministic SVG curve used by cards and marketing previews
-- `TradeRow` and `MarketTicker` provide decorative feed/ticker display without API calls
+- `TradeRow` supplies decorative rows inside **Hero** and similar rails (no HTTP)
+- `MarketTicker` is a client component that pulls live crypto and FX prices over the public internet (see `/` landing notes)
 - `TraderCard`, `TraderCardSkeleton`, and `RiskFilter` support provider marketplace UI
-- `Hero`, `HowItWorks`, `ProviderShowcase`, `VerifiedProviderShowcaseBlock` (real `GET /auth/top-masters` + `GET /auth/masters` counts), `LiveTradeFeedCard`, and `FooterStrip` provide reusable landing-page sections
+- `Hero`, `HowItWorks`, `ProviderShowcase`, `VerifiedProviderShowcaseBlock` (real `GET /auth/top-masters` + `GET /auth/masters` counts), `LiveTradeFeedCard`, `ContactSection`, and `FooterStrip` compose the landing page
 
-## `Footer`
+## `Footer` (`src/components/layout/Footer.tsx`)
 
-- Static branding/footer text
-- Dynamic year via `new Date().getFullYear()`
+- Present in the repo for reuse; **not** mounted from root `layout.tsx`. Landing uses **`FooterStrip`** instead.
 
 ## `AdminLayout`
 
@@ -656,7 +661,7 @@ From `package.json` / lockfile:
 ## 13) File-to-File Communication Map
 
 1. `src/app/layout.tsx`
-	- imports `ReduxProvider`, `Navbar`, `Footer`
+	- imports `ReduxProvider`, `Navbar` (no global `Footer`; landing includes `FooterStrip` in `page.tsx`)
 2. `ReduxProvider`
 	- injects `store` from `redux/slices/store.ts`
 	- dispatches `hydrateAuth()` on mount
@@ -830,6 +835,20 @@ For shared backend/frontend/client integration contracts, use:
 - `SYSTEM_CONTRACT_MATRIX.md` (workspace root)
 
 When API paths, response/request schemas, socket events, or role/identity behavior change, update that matrix first, then align this frontend guide.
+
+---
+
+## 22) Phase 4: Landing Page Dynamism (Completed)
+
+Shipped items aligned with `frontend_phase4_guide.md`, with implementation notes where behavior diverged from the earliest draft:
+
+- **4.1 Navbar:** Public links are **Discover**, **How it works**, **Docs** (no Pricing).
+- **4.2 Login:** Email + password + submit only; decorative role tabs and Google button removed.
+- **4.3 / 4.3b MarketTicker:** Live **CoinGecko** (six cryptos: BTC, ETH, SOL, XRP, ADA, DOGE) plus **Frankfurter** forex (EUR/USD, GBP/USD); **60s** polling; stale footnote when APIs fail; scroll animation preserved.
+- **4.4 LiveTradeFeedCard:** Server-side **`GET /trades/history`** with **60s** revalidation; strict **CLOSED** + **BUY**/**SELL** filter; dollar-formatted P&amp;L; **6-column** layout (Time, Symbol, Action, Volume, P&amp;L, Status); demo fallback rows when empty; backend currently returns legacy **`TradeLog`** rows for that route in many setups, so real rows depend on DB/API shape.
+- **4.5 FooterStrip:** Full **3-column** marketing footer + legal strip (`FooterStrip` export name unchanged).
+- **4.6 ContactSection:** **`id="contact"`**; Formspree JSON POST; primary **Button** submit with loading state.
+- **4.7 Docs:** This section plus **`SYSTEM_CONTRACT_MATRIX.md`** updates for **`/trades/history`** consumers.
 
 ---
 
