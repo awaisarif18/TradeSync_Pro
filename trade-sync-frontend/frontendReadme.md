@@ -548,7 +548,7 @@ Expected trade payload fields consumed:
 Dynamic navigation logic based on Redux auth state:
 
 - Show `Sign in`/`Get started` when not authenticated
-- Show public links `Discover`, `How it works`, `Pricing`, and `Docs` when not authenticated
+- Show public links `Discover`, `How it works`, and `Docs` when not authenticated
 - Show role-aware links when authenticated:
   - `MASTER` sees `Dashboard`
   - `SLAVE` sees `Discover` and `Dashboard`

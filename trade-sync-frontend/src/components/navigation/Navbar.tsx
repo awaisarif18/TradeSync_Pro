@@ -65,7 +65,6 @@ export default function Navbar() {
   const publicLinks: NavLink[] = [
     { name: 'Discover', href: '/traders', active: pathname.startsWith('/traders') },
     { name: 'How it works', href: pathname === '/' ? '#how' : '/#how' },
-    { name: 'Pricing', href: '#pricing' },
     { name: 'Docs', href: '#docs' },
   ];
 
