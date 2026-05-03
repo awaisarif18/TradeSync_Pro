@@ -105,7 +105,8 @@ trade-sync-frontend/
 	│  ├─ common/
 	│  │  ├─ Button.tsx                # Reusable button with loading state
 	│  │  ├─ Input.tsx                 # Reusable input with optional label
-	│  │  └─ Card.tsx                  # Metric card used in dashboards
+	│  │  ├─ Card.tsx                  # Metric card used in dashboards
+	│  │  └─ KpiCard.tsx               # Phase 5 KPI widget; hover + skeleton (admin/copier dashboards)
 	│  ├─ layout/
 	│  │  ├─ ReduxProvider.tsx         # App-level Redux Provider wrapper
 	│  │  ├─ Navbar.tsx                # Legacy top nav retained for reference
@@ -605,6 +606,15 @@ Other details:
   - `blue`, `emerald`, `purple`, `yellow`, `red`
 - Accepts Lucide icon component and renders value/title
 
+## `KpiCard` (`src/components/common/KpiCard.tsx`)
+
+- Phase 5 premium KPI tile; props-only (no data fetching)
+- `title`, `value` (`string | number`), optional `subtext`, `icon` as **`ReactNode`** (pass a sized Lucide icon, e.g. `<Users size={18} />`)
+- Optional `valueColor`: `default` | `mint` | `danger` | `violet` (maps to design tokens)
+- `loading`: pulsing skeleton bars (title/value/subtext placeholders + icon placeholder)
+- Hover: lift (`translateY(-4px)`), mint border and glow shadow; icon wrapper uses **`group-hover`** (`--color-mint-soft` background, `--color-mint` icon color)
+- Import: `import { KpiCard } from "@/components/common/KpiCard"` (`tsconfig` maps `@/*` → `./src/*`)
+
 ---
 
 ## 11) Styling and Frontend Build Tooling
@@ -844,10 +854,10 @@ Shipped items aligned with `frontend_phase4_guide.md`, with implementation notes
 
 - **4.1 Navbar:** Public links are **Discover**, **How it works**, **Docs** (no Pricing).
 - **4.2 Login:** Email + password + submit only; decorative role tabs and Google button removed.
-- **4.3 / 4.3b MarketTicker:** Live **CoinGecko** (six cryptos: BTC, ETH, SOL, XRP, ADA, DOGE) plus **Frankfurter** forex (EUR/USD, GBP/USD); **60s** polling; stale footnote when APIs fail; scroll animation preserved.
-- **4.4 LiveTradeFeedCard:** Server-side **`GET /trades/history`** with **60s** revalidation; strict **CLOSED** + **BUY**/**SELL** filter; dollar-formatted P&amp;L; **6-column** layout (Time, Symbol, Action, Volume, P&amp;L, Status); demo fallback rows when empty; backend currently returns legacy **`TradeLog`** rows for that route in many setups, so real rows depend on DB/API shape.
+- **4.3 / 4.3b MarketTicker:** Live **CoinGecko** (six cryptos: BTC, ETH, SOL, XRP, ADA, DOGE) plus **Frankfurter** forex (EUR/USD, GBP/USD); **60s** polling; **`fetch`** with **`cache: "no-store"`**; stale footnote when APIs fail; scroll animation preserved.
+- **4.4 LiveTradeFeedCard:** Server-side **`GET /trades/history`** with **`fetch`** and **`next: { revalidate: 60 }`**; strict **CLOSED** + **BUY**/**SELL** filter; dollar-formatted P&amp;L; **6-column** layout (Time, Symbol, Action, Volume, P&amp;L, Status); demo fallback rows when empty; backend currently returns legacy **`TradeLog`** rows for that route in many setups, so real rows depend on DB/API shape.
 - **4.5 FooterStrip:** Full **3-column** marketing footer + legal strip (`FooterStrip` export name unchanged).
-- **4.6 ContactSection:** **`id="contact"`**; Formspree JSON POST; primary **Button** submit with loading state.
+- **4.6 ContactSection:** **`id="contact"`**; Formspree JSON **`fetch`** POST; primary **Button** submit with loading state.
 - **4.7 Docs:** This section plus **`SYSTEM_CONTRACT_MATRIX.md`** updates for **`/trades/history`** consumers.
 
 ---
