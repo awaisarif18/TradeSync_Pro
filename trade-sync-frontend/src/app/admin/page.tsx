@@ -1,11 +1,22 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, ScrollText, Settings, ShieldAlert, ServerCog } from "lucide-react";
+import {
+  Link,
+  Search,
+  ScrollText,
+  Server,
+  Settings,
+  ShieldAlert,
+  ServerCog,
+  Users,
+  Zap,
+} from "lucide-react";
 import { useSelector } from "react-redux";
 import { toast } from "sonner";
 import { adminService } from "../../services/api";
 import { RootState } from "../../redux/slices/store";
+import { KpiCard } from "../../components/common/KpiCard";
 import { Button, Card, CardBody, EmptyState, Input, Pill, RoleBadge, Skeleton } from "../../components/ui";
 
 type AdminRoleFilter = "ALL" | "MASTER" | "SLAVE" | "ADMIN";
@@ -21,6 +32,7 @@ type AdminUser = {
   isActive: boolean;
   licenseKey: string | null;
   createdAt?: string;
+  subscribedToId?: string | null;
 };
 
 type LoadingAction = {
@@ -485,6 +497,25 @@ export default function AdminDashboard() {
     [users],
   );
 
+  const kpiMastersCount = useMemo(
+    () => users.filter((u) => u.role === "MASTER").length,
+    [users],
+  );
+  const kpiSlavesCount = useMemo(
+    () => users.filter((u) => u.role === "SLAVE").length,
+    [users],
+  );
+  const kpiActiveSubscriptions = useMemo(
+    () =>
+      users.filter((u) => u.role === "SLAVE" && u.subscribedToId).length,
+    [users],
+  );
+  const kpiPlatformMasters = useMemo(
+    () =>
+      users.filter((u) => u.role === "MASTER" && u.isActive).length,
+    [users],
+  );
+
   const visibleUsers = useMemo(() => {
     const query = search.trim().toLowerCase();
 
@@ -544,6 +575,40 @@ export default function AdminDashboard() {
 
         {activeTab === "users" ? (
           <>
+            <div className="mb-6 grid grid-cols-2 gap-4 min-[901px]:grid-cols-4">
+              <KpiCard
+                title="Total Users"
+                value={users.length}
+                subtext={`${kpiMastersCount} Masters / ${kpiSlavesCount} Copiers`}
+                icon={<Users size={18} strokeWidth={2.2} />}
+                valueColor="default"
+                loading={isLoading}
+              />
+              <KpiCard
+                title="Active Subscriptions"
+                value={kpiActiveSubscriptions}
+                subtext="Copiers actively mirroring"
+                icon={<Link size={18} strokeWidth={2.2} />}
+                valueColor="mint"
+                loading={isLoading}
+              />
+              <KpiCard
+                title="Platform Masters"
+                value={kpiPlatformMasters}
+                subtext="Active signal providers"
+                icon={<Zap size={18} strokeWidth={2.2} />}
+                valueColor="violet"
+                loading={isLoading}
+              />
+              <KpiCard
+                title="Core Engine"
+                value="Operational"
+                subtext="All systems normal"
+                icon={<Server size={18} strokeWidth={2.2} />}
+                valueColor="mint"
+                loading={isLoading}
+              />
+            </div>
             <UserFilterChips
               value={roleFilter}
               counts={counts}

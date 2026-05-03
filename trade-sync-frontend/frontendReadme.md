@@ -267,6 +267,7 @@ Key client components:
 - Fetches users via `adminService.getUsers()` on mount
 - Same `rehydratedFromStorage` wait as the dashboard: avoids redirecting admins or flashing login before `hydrateAuth` completes
 - Guards the page with Redux auth state and redirects non-admin users away
+- **Users** tab: four **`KpiCard`** tiles above filters/table (derived only from the fetched `users` array; **`loading`** mirrors the existing fetch state): Total Users, Active Subscriptions (`SLAVE` + **`subscribedToId`**), Platform Masters (**`MASTER`** + **`isActive`**), Core Engine (static **Operational** placeholder for Phase 5.5 latency later); responsive grid (**2** columns at **≤900px**, **4** above)
 - Supports client-side role filter chips (`ALL`, `MASTER`, `SLAVE`, `ADMIN`) and search across full name, email, and license key
 - Shows page-level admin tabs: `Users` renders the table, while `Nodes`, `Audit`, and `Settings` render coming-soon stubs
 - Actions per row:
