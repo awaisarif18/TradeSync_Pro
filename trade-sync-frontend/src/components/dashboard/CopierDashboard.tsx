@@ -30,6 +30,7 @@ import {
   EmptyState,
   Pill,
   SectionEyebrow,
+  Skeleton,
   StatusPill,
 } from "../ui";
 import {
@@ -41,7 +42,7 @@ import {
 import { RootState } from "../../redux/slices/store";
 import { loginSuccess } from "../../redux/slices/authSlice";
 import { useIncomingSignals, IncomingTrade } from "../../hooks/useIncomingSignals";
-import { formatCurrency, formatVolume } from "../../lib/format";
+import { formatCurrency, formatDateTime, formatVolume } from "../../lib/format";
 
 interface MasterUser {
   id: string;
@@ -459,6 +460,127 @@ function TradeStatus({ trade }: { trade: IncomingTrade }) {
   );
 }
 
+function HistoryPnlCell({ entry }: { entry: TradeHistoryEntry }) {
+  if (entry.status !== "CLOSED") {
+    return <span className="text-[var(--color-text-3)]">—</span>;
+  }
+  if (entry.pnl === null) {
+    return <span className="text-[var(--color-text-3)]">—</span>;
+  }
+  const pnl = entry.pnl;
+  const color =
+    pnl > 0 ? "var(--color-mint)" : "var(--color-danger)";
+  return (
+    <span className="font-mono-tnum text-sm font-semibold" style={{ color }}>
+      {formatCurrency(pnl, { sign: true })}
+    </span>
+  );
+}
+
+function HistoryActionChip({ action }: { action: string }) {
+  const upper = action.toUpperCase();
+  if (upper === "BUY") {
+    return (
+      <span className="rounded bg-[var(--color-mint-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--color-mint)]">
+        BUY
+      </span>
+    );
+  }
+  if (upper === "SELL") {
+    return (
+      <span className="rounded bg-[var(--color-danger-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--color-danger)]">
+        SELL
+      </span>
+    );
+  }
+  return (
+    <span className="rounded bg-white/5 px-2 py-1 text-[11px] font-semibold text-[var(--color-text-3)]">
+      {action}
+    </span>
+  );
+}
+
+function ProviderTradeHistoryTable({
+  entries,
+  loading,
+}: {
+  entries: TradeHistoryEntry[];
+  loading: boolean;
+}) {
+  return (
+    <Card>
+      <CardBody>
+        <div className="mb-5">
+          <SectionEyebrow color="mint">PROVIDER TRADE HISTORY</SectionEyebrow>
+          <h3 className="mt-1 text-lg font-semibold">Provider Trade History</h3>
+        </div>
+
+        <div className="grid grid-cols-[minmax(140px,1fr)_minmax(80px,0.9fr)_100px_100px_100px] gap-4 border-b border-[var(--color-line)] pb-3 text-[11px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
+          <div>Time</div>
+          <div>Symbol</div>
+          <div>Action</div>
+          <div>Status</div>
+          <div className="text-right">P&amp;L</div>
+        </div>
+
+        {loading ? (
+          <div className="space-y-4 pt-4">
+            {Array.from({ length: 3 }).map((_, index) => (
+              <div
+                key={index}
+                className="grid grid-cols-[minmax(140px,1fr)_minmax(80px,0.9fr)_100px_100px_100px] items-center gap-4"
+              >
+                <Skeleton width="75%" />
+                <Skeleton width="55%" />
+                <Skeleton width="50%" />
+                <Skeleton width="45%" />
+                <Skeleton width="70%" className="ml-auto" />
+              </div>
+            ))}
+          </div>
+        ) : entries.length === 0 ? (
+          <div className="py-10 text-center text-sm text-[var(--color-text-3)]">
+            No trade history yet for this provider.
+          </div>
+        ) : (
+          entries.map((entry, index) => (
+            <div
+              key={entry.id}
+              className="grid grid-cols-[minmax(140px,1fr)_minmax(80px,0.9fr)_100px_100px_100px] items-center gap-4 py-3 text-sm"
+              style={{
+                borderBottom:
+                  index < entries.length - 1
+                    ? "1px solid var(--color-line)"
+                    : "none",
+              }}
+            >
+              <div className="font-mono-tnum text-[var(--color-text-2)]">
+                {formatDateTime(entry.createdAt)}
+              </div>
+              <div className="font-medium">{entry.symbol}</div>
+              <div>
+                <HistoryActionChip action={entry.action} />
+              </div>
+              <div>
+                {entry.status === "OPEN" ? (
+                  <span className="text-xs text-[var(--color-text-3)]">OPEN</span>
+                ) : (
+                  <span className="rounded bg-white/5 px-2 py-1 text-[11px] font-semibold text-[var(--color-text-3)]">
+                    CLOSED
+                  </span>
+                )}
+              </div>
+              <div className="text-right">
+                <HistoryPnlCell entry={entry} />
+              </div>
+            </div>
+          ))
+        )}
+      </CardBody>
+    </Card>
+  );
+}
+
 function BridgeIllustration() {
   return (
     <svg
@@ -506,6 +628,8 @@ export default function CopierDashboard() {
   >({});
   const [, setHistoryByMaster] = useState<Record<string, TradeHistoryEntry[]>>({});
   const [profileError, setProfileError] = useState<string | null>(null);
+  const [masterHistory, setMasterHistory] = useState<TradeHistoryEntry[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [currentSubscription, setCurrentSubscription] = useState<string | null>(
     user?.subscribedToId ?? null,
   );
@@ -513,6 +637,38 @@ export default function CopierDashboard() {
   useEffect(() => {
     setCurrentSubscription(user?.subscribedToId ?? null);
   }, [user?.subscribedToId]);
+
+  useEffect(() => {
+    if (!currentSubscription) {
+      setMasterHistory([]);
+      setHistoryLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setHistoryLoading(true);
+
+    profileService
+      .getMasterHistory(currentSubscription)
+      .then((data) => {
+        if (cancelled) return;
+        const rows = Array.isArray(data) ? data.slice(0, 10) : [];
+        setMasterHistory(rows);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setMasterHistory([]);
+          console.error("Failed to load provider trade history");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHistoryLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentSubscription]);
 
   useEffect(() => {
     const fetchMasters = async () => {
@@ -737,6 +893,11 @@ export default function CopierDashboard() {
           {marketplace}
 
           <IncomingSignalsTable trades={trades} todayCount={todayCount} />
+
+          <ProviderTradeHistoryTable
+            entries={masterHistory}
+            loading={historyLoading}
+          />
         </>
       ) : (
         <>

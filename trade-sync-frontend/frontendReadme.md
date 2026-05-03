@@ -489,13 +489,15 @@ Core responsibilities:
 5. Render active and empty copier dashboard states
 6. Show a live incoming-signal table from the shared socket hook
 7. **Subscribed state only:** a four-**`KpiCard`** row (same responsive grid as admin: 2 columns **≤900px**, 4 above) as the first block after **`CopierKpiStrip`**, before the active provider card. Values come only from **`useIncomingSignals`** and existing state (no new API calls): **Session P&amp;L** (`formatCurrency(sessionPnl, { sign: true })`, mint/danger by sign), **Trades Copied** (`mirroredTrades` from the hook, subtext win rate from **`trades`** CLOSED / **pnl**), **Signals Today** (`todayCount`), **Bridge Status** (Connected + provider display name when subscribed)
+8. **Subscribed state only:** **Provider Trade History** card below **`IncomingSignalsTable`**: **`profileService.getMasterHistory(currentSubscription)`** when the subscribed master id changes (`GET /trades/master/:masterId/history`); stores up to **10** **`TradeHistoryEntry`** rows, **`historyLoading`** skeleton (three placeholder rows), empty message **No trade history yet for this provider.**; compact grid columns Time (**`formatDateTime(createdAt)`**), Symbol, Action (**BUY**/**SELL** chips), Status (**OPEN** muted / **CLOSED** pill), **P&amp;L** (**`formatCurrency`** with mint only if **`pnl > 0`** on CLOSED, **`pnl === null`** shows **—**)
 
 Hooks used:
 
 - `useSelector` → current auth user
 - `useDispatch` → update user after subscribe change
-- `useState` → masters, loading, current subscription
+- `useState` → masters, loading, current subscription, **`masterHistory`**, **`historyLoading`**
 - `useEffect` → fetch active masters on mount
+- `useEffect` → fetch subscribed provider trade history via **`profileService.getMasterHistory`** when **`currentSubscription`** changes (clear when unsubscribed)
 - `useIncomingSignals` → shared `trade_execution` socket listener and signal counters
 
 Marketplace/profile components:
@@ -504,7 +506,7 @@ Marketplace/profile components:
 - Copier dashboard uses `TraderCard` in marketplace and subscribed modes
 - Active subscription card shows the selected provider, risk pill, signal count, session P&L, and unsubscribe action
 - Empty state shows a provider-selection CTA and a three-card marketplace teaser
-- All data fetched via `profileService.getMasterProfile(masterId)` and `profileService.getMasterHistory(masterId)`
+- Marketplace bootstrap **`useEffect`** still loads **`profileService.getMasterProfile(masterId)`** and **`profileService.getMasterHistory(masterId)`** for each active master on mount (existing behavior); the **Provider Trade History** UI performs its own **`profileService.getMasterHistory(currentSubscription)`** when the copier’s subscribed master id changes
 
 `handleSubscribe(masterId)` flow:
 
