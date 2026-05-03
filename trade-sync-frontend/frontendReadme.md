@@ -488,6 +488,7 @@ Core responsibilities:
 4. Sync updated `subscribedToId` back into Redux user state
 5. Render active and empty copier dashboard states
 6. Show a live incoming-signal table from the shared socket hook
+7. **Subscribed state only:** a four-**`KpiCard`** row (same responsive grid as admin: 2 columns **≤900px**, 4 above) as the first block after **`CopierKpiStrip`**, before the active provider card. Values come only from **`useIncomingSignals`** and existing state (no new API calls): **Session P&amp;L** (`formatCurrency(sessionPnl, { sign: true })`, mint/danger by sign), **Trades Copied** (`mirroredTrades` from the hook, subtext win rate from **`trades`** CLOSED / **pnl**), **Signals Today** (`todayCount`), **Bridge Status** (Connected + provider display name when subscribed)
 
 Hooks used:
 

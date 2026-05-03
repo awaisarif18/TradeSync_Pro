@@ -4,12 +4,16 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
+  Activity,
   ArrowRight,
   BadgeCheck,
   Check,
   Clock3,
+  Copy,
+  LineChart,
   Radio,
   ShieldAlert,
+  Wifi,
   Zap,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
@@ -17,6 +21,7 @@ import { toast } from "sonner";
 import TraderCard, {
   TraderCardData,
 } from "../marketplace/TraderCard";
+import { KpiCard } from "../common/KpiCard";
 import {
   Avatar,
   Button,
@@ -595,6 +600,19 @@ export default function CopierDashboard() {
   );
   const trendingCards = traderCards.slice(0, 3);
 
+  const signalWinRate = useMemo(() => {
+    const closedSignals = trades.filter(
+      (s) => s.event === "CLOSE" || s.pnl !== undefined,
+    );
+    const wins = closedSignals.filter((s) => (s.pnl ?? 0) > 0).length;
+    return closedSignals.length > 0
+      ? Math.round((wins / closedSignals.length) * 100)
+      : 0;
+  }, [trades]);
+
+  const bridgeProviderName =
+    activeProfile?.fullName ?? activeMaster?.fullName ?? "Provider";
+
   const marketplace = (
     <section className="space-y-5">
       <div className="flex items-baseline justify-between gap-4">
@@ -672,6 +690,40 @@ export default function CopierDashboard() {
 
       {isSubscribed ? (
         <>
+          <div className="mb-6 grid grid-cols-2 gap-4 min-[901px]:grid-cols-4">
+            <KpiCard
+              title="Session P&L"
+              value={formatCurrency(sessionPnl, { sign: true })}
+              subtext="Since session started"
+              icon={<LineChart size={16} strokeWidth={2.2} />}
+              valueColor={sessionPnl >= 0 ? "mint" : "danger"}
+            />
+            <KpiCard
+              title="Trades Copied"
+              value={mirroredTrades}
+              subtext={`Win rate: ${signalWinRate}%`}
+              icon={<Copy size={16} strokeWidth={2.2} />}
+              valueColor="default"
+            />
+            <KpiCard
+              title="Signals Today"
+              value={todayCount}
+              subtext="From your provider"
+              icon={<Activity size={16} strokeWidth={2.2} />}
+              valueColor="violet"
+            />
+            <KpiCard
+              title="Bridge Status"
+              value={currentSubscription ? "Connected" : "Not connected"}
+              subtext={
+                currentSubscription
+                  ? `Mirroring ${bridgeProviderName}`
+                  : "Subscribe to a provider"
+              }
+              icon={<Wifi size={16} strokeWidth={2.2} />}
+              valueColor={currentSubscription ? "mint" : "danger"}
+            />
+          </div>
           <ActiveSubscriptionCard
             profile={activeProfile}
             master={activeMaster}
