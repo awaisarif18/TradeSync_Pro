@@ -4,15 +4,16 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Activity,
-  BarChart3,
+  BarChart2,
   Check,
-  CircleDot,
+  Clock,
   Copy,
   Download,
   Users,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import { toast } from "sonner";
+import { KpiCard } from "../common/KpiCard";
 import TraderCard, { TraderCardData } from "../marketplace/TraderCard";
 import {
   Button,
@@ -265,87 +266,49 @@ function LicenseKeyBlock({ licenseKey }: { licenseKey?: string | null }) {
   );
 }
 
-function KpiIconSlot({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--color-line)] bg-white/[0.04] text-[var(--color-text-3)]">
-      {children}
-    </div>
-  );
-}
-
-function KpiCard({
-  label,
-  value,
-  sub,
-  color = "var(--color-text)",
-  icon,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  color?: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <Card>
-      <CardBody>
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="mb-3 text-[10px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
-              {label}
-            </div>
-            <div
-              className="font-mono-tnum text-4xl font-semibold leading-none tracking-[-0.02em]"
-              style={{ color }}
-            >
-              {value}
-            </div>
-            {sub ? (
-              <div className="mt-2 text-[11px] text-[var(--color-text-3)]">
-                {sub}
-              </div>
-            ) : null}
-          </div>
-          <KpiIconSlot>{icon}</KpiIconSlot>
-        </div>
-      </CardBody>
-    </Card>
-  );
-}
-
 function ProviderKpiStrip({ data }: { data: MasterDashboardData }) {
   const winRate = data.profile.winRate;
-  const winRateColor =
-    winRate > 50
-      ? "var(--color-mint)"
-      : winRate < 40
-        ? "var(--color-danger)"
-        : "var(--color-text)";
+  const winRateValueColor: "default" | "mint" | "danger" | "violet" =
+    data.profile.closedTrades === 0
+      ? "default"
+      : winRate > 50
+        ? "mint"
+        : winRate < 40
+          ? "danger"
+          : "default";
 
   return (
-    <div className="grid gap-4 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-4 min-[901px]:grid-cols-4">
       <KpiCard
-        label="Total Signals Sent"
+        title="Total Signals Sent"
         value={data.totalSignalsSent.toLocaleString()}
-        icon={<Activity size={16} strokeWidth={1.8} />}
+        icon={<Activity size={16} strokeWidth={2.2} />}
+        valueColor="default"
+        loading={false}
       />
       <KpiCard
-        label="Connected Copiers"
+        title="Connected Copiers"
         value={data.subscriberCount.toLocaleString()}
-        // TODO: replace placeholder with a live copier count endpoint when available.
-        sub="Live sub-count pending backend endpoint"
-        icon={<Users size={16} strokeWidth={1.8} />}
+        subtext="Active subscribers"
+        icon={<Users size={16} strokeWidth={2.2} />}
+        valueColor="mint"
+        loading={false}
       />
       <KpiCard
-        label="Open Trades"
+        title="Open Trades"
         value={data.openTrades.toLocaleString()}
-        icon={<CircleDot size={16} strokeWidth={1.8} />}
+        icon={<Clock size={16} strokeWidth={2.2} />}
+        valueColor="default"
+        loading={false}
       />
       <KpiCard
-        label="Win Rate"
-        value={data.profile.closedTrades > 0 ? formatPercent(winRate) : "--"}
-        color={data.profile.closedTrades > 0 ? winRateColor : "var(--color-text-3)"}
-        icon={<BarChart3 size={16} strokeWidth={1.8} />}
+        title="Win Rate"
+        value={
+          data.profile.closedTrades > 0 ? formatPercent(winRate) : "--"
+        }
+        icon={<BarChart2 size={16} strokeWidth={2.2} />}
+        valueColor={winRateValueColor}
+        loading={false}
       />
     </div>
   );

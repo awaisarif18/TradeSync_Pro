@@ -464,7 +464,7 @@ Client-side validation blocks missing name/email/password, invalid email format,
 - Overview tab shows:
 	- provider header with derived `broadcasting` or `idle` status
 	- read-only license key display with clipboard copy and Sonner feedback
-	- 4 stat cards mapped directly from `totalSignalsSent`, `subscriberCount`, `openTrades`, and `profile.winRate`
+	- 4 KPI tiles via shared `KpiCard` (`totalSignalsSent`, `subscriberCount`, `openTrades`, and `profile.winRate` with conditional win-rate coloring)
 	- performance boxes for total P&L, average volume, and closed trades
 	- recent signal history table for the last 10 trades
 	- public profile preview rendered with the shared `TraderCard` in `preview` mode
