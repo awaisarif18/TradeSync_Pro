@@ -3,8 +3,8 @@ import { ArrowUpCircle, ArrowDownCircle, Clock } from "lucide-react";
 import { useIncomingSignals } from "../../hooks/useIncomingSignals";
 
 /**
- * @deprecated Phase 5 replaced the rendered dashboard feed with IncomingSignalsTable.
- * Keep this wrapper available for older callers while sharing the same socket hook.
+ * @deprecated CopierDashboard no longer embeds this feed (Fix 5-B); subscribed copiers use ProviderTradeHistoryTable and useIncomingSignals for KPIs.
+ * Keep this wrapper for any legacy import while sharing the same socket hook.
  */
 export default function LiveTradeTable() {
   const { trades } = useIncomingSignals();

@@ -487,9 +487,9 @@ Core responsibilities:
 3. Allow subscribe/unsubscribe actions
 4. Sync updated `subscribedToId` back into Redux user state
 5. Render active and empty copier dashboard states
-6. Show a live incoming-signal table from the shared socket hook
+6. Use **`useIncomingSignals`** for **`trade_execution`** data (KPI row, **`ActiveSubscriptionCard`** stats); subscribed view does **not** render a live incoming-signals table (history-only table; see **8**)
 7. **Subscribed state only:** three **`KpiCard`** tiles (grid **2** columns **≤900px**, **3** above): **Session P&amp;L**, **Trades Copied**, **Signals Today**; values from **`useIncomingSignals`** only (no new API calls). **`CopierKpiStrip`** (Active Provider / Latency / Risk cards) is **not** rendered when subscribed. **Signals Today** subtext: **`Avg latency: Nms`** when **`avgLatency`** is set (**`server_ts`** on **`trade_execution`**), else **From your provider**
-8. **Subscribed state only:** **Provider Trade History** card below **`IncomingSignalsTable`**: **`profileService.getMasterHistory(currentSubscription)`** when the subscribed master id changes (`GET /trades/master/:masterId/history`); stores up to **10** **`TradeHistoryEntry`** rows, **`historyLoading`** skeleton (three placeholder rows), empty message **No trade history yet for this provider.**; compact grid columns Time (**`formatDateTime(createdAt)`**), Symbol, Action (**BUY**/**SELL** chips), Status (**OPEN** muted / **CLOSED** pill), **P&amp;L** (**`formatCurrency`** with mint only if **`pnl > 0`** on CLOSED, **`pnl === null`** shows **—**)
+8. **Subscribed state only:** **Provider Trade History** card below the marketplace **section**: **`profileService.getMasterHistory(currentSubscription)`** when the subscribed master id changes (`GET /trades/master/:masterId/history`); stores up to **10** **`TradeHistoryEntry`** rows, **`historyLoading`** skeleton (three placeholder rows), empty message **No trade history yet for this provider.**; compact grid columns Time (**`formatDateTime(createdAt)`**), Symbol, Action (**BUY**/**SELL** chips), Status (**OPEN** muted / **CLOSED** pill), **P&amp;L** (**`formatCurrency`** with mint only if **`pnl > 0`** on CLOSED, **`pnl === null`** shows **—**)
 
 Hooks used:
 
@@ -523,7 +523,7 @@ UI behavior:
 ### Phase 5 (copier — completed)
 
 - **KPI grid (three `KpiCard` components):** Session P&amp;L, Trades Copied (win-rate subtext from **`trades`**), Signals Today (**`avgLatency`** in subtext when available; see responsibility **7**).
-- **Provider trade history:** inline table below **`IncomingSignalsTable`**, subscribed only — **`profileService.getMasterHistory`** → **`GET /trades/master/:masterId/history`**, up to **10** rows (see responsibilities **7–8** above).
+- **Provider trade history:** inline table after marketplace when subscribed — **`profileService.getMasterHistory`** → **`GET /trades/master/:masterId/history`**, up to **10** rows (see responsibilities **7–8** above).
 - **`useIncomingSignals`** exposes **`avgLatency`** (rolling average, last **10** samples); surfaced on **Signals Today** **`KpiCard`** subtext when **`server_ts`** is present on **`trade_execution`**.
 
 ## `useIncomingSignals`
@@ -555,7 +555,7 @@ Expected trade payload fields consumed:
 
 ## `IncomingSignalsTable` and `LiveTradeTable`
 
-- `IncomingSignalsTable` is the Phase 5 visual feed inside `CopierDashboard`
+- **`CopierDashboard`** no longer renders an incoming-signals feed table (removed Fix 5-B); **`useIncomingSignals`** **`trades`** buffer remains for **`LiveTradeTable`** and KPI / card stats only.
 - `LiveTradeTable` is deprecated and retained as a compatibility wrapper around `useIncomingSignals`
 
 ---
@@ -698,7 +698,7 @@ From `package.json` / lockfile:
 5. `CopierDashboard`
 	- calls `marketplaceService`
 	- updates local + Redux subscription state
-	- renders `IncomingSignalsTable`
+	- uses **`useIncomingSignals`** for KPIs and provider card stats; subscribed layout shows **`ProviderTradeHistoryTable`** (no incoming-signals table)
 6. `admin/page.tsx`
 	- calls `adminService`
 	- updates local users table state
@@ -881,7 +881,7 @@ Aligned with **`frontend_phase5_guide.md`**:
 
 - **Shared `KpiCard`** (`src/components/common/KpiCard.tsx`): hover lift, mint border glow, icon tint on **`group-hover`**, skeleton **`loading`** state; design tokens from **`globals.css`**.
 - **Admin (`/admin`):** four KPI cards atop the Users tab — **Total Users**, **Active Subscriptions**, **Platform Masters**, **Core Engine** — all derived from **`adminService.getUsers()`** only.
-- **Copier (`CopierDashboard`):** three KPI cards when subscribed (Session P&amp;L, Trades Copied, Signals Today); **`CopierKpiStrip`** hidden when subscribed; **Provider Trade History** table (**`GET /trades/master/:masterId/history`**, up to 10 rows) below the live **`IncomingSignalsTable`**.
+- **Copier (`CopierDashboard`):** three KPI cards when subscribed (Session P&amp;L, Trades Copied, Signals Today); **`CopierKpiStrip`** hidden when subscribed; **Provider Trade History** table (**`GET /trades/master/:masterId/history`**, up to 10 rows) after marketplace (no incoming-signals feed table).
 - **Latency:** backend **`trade_execution`** optional **`server_ts`**; **`useIncomingSignals`** **`avgLatency`**; **Signals Today** **`KpiCard`** subtext **`Avg latency: Nms`** when **`avgLatency`** is non-null.
 
 ---

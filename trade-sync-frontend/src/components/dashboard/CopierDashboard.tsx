@@ -8,7 +8,6 @@ import {
   ArrowRight,
   BadgeCheck,
   Check,
-  Clock3,
   Copy,
   LineChart,
   Radio,
@@ -40,8 +39,8 @@ import {
 } from "../../services/api";
 import { RootState } from "../../redux/slices/store";
 import { loginSuccess } from "../../redux/slices/authSlice";
-import { useIncomingSignals, IncomingTrade } from "../../hooks/useIncomingSignals";
-import { formatCurrency, formatDateTime, formatVolume } from "../../lib/format";
+import { useIncomingSignals } from "../../hooks/useIncomingSignals";
+import { formatCurrency, formatDateTime } from "../../lib/format";
 
 interface MasterUser {
   id: string;
@@ -347,118 +346,6 @@ function SubscriptionStat({
   );
 }
 
-function IncomingSignalsTable({
-  trades,
-  todayCount,
-}: {
-  trades: IncomingTrade[];
-  todayCount: number;
-}) {
-  return (
-    <Card>
-      <CardBody>
-        <div className="mb-5 flex items-baseline justify-between gap-4">
-          <div>
-            <SectionEyebrow color="mint">INCOMING SIGNALS</SectionEyebrow>
-            <h3 className="mt-1 text-lg font-semibold">Live feed from your provider</h3>
-          </div>
-          <Pill variant="outline-mint">
-            <span className="font-mono-tnum">{todayCount} today</span>
-          </Pill>
-        </div>
-
-        <div className="grid grid-cols-[90px_110px_1fr_80px_1fr] gap-4 border-b border-[var(--color-line)] pb-3 text-[11px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
-          <div>Time</div>
-          <div>Order</div>
-          <div>Symbol</div>
-          <div className="text-right">Volume</div>
-          <div>Status</div>
-        </div>
-
-        {trades.length === 0 ? (
-          <div className="py-12 text-center text-sm text-[var(--color-text-3)]">
-            <Clock3 className="mx-auto mb-3 opacity-50" size={32} />
-            Waiting for live market signals...
-          </div>
-        ) : (
-          trades.map((trade, index) => (
-            <SignalRow
-              key={`${trade.master_ticket}-${trade.event}-${trade.time}-${index}`}
-              trade={trade}
-              isLast={index === trades.length - 1}
-            />
-          ))
-        )}
-      </CardBody>
-    </Card>
-  );
-}
-
-function SignalRow({
-  trade,
-  isLast,
-}: {
-  trade: IncomingTrade;
-  isLast: boolean;
-}) {
-  return (
-    <div
-      className="grid grid-cols-[90px_110px_1fr_80px_1fr] items-center gap-4 py-3 text-sm"
-      style={{ borderBottom: isLast ? "none" : "1px solid var(--color-line)" }}
-    >
-      <div className="font-mono-tnum text-[var(--color-text-3)]">{trade.time}</div>
-      <div className="font-mono-tnum text-[var(--color-text-2)]">
-        #{trade.master_ticket}
-      </div>
-      <div className="font-medium">{trade.symbol}</div>
-      <div className="font-mono-tnum text-right">{formatVolume(Number(trade.volume))}</div>
-      <TradeStatus trade={trade} />
-    </div>
-  );
-}
-
-function TradeStatus({ trade }: { trade: IncomingTrade }) {
-  if (trade.event === "CLOSE" && trade.pnl != null) {
-    const pnl = Number(trade.pnl);
-
-    return (
-      <div className="flex items-center gap-3">
-        <span className="h-2 w-2 rounded-full bg-[var(--color-text-3)]" />
-        <span className="rounded bg-white/5 px-2 py-1 text-[11px] font-semibold text-[var(--color-text-3)]">
-          CLOSED
-        </span>
-        <span
-          className="font-mono-tnum text-sm font-semibold"
-          style={{ color: pnl >= 0 ? "var(--color-mint)" : "var(--color-danger)" }}
-        >
-          {formatCurrency(pnl, { sign: true })}
-        </span>
-      </div>
-    );
-  }
-
-  if (trade.event === "OPEN") {
-    return (
-      <div className="flex items-center gap-3">
-        <span className="h-2 w-2 rounded-full bg-[var(--color-mint)] shadow-[0_0_0_3px_var(--color-mint-soft)] animate-pulse" />
-        <span className="rounded bg-[var(--color-mint-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--color-mint)]">
-          OPEN
-        </span>
-      </div>
-    );
-  }
-
-  // TODO: render IGNORED and FAILED rows once backend/client emit those states.
-  return (
-    <div className="flex items-center gap-3">
-      <span className="h-2 w-2 rounded-full bg-[var(--color-text-3)]" />
-      <span className="rounded bg-white/5 px-2 py-1 text-[11px] font-semibold text-[var(--color-text-3)]">
-        {trade.event}
-      </span>
-    </div>
-  );
-}
-
 function HistoryPnlCell({ entry }: { entry: TradeHistoryEntry }) {
   if (entry.status !== "CLOSED") {
     return <span className="text-[var(--color-text-3)]">—</span>;
@@ -511,7 +398,6 @@ function ProviderTradeHistoryTable({
       <CardBody>
         <div className="mb-5">
           <SectionEyebrow color="mint">PROVIDER TRADE HISTORY</SectionEyebrow>
-          <h3 className="mt-1 text-lg font-semibold">Provider Trade History</h3>
         </div>
 
         <div className="grid grid-cols-[minmax(140px,1fr)_minmax(80px,0.9fr)_100px_100px_100px] gap-4 border-b border-[var(--color-line)] pb-3 text-[11px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
@@ -888,8 +774,6 @@ export default function CopierDashboard() {
           />
 
           {marketplace}
-
-          <IncomingSignalsTable trades={trades} todayCount={todayCount} />
 
           <ProviderTradeHistoryTable
             entries={masterHistory}
