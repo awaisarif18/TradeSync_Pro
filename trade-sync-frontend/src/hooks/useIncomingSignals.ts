@@ -25,6 +25,8 @@ export function useIncomingSignals() {
   >("connecting");
   const latencyWindowRef = useRef<number[]>([]);
   const [avgLatency, setAvgLatency] = useState<number | null>(null);
+  /** Increments on every `trade_execution` (UI “signals today” / Pablo stats); not capped by buffer length */
+  const [sessionSignalTotal, setSessionSignalTotal] = useState(0);
 
   useEffect(() => {
     // 1. Connect to the NestJS Socket
@@ -49,6 +51,7 @@ export function useIncomingSignals() {
       };
       // Add new trade to top of list, keep max 10
       setTrades((prev) => [newTrade, ...prev].slice(0, 10));
+      setSessionSignalTotal((n) => n + 1);
 
       const signal = data as { server_ts?: unknown };
       if (signal.server_ts && typeof signal.server_ts === "number") {
@@ -72,11 +75,12 @@ export function useIncomingSignals() {
     };
   }, []);
 
-  const todayCount = useMemo(() => trades.length, [trades.length]);
+  const todayCount = sessionSignalTotal;
   const sessionPnl = useMemo(
     () =>
       trades.reduce((total, trade) => {
-        if (trade.event === "CLOSE" && typeof trade.pnl === "number") {
+        const ev = String(trade.event ?? "").toUpperCase();
+        if (ev === "CLOSE" && typeof trade.pnl === "number") {
           return total + trade.pnl;
         }
 
@@ -85,7 +89,10 @@ export function useIncomingSignals() {
     [trades],
   );
   const mirroredTrades = useMemo(
-    () => trades.filter((trade) => trade.event === "OPEN").length,
+    () =>
+      trades.filter(
+        (trade) => String(trade.event ?? "").toUpperCase() === "OPEN",
+      ).length,
     [trades],
   );
 

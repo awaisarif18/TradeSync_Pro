@@ -541,8 +541,9 @@ Realtime flow:
 3. prepend row with local timestamp
 4. keep only latest 10 entries
 5. disconnect socket on unmount
-6. expose connection state plus today count, session P&L, mirrored-trade count, and **`avgLatency`**
+6. expose connection state, **`todayCount`** (monotonic session total of **`trade_execution`** events, not capped by the 10-row buffer), session P&L, mirrored-trade count, and **`avgLatency`**
 7. **Latency (Phase 5.5):** when the payload includes optional **`server_ts`** (Unix ms from gateway), compute **`Date.now() - server_ts`**, ignore samples outside **[0, 60000)** ms, keep a rolling average of the last **10** readings, expose **`avgLatency: number | null`** (null until the first valid sample)
+8. **`sessionPnl`** / **`mirroredTrades`** treat **`event`** case-insensitively (**`OPEN`** / **`CLOSE`**)
 
 Expected trade payload fields consumed:
 

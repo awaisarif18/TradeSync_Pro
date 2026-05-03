@@ -268,7 +268,6 @@ function ActiveSubscriptionCard({
 }) {
   const name = profile?.fullName ?? master?.fullName ?? "Loading provider";
   const riskLevel = normalizeRisk(profile?.riskLevel ?? null);
-  const pnlColor = sessionPnl >= 0 ? "var(--color-mint)" : "var(--color-danger)";
   const totalPnlColor =
     profile && profile.totalPnL < 0 ? "var(--color-danger)" : "var(--color-mint)";
 
@@ -298,13 +297,19 @@ function ActiveSubscriptionCard({
                 value={profile ? formatCurrency(profile.totalPnL, { sign: true }) : "--"}
                 color={profile ? totalPnlColor : "var(--color-text-3)"}
               />
-              <SubscriptionStat label="Today's signals" value={todayCount.toString()} />
+              <SubscriptionStat
+                label="Today's signals"
+                value={String(todayCount)}
+              />
               <SubscriptionStat
                 label="Your session P&L"
-                value={formatCurrency(sessionPnl, { sign: true })}
-                color={pnlColor}
+                value={formatCurrency(sessionPnl ?? 0, { sign: true })}
+                color={(sessionPnl ?? 0) >= 0 ? "var(--color-mint)" : "var(--color-danger)"}
               />
-              <SubscriptionStat label="Mirrored trades" value={mirroredTrades.toString()} />
+              <SubscriptionStat
+                label="Mirrored trades"
+                value={String(mirroredTrades ?? 0)}
+              />
             </div>
           </div>
 
@@ -649,7 +654,9 @@ export default function CopierDashboard() {
 
   const signalWinRate = useMemo(() => {
     const closedSignals = trades.filter(
-      (s) => s.event === "CLOSE" || s.pnl !== undefined,
+      (s) =>
+        String(s.event ?? "").toUpperCase() === "CLOSE" ||
+        s.pnl !== undefined,
     );
     const wins = closedSignals.filter((s) => (s.pnl ?? 0) > 0).length;
     return closedSignals.length > 0
