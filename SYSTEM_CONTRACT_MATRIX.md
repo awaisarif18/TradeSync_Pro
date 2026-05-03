@@ -86,7 +86,7 @@ JWT enforcement contract for web REST:
 |---|---|---|---|---|---|---|
 | /auth/register | POST | AuthController.register | Frontend register forms | { fullName, email, password, role, licenseKey? } | { access_token, user } | Public. Password hashed at rest. Role is MASTER or SLAVE from frontend forms |
 | /auth/login | POST | AuthController.login | Frontend LoginForm | { email, password } | { access_token, user } | Public. Used to populate Redux auth user + `tsp_access_token` |
-| /auth/users | GET | AuthController.getAllUsers | Frontend admin page | none | user[] (selected fields only) | **JWT required.** Role ADMIN only |
+| /auth/users | GET | AuthController.getAllUsers | Frontend admin page | none | user[] (id, fullName, email, role, isActive, licenseKey, createdAt, subscribedToId) | **JWT required.** Role ADMIN only. `subscribedToId` supports admin **Active Subscriptions** KPI (copiers with a non-null master id). |
 | /auth/users/:id/license | POST | AuthController.generateLicense | Frontend admin page | none | { message, licenseKey } | **JWT required.** Role ADMIN only |
 | /auth/users/:id/toggle-status | PATCH | AuthController.toggleStatus | Frontend admin page | none | { message, isActive } | **JWT required.** Role ADMIN only |
 | /auth/verify-node | POST | AuthController.verifyNode | Python Master/Slave controllers | { role, identifier, trace_id? } | { message, role, fullName, id, trace_id? } | **Public.** Pre-flight gate before MT5 operations |

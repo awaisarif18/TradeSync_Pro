@@ -17,7 +17,7 @@ export interface IncomingTrade {
   server_ts?: number;
 }
 
-export function useIncomingSignals() {
+export function useIncomingSignals(userEmail?: string | null) {
   const [trades, setTrades] = useState<IncomingTrade[]>([]);
   const [isConnected, setIsConnected] = useState(false);
   const [connectionState, setConnectionState] = useState<
@@ -36,6 +36,12 @@ export function useIncomingSignals() {
       console.log("Web Dashboard Connected to Socket");
       setIsConnected(true);
       setConnectionState("connected");
+      if (userEmail) {
+        socket.emit("register_node", {
+          role: "SLAVE",
+          identifier: userEmail,
+        });
+      }
     });
 
     socket.on("disconnect", () => {
@@ -73,7 +79,7 @@ export function useIncomingSignals() {
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [userEmail]);
 
   const todayCount = sessionSignalTotal;
   const sessionPnl = useMemo(

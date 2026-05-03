@@ -331,7 +331,7 @@ Base route prefix: `/auth`
 
 3. `getAllUsers()`
 	- Returns selected fields only:
-	  - `id, fullName, email, role, isActive, licenseKey, createdAt`
+	  - `id, fullName, email, role, isActive, licenseKey, createdAt, subscribedToId`
 	- Excludes password
 	- Sorts newest first
 

@@ -515,7 +515,7 @@ export default function CopierDashboard() {
     sessionPnl,
     mirroredTrades,
     avgLatency,
-  } = useIncomingSignals();
+  } = useIncomingSignals(user?.email);
 
   const [masters, setMasters] = useState<MasterUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);

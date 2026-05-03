@@ -4,11 +4,8 @@ import { useRouter } from "next/navigation";
 import {
   Link,
   Search,
-  ScrollText,
   Server,
-  Settings,
   ShieldAlert,
-  ServerCog,
   Users,
   Zap,
 } from "lucide-react";
@@ -20,7 +17,6 @@ import { KpiCard } from "../../components/common/KpiCard";
 import { Button, Card, CardBody, EmptyState, Input, Pill, RoleBadge, Skeleton } from "../../components/ui";
 
 type AdminRoleFilter = "ALL" | "MASTER" | "SLAVE" | "ADMIN";
-type AdminTab = "users" | "nodes" | "audit" | "settings";
 type UserRole = "MASTER" | "SLAVE" | "ADMIN";
 type ActionKey = "license" | "status";
 
@@ -47,13 +43,6 @@ const FILTERS: Array<{ value: AdminRoleFilter; label: string; countKey: keyof Us
   { value: "ADMIN", label: "Admins", countKey: "admins" },
 ];
 
-const ADMIN_TABS: Array<{ value: AdminTab; label: string; disabled?: boolean }> = [
-  { value: "users", label: "Users" },
-  { value: "nodes", label: "Nodes", disabled: true },
-  { value: "audit", label: "Audit", disabled: true },
-  { value: "settings", label: "Settings", disabled: true },
-];
-
 type UserCounts = {
   all: number;
   masters: number;
@@ -78,42 +67,6 @@ function responseMessage(error: unknown, fallback: string) {
   }
 
   return fallback;
-}
-
-function AdminTabs({
-  activeTab,
-  onChange,
-}: {
-  activeTab: AdminTab;
-  onChange: (tab: AdminTab) => void;
-}) {
-  return (
-    <div className="border-b border-[var(--color-line)]">
-      <div className="mx-auto flex max-w-[1240px] gap-7 px-8">
-        {ADMIN_TABS.map((tab) => {
-          const active = activeTab === tab.value;
-
-          return (
-            <button
-              key={tab.value}
-              type="button"
-              onClick={() => onChange(tab.value)}
-              className="py-3 text-sm font-medium"
-              style={{
-                color: active ? "var(--color-text)" : "var(--color-text-2)",
-                borderBottom: active
-                  ? "2px solid var(--color-mint)"
-                  : "2px solid transparent",
-                fontStyle: tab.disabled ? "italic" : "normal",
-              }}
-            >
-              {tab.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 function HeaderStat({ label, value }: { label: string; value: number }) {
@@ -395,50 +348,6 @@ function LoadingTable() {
   );
 }
 
-function AdminStubs() {
-  const stubs = [
-    {
-      title: "Nodes",
-      icon: <ServerCog size={24} />,
-      description:
-        "Real-time view of every connected desktop client, their health state, last signal received, and reconnect history.",
-    },
-    {
-      title: "Audit",
-      icon: <ScrollText size={24} />,
-      description:
-        "Searchable log of every privileged action: license generations, status toggles, profile changes, with operator attribution and timestamps.",
-    },
-    {
-      title: "Settings",
-      icon: <Settings size={24} />,
-      description:
-        "Platform-wide controls: license key prefix, default risk caps, broadcast policies, and CORS origin allowlist.",
-    },
-  ];
-
-  return (
-    <div className="grid gap-5 md:grid-cols-3">
-      {stubs.map((stub) => (
-        <Card key={stub.title} style={{ opacity: 0.5 }}>
-          <CardBody>
-            <div className="mb-4 flex justify-end text-xs italic text-[var(--color-text-3)]">
-              disabled
-            </div>
-            <div className="flex flex-col items-center text-center">
-              <div className="mb-4 text-[var(--color-text-3)]">{stub.icon}</div>
-              <h3 className="text-lg font-semibold">Coming soon</h3>
-              <p className="mt-3 text-sm leading-6 text-[var(--color-text-2)]">
-                {stub.description}
-              </p>
-            </div>
-          </CardBody>
-        </Card>
-      ))}
-    </div>
-  );
-}
-
 export default function AdminDashboard() {
   const { isAuthenticated, user, rehydratedFromStorage } = useSelector(
     (state: RootState) => state.auth,
@@ -447,7 +356,6 @@ export default function AdminDashboard() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AdminTab>("users");
   const [roleFilter, setRoleFilter] = useState<AdminRoleFilter>("ALL");
   const [search, setSearch] = useState("");
   const [loadingAction, setLoadingAction] = useState<LoadingAction>(null);
@@ -569,78 +477,71 @@ export default function AdminDashboard() {
 
   return (
     <div className="animate-in fade-in duration-500">
-      <AdminTabs activeTab={activeTab} onChange={setActiveTab} />
       <div className="mx-auto max-w-[1240px] space-y-6 px-8 py-8 pb-20">
         <PageHeader users={users} />
 
-        {activeTab === "users" ? (
-          <>
-            <div className="mb-6 grid grid-cols-2 gap-4 min-[901px]:grid-cols-4">
-              <KpiCard
-                title="Total Users"
-                value={users.length}
-                subtext={`${kpiMastersCount} Masters / ${kpiSlavesCount} Copiers`}
-                icon={<Users size={18} strokeWidth={2.2} />}
-                valueColor="default"
-                loading={isLoading}
-              />
-              <KpiCard
-                title="Active Subscriptions"
-                value={kpiActiveSubscriptions}
-                subtext="Copiers actively mirroring"
-                icon={<Link size={18} strokeWidth={2.2} />}
-                valueColor="mint"
-                loading={isLoading}
-              />
-              <KpiCard
-                title="Platform Masters"
-                value={kpiPlatformMasters}
-                subtext="Active signal providers"
-                icon={<Zap size={18} strokeWidth={2.2} />}
-                valueColor="violet"
-                loading={isLoading}
-              />
-              <KpiCard
-                title="Core Engine"
-                value="Operational"
-                subtext="All systems normal"
-                icon={<Server size={18} strokeWidth={2.2} />}
-                valueColor="mint"
-                loading={isLoading}
-              />
-            </div>
-            <UserFilterChips
-              value={roleFilter}
-              counts={counts}
-              search={search}
-              onChange={setRoleFilter}
-              onSearchChange={setSearch}
+        <div className="mb-6 grid grid-cols-2 gap-4 min-[901px]:grid-cols-4">
+          <KpiCard
+            title="Total Users"
+            value={users.length}
+            subtext={`${kpiMastersCount} Masters / ${kpiSlavesCount} Copiers`}
+            icon={<Users size={18} strokeWidth={2.2} />}
+            valueColor="default"
+            loading={isLoading}
+          />
+          <KpiCard
+            title="Active Subscriptions"
+            value={kpiActiveSubscriptions}
+            subtext="Copiers actively mirroring"
+            icon={<Link size={18} strokeWidth={2.2} />}
+            valueColor="mint"
+            loading={isLoading}
+          />
+          <KpiCard
+            title="Platform Masters"
+            value={kpiPlatformMasters}
+            subtext="Active signal providers"
+            icon={<Zap size={18} strokeWidth={2.2} />}
+            valueColor="violet"
+            loading={isLoading}
+          />
+          <KpiCard
+            title="Core Engine"
+            value="Operational"
+            subtext="All systems normal"
+            icon={<Server size={18} strokeWidth={2.2} />}
+            valueColor="mint"
+            loading={isLoading}
+          />
+        </div>
+        <UserFilterChips
+          value={roleFilter}
+          counts={counts}
+          search={search}
+          onChange={setRoleFilter}
+          onSearchChange={setSearch}
+        />
+        {isLoading ? (
+          <LoadingTable />
+        ) : error ? (
+          <Card>
+            <EmptyState
+              icon={<ShieldAlert size={22} />}
+              title="Admin users could not be loaded."
+              description={error}
+              action={<Button onClick={fetchUsers}>Retry</Button>}
             />
-            {isLoading ? (
-              <LoadingTable />
-            ) : error ? (
-              <Card>
-                <EmptyState
-                  icon={<ShieldAlert size={22} />}
-                  title="Admin users could not be loaded."
-                  description={error}
-                  action={<Button onClick={fetchUsers}>Retry</Button>}
-                />
-              </Card>
-            ) : (
-              <div className="overflow-x-auto">
-                <UserTable
-                  users={visibleUsers}
-                  loadingAction={loadingAction}
-                  onIssueLicense={handleGenerateLicense}
-                  onRegenerate={handleGenerateLicense}
-                  onToggleStatus={handleToggleStatus}
-                />
-              </div>
-            )}
-          </>
+          </Card>
         ) : (
-          <AdminStubs />
+          <div className="overflow-x-auto">
+            <UserTable
+              users={visibleUsers}
+              loadingAction={loadingAction}
+              onIssueLicense={handleGenerateLicense}
+              onRegenerate={handleGenerateLicense}
+              onToggleStatus={handleToggleStatus}
+            />
+          </div>
         )}
       </div>
     </div>

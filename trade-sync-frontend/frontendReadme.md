@@ -152,7 +152,7 @@ trade-sync-frontend/
 	│     ├─ TradeHistoryModal.tsx     # Design-system trade history modal with filters and aggregates
 	│     └─ PnLChart.tsx              # Cumulative PnL visualization via recharts (Phase 6)
 	├─ hooks/
-	│  └─ useIncomingSignals.ts        # trade_execution listener; rolling avgLatency from optional server_ts (Phase 5.5)
+	│  └─ useIncomingSignals.ts        # Socket: register_node (SLAVE + email) on connect; trade_execution; rolling avgLatency from optional server_ts (Phase 5.5 / 5-E)
 	├─ redux/
 	│  └─ slices/
 	│     ├─ authSlice.ts              # Auth state + reducers
@@ -267,26 +267,17 @@ Key client components:
 - Fetches users via `adminService.getUsers()` on mount
 - Same `rehydratedFromStorage` wait as the dashboard: avoids redirecting admins or flashing login before `hydrateAuth` completes
 - Guards the page with Redux auth state and redirects non-admin users away
-- **Phase 5 KPI grid (four `KpiCard` tiles, no extra HTTP calls):** **Total Users**, **Active Subscriptions** (`SLAVE` + **`subscribedToId`**), **Platform Masters** (`MASTER` + **`isActive`**), **Core Engine** (static **Operational**); all values derived from the in-memory **`users`** array returned by **`getUsers()`**; **`loading={isLoading}`** on each card; responsive grid (**2** columns at **≤900px**, **4** above), placed above role filter chips and search and the user table
+- **Phase 5 KPI grid (four `KpiCard` tiles, no extra HTTP calls):** **Total Users**, **Active Subscriptions** (`SLAVE` + truthy **`subscribedToId`** from **`GET /auth/users`**), **Platform Masters** (`MASTER` + **`isActive`**), **Core Engine** (static **Operational**); all values derived from the in-memory **`users`** array returned by **`getUsers()`**; **`loading={isLoading}`** on each card; responsive grid (**2** columns at **≤900px**, **4** above), placed above role filter chips and search and the user table
 - Supports client-side role filter chips (`ALL`, `MASTER`, `SLAVE`, `ADMIN`) and search across full name, email, and license key
-- Shows page-level admin tabs: `Users` renders the table, while `Nodes`, `Audit`, and `Settings` render coming-soon stubs
+- Single-page users console (no placeholder **Users / Nodes / Audit / Settings** sub-nav); future admin sections can add routes when built
 - Actions per row:
 - issue or regenerate master license keys via `POST /auth/users/:id/license`
 - toggle user active/disabled status via `PATCH /auth/users/:id/toggle-status`
-- Uses local state for users, loading, filter, search, active tab, and per-button loading
+- Uses local state for users, loading, filter, search, and per-button loading
 - Uses `RoleBadge` for relabeled `Provider`, `Copier`, and `Admin` role display
 - License keys render only as mono mint-soft pills in the table
 - Admin rows render `Protected` instead of action buttons
 - Uses Sonner toasts for action results; no `alert()` calls remain in the admin flow
-
-### Admin nested links exposed in horizontal tabs
-
-The admin page shows:
-
-- active `Users` tab
-- disabled-style placeholders for future `Nodes`, `Audit`, and `Settings`
-
-Only `/admin` page exists right now. Future tabs should become links when their pages are added.
 
 ---
 
@@ -487,7 +478,7 @@ Core responsibilities:
 3. Allow subscribe/unsubscribe actions
 4. Sync updated `subscribedToId` back into Redux user state
 5. Render active and empty copier dashboard states
-6. Use **`useIncomingSignals`** for **`trade_execution`** data (KPI row, **`ActiveSubscriptionCard`** stats); subscribed view does **not** render a live incoming-signals table (history-only table; see **8**)
+6. Use **`useIncomingSignals(user?.email)`** for **`trade_execution`** data (KPI row, **`ActiveSubscriptionCard`** stats); the hook emits **`register_node`** on socket connect so the copier joins the provider room; subscribed view does **not** render a live incoming-signals table (history-only table; see **8**)
 7. **Subscribed state only:** three **`KpiCard`** tiles (grid **2** columns **≤900px**, **3** above): **Session P&amp;L**, **Trades Copied**, **Signals Today**; values from **`useIncomingSignals`** only (no new API calls). **`CopierKpiStrip`** (Active Provider / Latency / Risk cards) is **not** rendered when subscribed. **Signals Today** subtext: **`Avg latency: Nms`** when **`avgLatency`** is set (**`server_ts`** on **`trade_execution`**), else **From your provider**
 8. **Subscribed state only:** **Provider Trade History** card below the marketplace **section**: **`profileService.getMasterHistory(currentSubscription)`** when the subscribed master id changes (`GET /trades/master/:masterId/history`); stores up to **10** **`TradeHistoryEntry`** rows, **`historyLoading`** skeleton (three placeholder rows), empty message **No trade history yet for this provider.**; compact grid columns Time (**`formatDateTime(createdAt)`**), Symbol, Action (**BUY**/**SELL** chips), Status (**OPEN** muted / **CLOSED** pill), **P&amp;L** (**`formatCurrency`** with mint only if **`pnl > 0`** on CLOSED, **`pnl === null`** shows **—**)
 
@@ -537,13 +528,14 @@ Hooks:
 Realtime flow:
 
 1. connect to `io('http://localhost:3000')`
-2. listen for `trade_execution` events
-3. prepend row with local timestamp
-4. keep only latest 10 entries
-5. disconnect socket on unmount
-6. expose connection state, **`todayCount`** (monotonic session total of **`trade_execution`** events, not capped by the 10-row buffer), session P&L, mirrored-trade count, and **`avgLatency`**
-7. **Latency (Phase 5.5):** when the payload includes optional **`server_ts`** (Unix ms from gateway), compute **`Date.now() - server_ts`**, ignore samples outside **[0, 60000)** ms, keep a rolling average of the last **10** readings, expose **`avgLatency: number | null`** (null until the first valid sample)
-8. **`sessionPnl`** / **`mirroredTrades`** treat **`event`** case-insensitively (**`OPEN`** / **`CLOSE`**)
+2. on **`connect`**, if **`userEmail`** is set (copier logged in), emit **`register_node`** with **`{ role: 'SLAVE', identifier: userEmail }`** so the gateway joins **`room_master_<subscribedToId>`** (see **`SYSTEM_CONTRACT_MATRIX.md`** §4.2). **`CopierDashboard`** passes **`user?.email`**. Optional arg; callers without email still connect but do not join a master room.
+3. listen for `trade_execution` events
+4. prepend row with local timestamp
+5. keep only latest 10 entries
+6. disconnect socket on unmount
+7. expose connection state, **`todayCount`** (monotonic session total of **`trade_execution`** events, not capped by the 10-row buffer), session P&L, mirrored-trade count, and **`avgLatency`**
+8. **Latency (Phase 5.5):** when the payload includes optional **`server_ts`** (Unix ms from gateway), compute **`Date.now() - server_ts`**, ignore samples outside **[0, 60000)** ms, keep a rolling average of the last **10** readings, expose **`avgLatency: number | null`** (null until the first valid sample)
+9. **`sessionPnl`** / **`mirroredTrades`** treat **`event`** case-insensitively (**`OPEN`** / **`CLOSE`**)
 
 Expected trade payload fields consumed:
 
@@ -715,10 +707,7 @@ From `package.json` / lockfile:
 
 These are present in current source and should be considered before new coding:
 
-1. Admin tabs include disabled placeholders for future pages:
-	- `Nodes`, `Audit`, `Settings`
-
-2. `Navbar` mobile menu state exists but no mobile link panel is rendered.
+1. `Navbar` mobile menu state exists but no mobile link panel is rendered.
 
 These are not documentation errors; they reflect current code reality.
 
@@ -749,7 +738,7 @@ If using AI to generate code changes, apply these constraints:
 2. Keep Redux state shape backward-compatible (`user`, `isAuthenticated`, `subscribedToId`, and `rehydratedFromStorage` for session hydration).
 3. Do not rename `loginSuccess` reducer without updating all auth forms and marketplace update flow.
 4. If moving API base URL to env vars, keep current default behavior for local dev.
-5. If adding admin pages (`/nodes`, `/audit`, `/settings`), convert the disabled admin tabs into links.
+5. If adding admin pages (`/nodes`, `/audit`, `/settings`), wire them from the main shell or a dedicated admin layout as new routes.
 6. If changing socket logic, preserve display behavior expected by `useIncomingSignals` and `LiveTradeTable`.
 7. Prefer additive changes over destructive refactors.
 8. Update this document whenever API contracts, state shape, or route behavior changes.
@@ -816,7 +805,7 @@ Phase 6 implementation added the legacy master profile card grid and trade histo
 1. Fix `RootState` import path inconsistencies.
 2. Keep toasts as the only user-facing error surface (no `alert()` in `src/`).
 3. Add API request typing instead of broad `any` usage.
-4. Implement future admin tabs for nodes, audit logs, and settings.
+4. Add dedicated admin routes or sections for nodes, audit logs, and settings when those features ship.
 5. Centralize socket management if multiple realtime widgets are added.
 
 ---

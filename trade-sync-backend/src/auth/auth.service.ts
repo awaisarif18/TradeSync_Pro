@@ -196,6 +196,7 @@ export class AuthService {
           'isActive',
           'licenseKey',
           'createdAt',
+          'subscribedToId',
         ],
         order: { createdAt: 'DESC' }, // Newest users first
       });
