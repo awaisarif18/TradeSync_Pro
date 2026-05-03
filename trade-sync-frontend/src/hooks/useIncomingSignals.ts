@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { io } from "socket.io-client";
 
 export interface IncomingTrade {
@@ -13,6 +13,8 @@ export interface IncomingTrade {
   signalId?: number;
   trace_id?: string;
   time: string;
+  /** Unix ms from gateway emit; optional — used for client latency estimate */
+  server_ts?: number;
 }
 
 export function useIncomingSignals() {
@@ -21,6 +23,8 @@ export function useIncomingSignals() {
   const [connectionState, setConnectionState] = useState<
     "connecting" | "connected" | "disconnected"
   >("connecting");
+  const latencyWindowRef = useRef<number[]>([]);
+  const [avgLatency, setAvgLatency] = useState<number | null>(null);
 
   useEffect(() => {
     // 1. Connect to the NestJS Socket
@@ -45,6 +49,22 @@ export function useIncomingSignals() {
       };
       // Add new trade to top of list, keep max 10
       setTrades((prev) => [newTrade, ...prev].slice(0, 10));
+
+      const signal = data as { server_ts?: unknown };
+      if (signal.server_ts && typeof signal.server_ts === "number") {
+        const latency = Date.now() - signal.server_ts;
+        if (latency >= 0 && latency < 60_000) {
+          latencyWindowRef.current = [
+            ...latencyWindowRef.current.slice(-9),
+            latency,
+          ];
+          const avg = Math.round(
+            latencyWindowRef.current.reduce((a, b) => a + b, 0) /
+              latencyWindowRef.current.length,
+          );
+          setAvgLatency(avg);
+        }
+      }
     });
 
     return () => {
@@ -76,5 +96,6 @@ export function useIncomingSignals() {
     todayCount,
     sessionPnl,
     mirroredTrades,
+    avgLatency,
   };
 }

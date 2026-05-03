@@ -618,8 +618,14 @@ export default function CopierDashboard() {
   const dispatch = useDispatch();
   const router = useRouter();
   const user = useSelector((state: RootState) => state.auth.user);
-  const { trades, connectionState, todayCount, sessionPnl, mirroredTrades } =
-    useIncomingSignals();
+  const {
+    trades,
+    connectionState,
+    todayCount,
+    sessionPnl,
+    mirroredTrades,
+    avgLatency,
+  } = useIncomingSignals();
 
   const [masters, setMasters] = useState<MasterUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -873,7 +879,9 @@ export default function CopierDashboard() {
               value={currentSubscription ? "Connected" : "Not connected"}
               subtext={
                 currentSubscription
-                  ? `Mirroring ${bridgeProviderName}`
+                  ? avgLatency !== null
+                    ? `Avg latency: ${avgLatency}ms`
+                    : `Mirroring ${bridgeProviderName}`
                   : "Subscribe to a provider"
               }
               icon={<Wifi size={16} strokeWidth={2.2} />}

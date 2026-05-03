@@ -307,6 +307,7 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
       ...data,
       trace_id: traceId,
       signalId: oldSignalId,
+      server_ts: Date.now(),
     });
 
     this.log('log', 'trade_execution_broadcasted', {

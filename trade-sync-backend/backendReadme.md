@@ -498,7 +498,7 @@ Flow:
 
 4. Broadcast:
 	- emits `trade_execution` to room `room_master_${masterUser.id}`
-	- payload: original data + `signalId: oldSignalId`
+	- payload now includes optional `server_ts: Date.now()` for client-side latency measurement (Phase 5, additive). All existing consumers are safe; required payload keys unchanged. Also merges **`signalId: oldSignalId`** and propagates original signal fields.
 
 This creates a room-based fanout model where each master has an isolated channel and subscribed slaves listen to that channel.
 

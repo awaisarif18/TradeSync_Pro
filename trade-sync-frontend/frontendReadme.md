@@ -106,7 +106,7 @@ trade-sync-frontend/
 	│  │  ├─ Button.tsx                # Reusable button with loading state
 	│  │  ├─ Input.tsx                 # Reusable input with optional label
 	│  │  ├─ Card.tsx                  # Metric card used in dashboards
-	│  │  └─ KpiCard.tsx               # Phase 5 KPI widget; hover + skeleton (admin/copier dashboards)
+	│  │  └─ KpiCard.tsx               # Shared premium KPI widget (lift + glow + icon pop + skeleton); admin + copier dashboards
 	│  ├─ layout/
 	│  │  ├─ ReduxProvider.tsx         # App-level Redux Provider wrapper
 	│  │  ├─ Navbar.tsx                # Legacy top nav retained for reference
@@ -152,7 +152,7 @@ trade-sync-frontend/
 	│     ├─ TradeHistoryModal.tsx     # Design-system trade history modal with filters and aggregates
 	│     └─ PnLChart.tsx              # Cumulative PnL visualization via recharts (Phase 6)
 	├─ hooks/
-	│  └─ useIncomingSignals.ts        # Shared trade_execution socket listener for dashboard feeds
+	│  └─ useIncomingSignals.ts        # trade_execution listener; rolling avgLatency from optional server_ts (Phase 5.5)
 	├─ redux/
 	│  └─ slices/
 	│     ├─ authSlice.ts              # Auth state + reducers
@@ -267,7 +267,7 @@ Key client components:
 - Fetches users via `adminService.getUsers()` on mount
 - Same `rehydratedFromStorage` wait as the dashboard: avoids redirecting admins or flashing login before `hydrateAuth` completes
 - Guards the page with Redux auth state and redirects non-admin users away
-- **Users** tab: four **`KpiCard`** tiles above filters/table (derived only from the fetched `users` array; **`loading`** mirrors the existing fetch state): Total Users, Active Subscriptions (`SLAVE` + **`subscribedToId`**), Platform Masters (**`MASTER`** + **`isActive`**), Core Engine (static **Operational** placeholder for Phase 5.5 latency later); responsive grid (**2** columns at **≤900px**, **4** above)
+- **Phase 5 KPI grid (four `KpiCard` tiles, no extra HTTP calls):** **Total Users**, **Active Subscriptions** (`SLAVE` + **`subscribedToId`**), **Platform Masters** (`MASTER` + **`isActive`**), **Core Engine** (static **Operational**); all values derived from the in-memory **`users`** array returned by **`getUsers()`**; **`loading={isLoading}`** on each card; responsive grid (**2** columns at **≤900px**, **4** above), placed above role filter chips and search and the user table
 - Supports client-side role filter chips (`ALL`, `MASTER`, `SLAVE`, `ADMIN`) and search across full name, email, and license key
 - Shows page-level admin tabs: `Users` renders the table, while `Nodes`, `Audit`, and `Settings` render coming-soon stubs
 - Actions per row:
@@ -488,7 +488,7 @@ Core responsibilities:
 4. Sync updated `subscribedToId` back into Redux user state
 5. Render active and empty copier dashboard states
 6. Show a live incoming-signal table from the shared socket hook
-7. **Subscribed state only:** a four-**`KpiCard`** row (same responsive grid as admin: 2 columns **≤900px**, 4 above) as the first block after **`CopierKpiStrip`**, before the active provider card. Values come only from **`useIncomingSignals`** and existing state (no new API calls): **Session P&amp;L** (`formatCurrency(sessionPnl, { sign: true })`, mint/danger by sign), **Trades Copied** (`mirroredTrades` from the hook, subtext win rate from **`trades`** CLOSED / **pnl**), **Signals Today** (`todayCount`), **Bridge Status** (Connected + provider display name when subscribed)
+7. **Subscribed state only:** a four-**`KpiCard`** row (same responsive grid as admin: 2 columns **≤900px**, 4 above) as the first block after **`CopierKpiStrip`**, before the active provider card. Values come only from **`useIncomingSignals`** and existing state (no new API calls): **Session P&amp;L** (`formatCurrency(sessionPnl, { sign: true })`, mint/danger by sign), **Trades Copied** (`mirroredTrades` from the hook, subtext win rate from **`trades`** CLOSED / **pnl**), **Signals Today** (`todayCount`), **Bridge Status** (Connected; subtext **`Avg latency: Nms`** from **`avgLatency`** once **`server_ts`** samples exist, else **Mirroring {name}**)
 8. **Subscribed state only:** **Provider Trade History** card below **`IncomingSignalsTable`**: **`profileService.getMasterHistory(currentSubscription)`** when the subscribed master id changes (`GET /trades/master/:masterId/history`); stores up to **10** **`TradeHistoryEntry`** rows, **`historyLoading`** skeleton (three placeholder rows), empty message **No trade history yet for this provider.**; compact grid columns Time (**`formatDateTime(createdAt)`**), Symbol, Action (**BUY**/**SELL** chips), Status (**OPEN** muted / **CLOSED** pill), **P&amp;L** (**`formatCurrency`** with mint only if **`pnl > 0`** on CLOSED, **`pnl === null`** shows **—**)
 
 Hooks used:
@@ -520,11 +520,18 @@ UI behavior:
 - If already subscribed, that provider card renders in subscribed mode and other cards can replace the subscription
 - Unsubscribe action uses `masterId = null`
 
+### Phase 5 (copier — completed)
+
+- **KPI grid (four `KpiCard` components):** Session P&amp;L, Trades Copied (mirrored opens + win-rate subtext from **`trades`**), Signals Today, Bridge Status (**`avgLatency`** shown as **`Avg latency: Nms`** in subtext once **`trade_execution`** includes **`server_ts`** and samples exist; otherwise **Mirroring {provider}**).
+- **Provider trade history:** inline table below **`IncomingSignalsTable`**, subscribed only — **`profileService.getMasterHistory`** → **`GET /trades/master/:masterId/history`**, up to **10** rows (see responsibilities **7–8** above).
+- **`useIncomingSignals`** exposes **`avgLatency`** (rolling average, last **10** samples); consumed by the Bridge Status card per above.
+
 ## `useIncomingSignals`
 
 Hooks:
 
-- `useState<Trade[]>`
+- `useState<IncomingTrade[]>`
+- `useRef<number[]>` — rolling buffer for latency samples
 - `useEffect` for socket lifecycle
 
 Realtime flow:
@@ -534,12 +541,8 @@ Realtime flow:
 3. prepend row with local timestamp
 4. keep only latest 10 entries
 5. disconnect socket on unmount
-6. expose connection state plus today count, session P&L, and mirrored-trade count
-
-## `IncomingSignalsTable` and `LiveTradeTable`
-
-- `IncomingSignalsTable` is the Phase 5 visual feed inside `CopierDashboard`
-- `LiveTradeTable` is deprecated and retained as a compatibility wrapper around `useIncomingSignals`
+6. expose connection state plus today count, session P&L, mirrored-trade count, and **`avgLatency`**
+7. **Latency (Phase 5.5):** when the payload includes optional **`server_ts`** (Unix ms from gateway), compute **`Date.now() - server_ts`**, ignore samples outside **[0, 60000)** ms, keep a rolling average of the last **10** readings, expose **`avgLatency: number | null`** (null until the first valid sample)
 
 Expected trade payload fields consumed:
 
@@ -548,6 +551,12 @@ Expected trade payload fields consumed:
 - `action`
 - `volume`
 - `master_ticket`
+- optional **`server_ts`** (see **`SYSTEM_CONTRACT_MATRIX.md`** `trade_execution` schema)
+
+## `IncomingSignalsTable` and `LiveTradeTable`
+
+- `IncomingSignalsTable` is the Phase 5 visual feed inside `CopierDashboard`
+- `LiveTradeTable` is deprecated and retained as a compatibility wrapper around `useIncomingSignals`
 
 ---
 
@@ -863,6 +872,17 @@ Shipped items aligned with `frontend_phase4_guide.md`, with implementation notes
 - **4.5 FooterStrip:** Full **3-column** marketing footer + legal strip (`FooterStrip` export name unchanged).
 - **4.6 ContactSection:** **`id="contact"`**; Formspree JSON **`fetch`** POST; primary **Button** submit with loading state.
 - **4.7 Docs:** This section plus **`SYSTEM_CONTRACT_MATRIX.md`** updates for **`/trades/history`** consumers.
+
+---
+
+## 23) Phase 5: KPI dashboards + live trade history + latency measurement (Completed)
+
+Aligned with **`frontend_phase5_guide.md`**:
+
+- **Shared `KpiCard`** (`src/components/common/KpiCard.tsx`): hover lift, mint border glow, icon tint on **`group-hover`**, skeleton **`loading`** state; design tokens from **`globals.css`**.
+- **Admin (`/admin`):** four KPI cards atop the Users tab — **Total Users**, **Active Subscriptions**, **Platform Masters**, **Core Engine** — all derived from **`adminService.getUsers()`** only.
+- **Copier (`CopierDashboard`):** four KPI cards when subscribed (Session P&amp;L, Trades Copied, Signals Today, Bridge Status); **Provider Trade History** table (**`GET /trades/master/:masterId/history`**, up to 10 rows) below the live **`IncomingSignalsTable`**.
+- **Latency:** backend **`trade_execution`** emit adds optional **`server_ts`** (see **`SYSTEM_CONTRACT_MATRIX.md`**); **`useIncomingSignals`** computes **`avgLatency`** from **`server_ts`**; Bridge Status **`KpiCard`** subtext shows **`Avg latency: Nms`** when **`avgLatency`** is non-null.
 
 ---
 

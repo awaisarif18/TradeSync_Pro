@@ -182,7 +182,8 @@ Current backend emits original signal plus optional server-side additions:
   "volume": 0.1,
   "pnl": 0.0,
   "trace_id": "uuid-optional",
-  "signalId": 101
+  "signalId": 101,
+  "server_ts": 1748000000000
 }
 ```
 
@@ -193,8 +194,10 @@ Consumer-required keys (must remain stable):
 - action
 - volume
 
-Optional compatibility key:
+Optional compatibility keys:
 - trace_id (for observability only)
+- signalId (server-side trade log linkage when present)
+- server_ts — Optional. Unix millisecond timestamp. Added Phase 5. Used by frontend for latency display. All existing consumers safely ignore unknown fields.
 
 Note:
 - Backend tags TradeLogs.slaveId when exactly one slave is in the room.
