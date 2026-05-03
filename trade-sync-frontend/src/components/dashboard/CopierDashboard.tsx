@@ -13,7 +13,6 @@ import {
   LineChart,
   Radio,
   ShieldAlert,
-  Wifi,
   Zap,
 } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
@@ -772,9 +771,6 @@ export default function CopierDashboard() {
       : 0;
   }, [trades]);
 
-  const bridgeProviderName =
-    activeProfile?.fullName ?? activeMaster?.fullName ?? "Provider";
-
   const marketplace = (
     <section className="space-y-5">
       <div className="flex items-baseline justify-between gap-4">
@@ -843,16 +839,18 @@ export default function CopierDashboard() {
     <div className="mx-auto max-w-[1240px] space-y-6 px-8 pb-20">
       <PageHeader status={dashboardStatus} />
 
-      <CopierKpiStrip
-        activeProfile={activeProfile}
-        activeMaster={activeMaster}
-        isSubscribed={isSubscribed}
-        onBrowse={() => router.push("/traders")}
-      />
+      {!isSubscribed ? (
+        <CopierKpiStrip
+          activeProfile={activeProfile}
+          activeMaster={activeMaster}
+          isSubscribed={isSubscribed}
+          onBrowse={() => router.push("/traders")}
+        />
+      ) : null}
 
       {isSubscribed ? (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4 min-[901px]:grid-cols-4">
+          <div className="mb-6 grid grid-cols-2 gap-4 min-[901px]:grid-cols-3">
             <KpiCard
               title="Session P&L"
               value={formatCurrency(sessionPnl, { sign: true })}
@@ -870,22 +868,13 @@ export default function CopierDashboard() {
             <KpiCard
               title="Signals Today"
               value={todayCount}
-              subtext="From your provider"
+              subtext={
+                avgLatency !== null
+                  ? `Avg latency: ${avgLatency}ms`
+                  : "From your provider"
+              }
               icon={<Activity size={16} strokeWidth={2.2} />}
               valueColor="violet"
-            />
-            <KpiCard
-              title="Bridge Status"
-              value={currentSubscription ? "Connected" : "Not connected"}
-              subtext={
-                currentSubscription
-                  ? avgLatency !== null
-                    ? `Avg latency: ${avgLatency}ms`
-                    : `Mirroring ${bridgeProviderName}`
-                  : "Subscribe to a provider"
-              }
-              icon={<Wifi size={16} strokeWidth={2.2} />}
-              valueColor={currentSubscription ? "mint" : "danger"}
             />
           </div>
           <ActiveSubscriptionCard
