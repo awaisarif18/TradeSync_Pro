@@ -126,20 +126,9 @@ export default function TraderCard({
             flexDirection: 'column',
             gap: 14,
             opacity: empty ? 0.7 : 1,
-            position: 'relative',
           }}
         >
-          <div style={{ position: 'absolute', top: -4, right: 0 }}>
-            {mode === 'subscribed' ? (
-              <Pill variant="violet">
-                <span className="font-mono-tnum">●</span> Subscribed
-              </Pill>
-            ) : (
-              <StatusPill status={trader.isLive ? 'live' : 'idle'} label="" />
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingRight: 68 }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
             <Avatar name={trader.fullName} size={38} />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -172,7 +161,26 @@ export default function TraderCard({
                 {empty ? '—' : `@${displayHandle(trader)} · ${displayAsset(trader)}`}
               </div>
             </div>
-            {!empty ? <Pill variant={riskVariant(trader.riskLevel)}>{riskLabel(trader.riskLevel)}</Pill> : null}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                gap: 6,
+                flexShrink: 0,
+              }}
+            >
+              {mode === 'subscribed' ? (
+                <Pill variant="violet">
+                  <span className="font-mono-tnum">●</span> Subscribed
+                </Pill>
+              ) : (
+                <StatusPill status={trader.isLive ? 'live' : 'idle'} label="" />
+              )}
+              {!empty ? (
+                <Pill variant={riskVariant(trader.riskLevel)}>{riskLabel(trader.riskLevel)}</Pill>
+              ) : null}
+            </div>
           </div>
 
           <div style={{ height: 64, margin: '0 -4px', opacity: empty ? 0.3 : 1 }}>

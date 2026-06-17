@@ -808,7 +808,6 @@ export default function CopierDashboard() {
 
           <div className="flex flex-wrap justify-center gap-7 text-sm text-[var(--color-text-2)]">
             {[
-              "KYC verified providers",
               "Audited 90-day history",
               "Sub-second mirror lag",
             ].map((item) => (

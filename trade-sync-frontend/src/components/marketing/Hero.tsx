@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ArrowRight, Link as LinkIcon, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Link as LinkIcon } from 'lucide-react';
 import EquityCurve from '../charts/EquityCurve';
 import TradeRow, { type Trade } from '../feed/TradeRow';
 import { Button, Card, CardBody, Pill, StatusPill } from '../ui';
@@ -76,9 +76,6 @@ export default function Hero() {
             color: 'var(--color-text-2)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <ShieldCheck size={18} /> Regulated · KYC verified
-          </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <LinkIcon size={18} /> Direct MT5 bridge
           </div>
