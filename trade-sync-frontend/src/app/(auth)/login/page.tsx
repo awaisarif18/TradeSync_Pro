@@ -8,7 +8,7 @@ import { toast } from "sonner";
 import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import EquityCurve from "../../../components/charts/EquityCurve";
 import TradeRow, { type Trade } from "../../../components/feed/TradeRow";
-import { Avatar, Button, Card, CardBody, Input, Logo, Pill, StatusPill } from "../../../components/ui";
+import { Avatar, Button, Card, CardBody, Input, Pill, StatusPill } from "../../../components/ui";
 import { loginSuccess } from "../../../redux/slices/authSlice";
 import { authService } from "../../../services/api";
 
@@ -141,7 +141,6 @@ export default function LoginPage() {
   return (
     <div className="auth-shell">
       <div className="auth-left">
-        <Logo size="md" asLink />
         <div className="auth-form">
           <h1 style={{ fontSize: 32, fontWeight: 600, letterSpacing: "-0.025em", margin: "0 0 8px" }}>
             Welcome back.

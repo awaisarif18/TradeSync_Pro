@@ -193,6 +193,8 @@ Key client components:
 
 ## 4. Routes — complete behavior map
 
+Auth routes (`/login`, `/register`, `/verify-email`, `/forgot-password`) do not render an in-page `Logo`; branding comes from the global `Navbar` in the root layout only.
+
 ### `/` — Marketing landing
 
 **Type:** async server component (`src/app/page.tsx`)

@@ -7,7 +7,7 @@ import { useDispatch } from "react-redux";
 import { toast } from "sonner";
 import { ArrowRight, MailCheck } from "lucide-react";
 import OtpInput from "@/components/auth/OtpInput";
-import { Button, Logo } from "@/components/ui";
+import { Button } from "@/components/ui";
 import { loginSuccess } from "@/redux/slices/authSlice";
 import { authService } from "@/services/api";
 
@@ -98,7 +98,6 @@ function VerifyEmailInner() {
   return (
     <div className="otp-shell">
       <div className="otp-card">
-        <Logo size="md" asLink />
         <div
           style={{
             display: "inline-flex",
@@ -109,7 +108,7 @@ function VerifyEmailInner() {
             borderRadius: 16,
             background: "var(--color-mint-soft)",
             border: "1px solid rgba(0,195,137,0.3)",
-            margin: "28px 0 20px",
+            margin: "0 0 20px",
           }}
         >
           <MailCheck size={26} color="var(--color-mint)" />

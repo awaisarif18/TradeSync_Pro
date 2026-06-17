@@ -6,7 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { ArrowRight, Eye, EyeOff, KeyRound, Sparkles } from "lucide-react";
 import OtpInput from "@/components/auth/OtpInput";
-import { Button, Input, Logo } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { generatePassword } from "@/lib/generatePassword";
 import { authService } from "@/services/api";
 
@@ -139,8 +139,6 @@ export default function ForgotPasswordPage() {
   return (
     <div className="reset-shell">
       <div className="reset-card">
-        <Logo size="md" asLink />
-
         {step !== "done" ? (
           <div
             style={{
@@ -152,7 +150,7 @@ export default function ForgotPasswordPage() {
               borderRadius: 16,
               background: "var(--color-mint-soft)",
               border: "1px solid rgba(0,195,137,0.3)",
-              margin: "28px 0 20px",
+              margin: "0 0 20px",
             }}
           >
             <KeyRound size={26} color="var(--color-mint)" />

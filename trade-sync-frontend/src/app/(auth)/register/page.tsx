@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import EquityCurve from "../../../components/charts/EquityCurve";
 import TraderCard, { type TraderCardData } from "../../../components/marketplace/TraderCard";
-import { Button, Card, CardBody, Input, Logo, Pill, SectionEyebrow } from "../../../components/ui";
+import { Button, Card, CardBody, Input, Pill, SectionEyebrow } from "../../../components/ui";
 import { authService } from "../../../services/api";
 
 type RegisterRole = "MASTER" | "SLAVE";
@@ -131,7 +131,6 @@ export default function RegisterPage() {
   return (
     <div className="register-shell">
       <div className="register-left">
-        <Logo size="md" asLink />
         <div className="register-form">
           <h1 style={{ fontSize: 32, fontWeight: 600, letterSpacing: "-0.025em", margin: "0 0 8px" }}>
             Create your account.
