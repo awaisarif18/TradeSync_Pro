@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getItem } from "@/lib/authStorage";
 import {
   AUTH_ACCESS_TOKEN_STORAGE_KEY,
   logout,
@@ -14,7 +15,7 @@ export const api = axios.create({
 
 api.interceptors.request.use((config) => {
   if (typeof window === "undefined") return config;
-  const token = localStorage.getItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
+  const token = getItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }

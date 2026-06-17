@@ -1,10 +1,12 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import {
+  clearSession,
+  isJwtExpired,
+  readSession,
+  setSession,
+} from "@/lib/authStorage";
 
-/** Persisted user JSON (same key as pre-JWT for continuity). */
-export const AUTH_USER_STORAGE_KEY = "tsp_user";
-
-/** Bearer access token from POST /auth/login | /auth/register. */
-export const AUTH_ACCESS_TOKEN_STORAGE_KEY = "tsp_access_token";
+export { AUTH_ACCESS_TOKEN_STORAGE_KEY, AUTH_USER_STORAGE_KEY } from "@/lib/authStorage";
 
 interface AuthState {
   user: {
@@ -18,7 +20,9 @@ interface AuthState {
   /** JWT access token; sent as Authorization Bearer on API calls. */
   accessToken: string | null;
   isAuthenticated: boolean;
-  /** Set true after client localStorage rehydration so guards do not redirect early. */
+  /** When true, session is stored in localStorage; otherwise sessionStorage. */
+  rememberMe: boolean;
+  /** Set true after client storage rehydration so guards do not redirect early. */
   rehydratedFromStorage: boolean;
 }
 
@@ -26,28 +30,28 @@ export type LoginSuccessPayload = {
   user: NonNullable<AuthState["user"]>;
   /** Omit when refreshing user fields only (subscription); keeps existing token. */
   accessToken?: string | null;
+  /** Omit on subscription updates; defaults to true when a new token is issued. */
+  rememberMe?: boolean;
 };
 
 const initialState: AuthState = {
   user: null,
   accessToken: null,
   isAuthenticated: false,
+  rememberMe: true,
   rehydratedFromStorage: false,
 };
 
 function persistAuth(state: AuthState) {
   if (typeof window === "undefined") return;
 
-  if (state.user) {
-    localStorage.setItem(AUTH_USER_STORAGE_KEY, JSON.stringify(state.user));
+  if (state.user && state.accessToken) {
+    setSession(state.rememberMe, {
+      user: state.user,
+      token: state.accessToken,
+    });
   } else {
-    localStorage.removeItem(AUTH_USER_STORAGE_KEY);
-  }
-
-  if (state.accessToken) {
-    localStorage.setItem(AUTH_ACCESS_TOKEN_STORAGE_KEY, state.accessToken);
-  } else {
-    localStorage.removeItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
+    clearSession();
   }
 }
 
@@ -62,6 +66,11 @@ const authSlice = createSlice({
 
       if (action.payload.accessToken !== undefined) {
         state.accessToken = action.payload.accessToken ?? null;
+        if (action.payload.rememberMe !== undefined) {
+          state.rememberMe = action.payload.rememberMe;
+        } else {
+          state.rememberMe = true;
+        }
       }
 
       persistAuth(state);
@@ -70,41 +79,36 @@ const authSlice = createSlice({
       state.user = null;
       state.accessToken = null;
       state.isAuthenticated = false;
+      state.rememberMe = true;
       state.rehydratedFromStorage = true;
 
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(AUTH_USER_STORAGE_KEY);
-        localStorage.removeItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
-      }
+      clearSession();
     },
     hydrateAuth: (state) => {
       if (typeof window === "undefined") {
         return;
       }
 
-      const storedUser = localStorage.getItem(AUTH_USER_STORAGE_KEY);
-      const storedToken = localStorage.getItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
+      const session = readSession();
 
-      if (storedUser && storedToken) {
-        try {
-          state.user = JSON.parse(storedUser) as AuthState["user"];
-          state.accessToken = storedToken;
-          state.isAuthenticated = Boolean(state.user);
-        } catch (error) {
-          console.error("Failed to hydrate auth state", error);
-          localStorage.removeItem(AUTH_USER_STORAGE_KEY);
-          localStorage.removeItem(AUTH_ACCESS_TOKEN_STORAGE_KEY);
+      if (session) {
+        if (isJwtExpired(session.token)) {
+          clearSession();
           state.user = null;
           state.accessToken = null;
           state.isAuthenticated = false;
+          state.rememberMe = true;
+        } else {
+          state.user = session.user;
+          state.accessToken = session.token;
+          state.isAuthenticated = Boolean(session.user);
+          state.rememberMe = session.remember;
         }
       } else {
-        if (storedUser && !storedToken) {
-          localStorage.removeItem(AUTH_USER_STORAGE_KEY);
-        }
         state.user = null;
         state.accessToken = null;
         state.isAuthenticated = false;
+        state.rememberMe = true;
       }
 
       state.rehydratedFromStorage = true;

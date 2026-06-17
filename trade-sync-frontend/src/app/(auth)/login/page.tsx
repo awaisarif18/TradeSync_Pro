@@ -74,6 +74,7 @@ export default function LoginPage() {
     password: false,
   });
   const [formData, setFormData] = useState({ email: "", password: "" });
+  const [rememberMe, setRememberMe] = useState(true);
   const validationErrors = validateLoginForm(formData);
   const isFormValid = Object.keys(validationErrors).length === 0;
 
@@ -98,6 +99,7 @@ export default function LoginPage() {
         loginSuccess({
           user: session.user as AuthUser,
           accessToken: session.access_token,
+          rememberMe,
         }),
       );
       toast.success(
@@ -197,7 +199,12 @@ export default function LoginPage() {
               />
             </div>
             <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13, color: "var(--color-text-2)", cursor: "pointer" }}>
-              <input type="checkbox" defaultChecked style={{ accentColor: "var(--color-mint)" }} />
+              <input
+                type="checkbox"
+                checked={rememberMe}
+                onChange={(event) => setRememberMe(event.target.checked)}
+                style={{ accentColor: "var(--color-mint)" }}
+              />
               Keep me signed in on this device
             </label>
             <Button
