@@ -46,4 +46,23 @@ export class TradeLog {
 
   @Column({ nullable: true })
   closedAt: Date;
+
+  // --- Slippage guard diagnostics (additive, Phase: slippage hardening) ---
+  // masterPrice: saved from OPEN signal payload.
+  // copierPrice/slippagePoints* : populated by trade_execution_ack from the slave.
+  // All nullable so synchronize:true adds them without touching historical rows.
+  @Column('float', { nullable: true })
+  masterPrice: number | null;
+
+  @Column('float', { nullable: true })
+  copierPrice: number | null;
+
+  @Column('float', { nullable: true })
+  slippagePointsConfigured: number | null;
+
+  @Column('float', { nullable: true })
+  slippagePointsActual: number | null;
+
+  @Column({ nullable: true, default: false })
+  slippageBlocked: boolean;
 }

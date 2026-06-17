@@ -40,6 +40,11 @@ class SlaveState:
         # Maximum deviation in points for order execution
         # Passed as 'deviation' parameter to MT5 order requests
 
+        self.max_slippage_points: float = 0.0
+        # Strict master-vs-copier price drift guard (in points). 0.0 = disabled.
+        # On OPEN, if abs(copierPrice - masterPrice) / point exceeds this, the
+        # copy is hard-blocked. Distinct from slippage_points (MT5 fill tolerance).
+
         self.unmapped_symbol_behavior: str = 'IGNORE'
         # Values: 'IGNORE' | 'COPY_AS_IS'
         # IGNORE: skip trades for unmapped symbols (current default)

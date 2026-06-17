@@ -27,6 +27,17 @@ class SlaveController:
         }
         self._terminal_log(str(payload))
 
+    def _emit_execution_ack(self, **fields):
+        """Sends a trade_execution_ack to the backend for slippage auditability.
+        No-ops safely when no socket is attached (e.g. unit tests)."""
+        socket = self.socket
+        if not socket or not hasattr(socket, 'emit_event'):
+            return
+        try:
+            socket.emit_event('trade_execution_ack', fields)
+        except Exception as e:
+            self._terminal_log(f"Failed to emit trade_execution_ack: {e}")
+
     def _on_health_change(self, health_state):
         self.state.health_state = health_state
         self.state.socket_connected = health_state == "CONNECTED"
@@ -251,6 +262,66 @@ class SlaveController:
                 exec_action = 'SELL' if exec_action == 'BUY' else 'BUY'
                 print(Fore.CYAN + f"[COPY] Reverse copy: {data['action']} -> {exec_action}" + Style.RESET_ALL)
 
+            # Guard 4: Strict master-vs-copier slippage drift
+            # Hard-blocks the copy when the copier quote has drifted too far from
+            # the master entry price. Distinct from MT5 'deviation' fill tolerance.
+            master_price = data.get('masterPrice')
+            copier_price = self.mt5.get_execution_price(slave_symbol, exec_action)
+            point = self.mt5.get_symbol_point(slave_symbol)
+            actual_slippage = None
+            try:
+                master_price = float(master_price) if master_price is not None else None
+                copier_price = float(copier_price) if copier_price is not None else None
+                point = float(point) if point else None
+            except (TypeError, ValueError):
+                master_price = copier_price = point = None
+
+            if master_price and copier_price and point:
+                actual_slippage = round(abs(copier_price - master_price) / point, 2)
+                if self.state.max_slippage_points > 0 and actual_slippage > self.state.max_slippage_points:
+                    msg = (
+                        f"[RISK] OPEN blocked — slippage {actual_slippage} pts exceeds "
+                        f"max {self.state.max_slippage_points} pts "
+                        f"(master {master_price} vs copier {copier_price})"
+                    )
+                    print(Fore.RED + msg + Style.RESET_ALL)
+                    self.state.add_log(msg)
+                    self._structured_log(
+                        "slippage_guard_blocked",
+                        trace_id=trace_id,
+                        master_ticket=m_ticket,
+                        symbol=slave_symbol,
+                        master_price=master_price,
+                        copier_price=copier_price,
+                        slippage_points_actual=actual_slippage,
+                        slippage_points_configured=self.state.max_slippage_points,
+                        status="blocked",
+                    )
+                    self._emit_execution_ack(
+                        trace_id=trace_id,
+                        master_ticket=m_ticket,
+                        slave_ticket=None,
+                        symbol=slave_symbol,
+                        status="BLOCKED_SLIPPAGE",
+                        masterPrice=master_price,
+                        copierPrice=copier_price,
+                        slippagePointsConfigured=self.state.max_slippage_points,
+                        slippagePointsActual=actual_slippage,
+                        slippageBlocked=True,
+                    )
+                    self.update_ui()
+                    return
+            else:
+                self._structured_log(
+                    "slippage_check_skipped_missing_price",
+                    trace_id=trace_id,
+                    master_ticket=m_ticket,
+                    symbol=slave_symbol,
+                    has_master_price=master_price is not None,
+                    has_copier_price=copier_price is not None,
+                    has_point=point is not None,
+                )
+
             self.state.add_log(f"Copying {master_symbol} as {slave_symbol}...")
             self._structured_log(
                 "open_signal_processing",
@@ -286,6 +357,18 @@ class SlaveController:
                     action=exec_action,
                     volume=new_vol
                 )
+                self._emit_execution_ack(
+                    trace_id=trace_id,
+                    master_ticket=m_ticket,
+                    slave_ticket=slave_ticket,
+                    symbol=slave_symbol,
+                    status="EXECUTED",
+                    masterPrice=master_price,
+                    copierPrice=copier_price,
+                    slippagePointsConfigured=self.state.max_slippage_points,
+                    slippagePointsActual=actual_slippage,
+                    slippageBlocked=False,
+                )
             else:
                 self.state.add_log(f"FAILED: {res.comment if res else 'Unknown Error'}")
                 self._structured_log(
@@ -294,6 +377,18 @@ class SlaveController:
                     master_ticket=m_ticket,
                     status="error",
                     error=res.comment if res else 'Unknown Error',
+                )
+                self._emit_execution_ack(
+                    trace_id=trace_id,
+                    master_ticket=m_ticket,
+                    slave_ticket=None,
+                    symbol=slave_symbol,
+                    status="FAILED",
+                    masterPrice=master_price,
+                    copierPrice=copier_price,
+                    slippagePointsConfigured=self.state.max_slippage_points,
+                    slippagePointsActual=actual_slippage,
+                    slippageBlocked=False,
                 )
             
         elif event == "CLOSE":

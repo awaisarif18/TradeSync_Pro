@@ -113,3 +113,17 @@ class SocketManager:
             master_ticket=signal_dict.get("master_ticket"),
         )
         self.sio.emit('test_signal', signal_dict)
+
+    def emit_event(self, event_name, payload):
+        """Generic emit for additive events (e.g. trade_execution_ack)."""
+        payload = {
+            **payload,
+            "trace_id": payload.get("trace_id", str(uuid4())),
+        }
+        self._log(
+            "emit_event",
+            event_name=event_name,
+            trace_id=payload.get("trace_id"),
+            master_ticket=payload.get("master_ticket"),
+        )
+        self.sio.emit(event_name, payload)

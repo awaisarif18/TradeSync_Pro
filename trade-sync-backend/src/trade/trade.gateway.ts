@@ -265,6 +265,7 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
           volume: data.volume,
           ticketNumber: data.master_ticket.toString(),
           status: 'OPEN',
+          masterPrice: data.masterPrice ?? null,
         });
         await this.tradeLogRepo.save(newLog);
       } else if (data.event === 'CLOSE') {
@@ -316,7 +317,89 @@ export class TradeGateway implements OnGatewayConnection, OnGatewayDisconnect {
       symbol: data?.symbol,
       event: data?.event,
       master_ticket: data?.master_ticket,
+      masterPrice: data?.masterPrice,
       signalId: oldSignalId,
     });
+  }
+
+  // --- NEW: SLAVE EXECUTION ACK FOR SLIPPAGE AUDITABILITY ---
+  // Additive event. The slave reports its execution result (executed/blocked/failed)
+  // so the backend can persist copier-side pricing + slippage diagnostics.
+  @SubscribeMessage('trade_execution_ack')
+  async handleTradeExecutionAck(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: any,
+  ) {
+    const traceId = data?.trace_id || randomUUID();
+    const connectedClient = this.connectedClients.get(client.id);
+    const masterId = connectedClient?.subscribedMasterId;
+
+    if (!masterId || data?.master_ticket === undefined) {
+      this.log('warn', 'trade_execution_ack_ignored', {
+        trace_id: traceId,
+        reason: !masterId ? 'no_master_context' : 'missing_master_ticket',
+        clientId: client.id,
+      });
+      return;
+    }
+
+    try {
+      // Multi-slave caveat: one master OPEN row is shared across slaves, so these
+      // diagnostics are exact for single-slave rooms and best-effort otherwise.
+      // Per-slave rows are a future enhancement (see slaveId TODO above).
+      const existingLog = await this.tradeLogRepo.findOne({
+        where: {
+          masterId,
+          ticketNumber: data.master_ticket.toString(),
+          status: 'OPEN',
+        },
+        order: { createdAt: 'DESC' },
+      });
+
+      if (!existingLog) {
+        this.log('warn', 'trade_execution_ack_target_not_found', {
+          trace_id: traceId,
+          masterId,
+          master_ticket: data?.master_ticket,
+        });
+        return;
+      }
+
+      if (data.copierPrice !== undefined && data.copierPrice !== null) {
+        existingLog.copierPrice = data.copierPrice;
+      }
+      if (data.masterPrice !== undefined && data.masterPrice !== null) {
+        existingLog.masterPrice = existingLog.masterPrice ?? data.masterPrice;
+      }
+      if (
+        data.slippagePointsConfigured !== undefined &&
+        data.slippagePointsConfigured !== null
+      ) {
+        existingLog.slippagePointsConfigured = data.slippagePointsConfigured;
+      }
+      if (
+        data.slippagePointsActual !== undefined &&
+        data.slippagePointsActual !== null
+      ) {
+        existingLog.slippagePointsActual = data.slippagePointsActual;
+      }
+      existingLog.slippageBlocked = Boolean(data.slippageBlocked);
+
+      await this.tradeLogRepo.save(existingLog);
+
+      this.log('log', 'trade_execution_ack_recorded', {
+        trace_id: traceId,
+        masterId,
+        master_ticket: data?.master_ticket,
+        status: data?.status,
+        slippageBlocked: existingLog.slippageBlocked,
+        slippagePointsActual: existingLog.slippagePointsActual,
+      });
+    } catch (ackError) {
+      this.log('error', 'trade_execution_ack_save_failed', {
+        trace_id: traceId,
+        error: ackError instanceof Error ? ackError.message : String(ackError),
+      });
+    }
   }
 }

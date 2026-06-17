@@ -1,879 +1,964 @@
 # TradeSync Pro Frontend — Deep Technical Documentation
 
-This document is the authoritative engineering guide for the `trade-sync-frontend` application.  
-It is designed for both human developers and AI coding models so new features can be added safely without breaking existing flows.
+This document is the authoritative engineering guide for `trade-sync-frontend`.  
+Written for human developers and AI coding agents so new features can be added safely without breaking existing flows.
 
 ---
 
-## Scope Lock (Current Phase)
+## 1. Project identity
 
-Current implementation scope is Phase 1 only from README_NEXT_STEPS.md: Immediate Priority: Stabilization.
-
-Frontend work allowed in this phase:
-1. Maintain compatibility with existing contracts in SYSTEM_CONTRACT_MATRIX.md
-2. Support stabilization visibility where needed (existing flows only)
-3. Keep live signal behavior compatible while backend/client stabilization changes land
-
-Frontend work deferred for later phases:
-1. Real-time operations dashboard expansion
-2. Subscription UX hardening enhancements beyond current core flow
-3. Incident panel
-4. Audit explorer and advanced filtering views
-
-Lightweight testing policy for this project stage:
-- Keep frontend testing minimal and practical
-- Prioritize manual smoke verification of login, dashboard routing, and live feed behavior
-- Avoid broad UI test expansion during Phase 1 stabilization
-
-Phase 1 implementation impact on frontend:
-1. No new frontend feature modules were added in this phase
-2. Existing live feed remains contract-compatible with backend `trade_execution`
-3. Backend now includes optional `trace_id` in payloads; current UI safely ignores extra fields
-
-Manual smoke expectation (frontend-facing behavior):
-1. Live trade feed should continue receiving `trade_execution` events
-2. No route/Redux contract changes are required for current pages
-3. Compatibility remains intact while backend/client stabilization logic runs underneath
-
----
-
-## 1) Project Identity
-
-- **Project:** `trade-sync-frontend`
-- **Version:** `0.1.0`
-- **Framework:** Next.js App Router
-- **UI Runtime:** React 19
-- **Language:** TypeScript
-- **State Management:** Redux Toolkit + React Redux
-- **Networking:** Axios (HTTP), Socket.IO client (realtime)
-- **Styling:** Tailwind CSS v4 (PostCSS plugin)
+| Field | Value |
+|-------|-------|
+| Package | `trade-sync-frontend` v0.1.0 |
+| Framework | Next.js 16.1.6 (App Router) |
+| UI Runtime | React 19.2.3 |
+| Language | TypeScript 5 (strict mode) |
+| State | Redux Toolkit 2.11.x + React Redux 9.x |
+| HTTP client | Axios 1.13.x |
+| Realtime | Socket.IO client 4.8.x |
+| Styling | Tailwind CSS v4 (PostCSS, no tailwind.config.ts) |
+| Charts | Recharts 3.8.x |
+| Toasts | Sonner 2.0.x |
+| Icons | Lucide React 0.563.x |
+| Dev port | `http://localhost:3001` |
+| Backend target | `http://localhost:3000` (hardcoded in `services/api.ts`) |
 
 Primary frontend responsibilities:
 
-1. Public landing, traders marketplace, and auth pages
-2. Login + register workflows (Provider/Copier)
-3. Role-gated dashboards (`MASTER`, `SLAVE`, `ADMIN`)
-4. Admin user/license/status management UI
-5. Copier marketplace subscription management
-6. Realtime trade feed display via WebSocket
+1. Public marketing landing and traders marketplace (unauthenticated)
+2. Login + registration with JWT-based auth persistence
+3. Role-gated dashboards: `MASTER` (Provider Console), `SLAVE` (Copier Terminal), `ADMIN` (System Administration)
+4. Admin user/license/status management console
+5. Copier subscription management with live signal KPIs
+6. Realtime `trade_execution` WebSocket feed via `useIncomingSignals`
 
 ---
 
-## 2) Full Frontend File Structure and Responsibilities
+## 2. Complete file structure
 
 ```text
 trade-sync-frontend/
-├─ frontendReadme.md                  # This document
-├─ README.md                          # Default Next.js starter README
-├─ package.json                       # Scripts, deps, versions
-├─ package-lock.json                  # Resolved dependency graph (lockfile v3)
-├─ next.config.ts                     # Next config (currently default)
-├─ tsconfig.json                      # TypeScript config + path alias
-├─ eslint.config.mjs                  # ESLint (Next core-web-vitals + TS)
-├─ postcss.config.mjs                 # Tailwind PostCSS plugin wiring
-├─ .gitignore                         # Git ignore rules
-├─ public/                            # Static starter SVG assets
-│  ├─ file.svg
-│  ├─ globe.svg
-│  ├─ next.svg
-│  ├─ vercel.svg
-│  └─ window.svg
-└─ src/
-	├─ app/
-	│  ├─ globals.css                  # Global CSS + Tailwind theme tokens
-	│  ├─ layout.tsx                   # Root app shell: Provider + Navbar + main (no global footer; landing uses FooterStrip)
-	│  ├─ not-found.tsx                # Token-based 404 page
-	│  ├─ error.tsx                    # Token-based route error boundary
-	│  ├─ global-error.tsx             # Root error boundary (imports globals for tokens)
-	│  ├─ page.tsx                     # Marketing landing page
-	│  ├─ (auth)/
-	│  │  ├─ layout.tsx                # Lightweight auth route-group layout
-	│  │  ├─ login/
-	│  │  │  └─ page.tsx              # Split-screen login (`/login`)
-	│  │  └─ register/
-	│  │     └─ page.tsx              # Split-screen registration (`/register`)
-	│  ├─ traders/
-	│  │  ├─ page.tsx                  # Provider marketplace grid with risk filter
-	│  │  └─ [id]/
-	│  │     └─ page.tsx               # Public provider detail page
-	│  ├─ dashboard/
-	│  │  └─ page.tsx                  # Auth gate + role-based dashboard switch
-	│  └─ admin/
-	│     ├─ layout.tsx                # Admin shell with horizontal tab navigation
-	│     ├─ page.tsx                  # Admin control panel table/actions
-	├─ components/
-	│  ├─ common/
-	│  │  ├─ Button.tsx                # Reusable button with loading state
-	│  │  ├─ Input.tsx                 # Reusable input with optional label
-	│  │  ├─ Card.tsx                  # Metric card used in dashboards
-	│  │  └─ KpiCard.tsx               # Shared premium KPI widget (lift + glow + icon pop + skeleton); admin + copier dashboards
-	│  ├─ layout/
-	│  │  ├─ ReduxProvider.tsx         # App-level Redux Provider wrapper
-	│  │  ├─ Navbar.tsx                # Legacy top nav retained for reference
-	│  │  └─ Footer.tsx                # Optional/legacy layout footer (not used in root layout; see FooterStrip on landing)
-	│  ├─ navigation/
-	│  │  └─ Navbar.tsx                # Token-based top nav with role/auth-aware links
-	│  ├─ charts/
-	│  │  └─ EquityCurve.tsx           # SVG equity curve for cards and marketing previews
-	│  ├─ feed/
-	│  │  ├─ TradeRow.tsx              # Typed live-trade row display
-	│  │  └─ MarketTicker.tsx          # Client ticker: CoinGecko + Frankfurter; 60s refresh (see Phase 4)
-	│  ├─ marketplace/
-	│  │  ├─ TraderCard.tsx            # Provider profile card for marketplace/showcase contexts
-	│  │  ├─ TraderCardSkeleton.tsx    # Loading skeleton for provider cards
-	│  │  ├─ RiskFilter.tsx            # Risk-level filter pill row
-	│  │  ├─ ProviderHeroBand.tsx      # Provider detail identity band
-	│  │  ├─ PerformanceBigCard.tsx    # Provider detail performance and copy action
-	│  │  ├─ RiskProfileCard.tsx       # Risk metrics from profile.riskMetrics or empty state
-	│  │  ├─ InstrumentsCard.tsx       # Instrument pill list
-	│  │  └─ TradingHoursCard.tsx      # Log-derived hours summary or fallback copy
-	│  ├─ marketing/
-	│  │  ├─ Hero.tsx                  # Landing hero and product preview
-	│  │  ├─ HowItWorks.tsx            # Three-card explainer section
-	│  │  ├─ ProviderShowcase.tsx      # Landing provider card grid (`totalProviderCount` for “See all”)
-	│  │  ├─ VerifiedProviderShowcaseBlock.tsx  # Client: top masters + active count strip + showcase
-	│  │  ├─ LiveTradeFeedCard.tsx     # Landing trade table; server-fed from GET /trades/history (see Phase 4)
-	│  │  ├─ ContactSection.tsx       # 'use client' contact form; POSTs to Formspree; landing page only
-	│  │  └─ FooterStrip.tsx           # Full 3-column footer with brand, product links, company links; dynamic copyright year
-	│  ├─ auth/
-	│  │  ├─ LoginForm.tsx
-	│  │  ├─ RegisterMasterForm.tsx
-	│  │  └─ RegisterSlaveForm.tsx
-	│  ├─ landing/
-	│  │  └─ TopTradersSection.tsx     # Public landing-page trader showcase (Phase 7)
-	│  ├─ master/
-	│  │  └─ TradeHistoryModal.tsx     # Re-export of dashboard modal (canonical import path)
-	│  └─ dashboard/
-	│     ├─ ProviderDashboard.tsx     # Provider console with overview, profile setup, and empty states
-	│     ├─ MasterProfileSetup.tsx   # Deprecated standalone master identity form retained for older imports
-	│     ├─ CopierDashboard.tsx      # Copier console with active/empty states and incoming signals
-	│     ├─ LiveTradeTable.tsx        # Deprecated WebSocket feed wrapper retained for compatibility
-	│     ├─ MasterProfileCard.tsx     # Deprecated dashboard profile card kept for current dashboard callers
-	│     ├─ TradeHistoryModal.tsx     # Design-system trade history modal with filters and aggregates
-	│     └─ PnLChart.tsx              # Cumulative PnL visualization via recharts (Phase 6)
-	├─ hooks/
-	│  └─ useIncomingSignals.ts        # Socket: register_node (SLAVE + email) on connect; trade_execution; rolling avgLatency from optional server_ts (Phase 5.5 / 5-E)
-	├─ redux/
-	│  └─ slices/
-	│     ├─ authSlice.ts              # Auth state + reducers
-	│     └─ store.ts                  # Redux store + RootState types
-	├─ services/
-	│  └─ api.ts                       # Axios instance + service wrappers
-	└─ lib/
-	   ├─ cn.ts                        # clsx + tailwind-merge class helper
-	   ├─ role-display.ts              # Role labels and role color mapping
-	   ├─ format.ts                    # Currency, percent, volume, and date formatters
-	   ├─ avatar-color.ts              # Deterministic avatar color helper
-	   └─ mapMasterToTraderCard.ts     # MasterProfile/TopMaster → TraderCardData + ROI proxy
+├── frontendReadme.md
+├── README.md                              # Default Next.js starter README (not this doc)
+├── package.json
+├── package-lock.json
+├── next.config.ts                         # Minimal; no custom rewrites or env overrides
+├── tsconfig.json                          # strict, baseUrl ".", @/* → ./src/*
+├── eslint.config.mjs                      # Next core-web-vitals + TS presets
+├── postcss.config.mjs                     # @tailwindcss/postcss (Tailwind v4 entry point)
+├── .gitignore                             # Includes .env*, design-source/, *.tsbuildinfo
+├── public/
+│   ├── file.svg
+│   ├── vercel.svg
+│   └── window.svg
+└── src/
+    ├── app/
+    │   ├── globals.css                    # @import "tailwindcss"; @theme tokens; fonts; keyframes
+    │   ├── layout.tsx                     # Root shell: ReduxProvider + Navbar + main + Toaster
+    │   ├── page.tsx                       # Landing (async server component, fetches /trades/history)
+    │   ├── not-found.tsx                  # 404 page with design tokens
+    │   ├── error.tsx                      # Route error boundary (reset + home link)
+    │   ├── global-error.tsx               # Root error boundary (imports globals.css for tokens)
+    │   ├── (auth)/
+    │   │   ├── layout.tsx                 # Thin wrapper: min-h-screen + dark bg for auth routes
+    │   │   ├── login/page.tsx             # Split-screen login at /login
+    │   │   └── register/page.tsx          # Split-screen registration at /register
+    │   ├── dashboard/
+    │   │   └── page.tsx                   # Auth gate + role switch → ProviderDashboard or CopierDashboard
+    │   ├── admin/
+    │   │   ├── layout.tsx                 # min-h-screen wrapper (no tab nav; page owns UI)
+    │   │   └── page.tsx                   # Admin console: user table, KPIs, actions
+    │   ├── traders/
+    │   │   ├── page.tsx                   # Provider marketplace grid at /traders
+    │   │   └── [id]/page.tsx              # Public provider detail page at /traders/:id
+    │   └── test-ui/
+    │       └── page.tsx                   # Internal UI sandbox (no auth guard; dev only)
+    ├── components/
+    │   ├── ui/                            # Design system primitives (canonical import via index.ts)
+    │   │   ├── index.ts                   # Barrel export for all ui/ primitives
+    │   │   ├── Avatar.tsx                 # Initials-based avatar with deterministic color from avatar-color.ts
+    │   │   ├── Button.tsx                 # Primary/ghost/ghost-mint/ghost-danger/primary variants; loading; sizes sm/md
+    │   │   ├── Card.tsx                   # Container with Card, CardBody, CardHeader; variant="role-violet"|"role-danger"
+    │   │   ├── EmptyState.tsx             # Centered empty state: icon, title, description, action slot
+    │   │   ├── Input.tsx                  # Input with label, leftIcon, rightIcon, error string
+    │   │   ├── Logo.tsx                   # TradeSync Pro wordmark; size="sm|md|lg"; asLink prop
+    │   │   ├── Pill.tsx                   # Inline status/label pill; variants: default/mint/danger/violet/outline-*
+    │   │   ├── RoleBadge.tsx              # MASTER → "Provider" pill; SLAVE → "Copier" pill; ADMIN → "Admin" pill
+    │   │   ├── SectionEyebrow.tsx         # Small uppercase label above headings; color="mint|violet|default"
+    │   │   ├── Skeleton.tsx               # Pulsing loading placeholder; variant="line|rect"; width/height props
+    │   │   └── StatusPill.tsx             # Live/idle/broadcasting/disconnected/listening pill with dot; mono prop
+    │   ├── common/
+    │   │   ├── Button.tsx                 # Legacy button (pre-design-system, kept for compatibility)
+    │   │   ├── Card.tsx                   # Legacy metric card (pre-design-system, kept for compatibility)
+    │   │   ├── Input.tsx                  # Legacy input (pre-design-system, kept for compatibility)
+    │   │   └── KpiCard.tsx                # Premium KPI tile: hover lift+glow, icon tint, loading skeleton
+    │   ├── layout/
+    │   │   ├── ReduxProvider.tsx          # Redux Provider + hydrateAuth on useLayoutEffect
+    │   │   ├── Navbar.tsx                 # Legacy top nav (not used in root layout; retained for reference)
+    │   │   └── Footer.tsx                 # Legacy footer (not used in root layout; landing uses FooterStrip)
+    │   ├── navigation/
+    │   │   └── Navbar.tsx                 # Active top nav; role/auth-aware; sticky glassmorphic
+    │   ├── charts/
+    │   │   └── EquityCurve.tsx            # SVG decorative equity curve (marketing + auth rails)
+    │   ├── feed/
+    │   │   ├── MarketTicker.tsx           # Live crypto+FX prices; CoinGecko + Frankfurter; 60s refresh
+    │   │   └── TradeRow.tsx               # Typed trade row for decorative rails in Hero/login
+    │   ├── auth/
+    │   │   ├── LoginForm.tsx              # Legacy login form component (not used by /login page; retained)
+    │   │   ├── RegisterMasterForm.tsx     # Legacy MASTER registration form (not used by /register; retained)
+    │   │   └── RegisterSlaveForm.tsx      # Legacy SLAVE registration form (not used by /register; retained)
+    │   ├── landing/
+    │   │   └── TopTradersSection.tsx      # Public landing trader showcase
+    │   ├── marketing/
+    │   │   ├── Hero.tsx                   # Landing hero section
+    │   │   ├── HowItWorks.tsx             # Three-step explainer section
+    │   │   ├── ProviderShowcase.tsx        # Landing provider card grid
+    │   │   ├── VerifiedProviderShowcaseBlock.tsx  # 'use client'; calls GET /auth/top-masters + /auth/masters
+    │   │   ├── LiveTradeFeedCard.tsx       # Server-fed closed-trade table (server component; 5 rows)
+    │   │   ├── ContactSection.tsx          # 'use client'; Formspree POST; inline success
+    │   │   └── FooterStrip.tsx             # 3-column footer; dynamic copyright year
+    │   ├── marketplace/
+    │   │   ├── TraderCard.tsx              # Provider profile card; modes: preview/marketplace/subscribed
+    │   │   ├── TraderCardSkeleton.tsx      # Skeleton placeholder for TraderCard
+    │   │   ├── RiskFilter.tsx              # Risk-level pill filter row (ALL/LOW/MEDIUM/HIGH)
+    │   │   ├── ProviderHeroBand.tsx        # Provider detail identity band (name, handle, asset, risk)
+    │   │   ├── PerformanceBigCard.tsx      # Provider detail performance card + copy action button
+    │   │   ├── RiskProfileCard.tsx         # Risk metrics card (maxDrawdown, avgTrades, streak, bestDay)
+    │   │   ├── InstrumentsCard.tsx         # Comma-split instrument pill list from profile.instruments
+    │   │   └── TradingHoursCard.tsx        # activeHoursSummary display or fallback copy
+    │   ├── dashboard/
+    │   │   ├── ProviderDashboard.tsx       # Provider console: overview + profile-setup tabs
+    │   │   ├── CopierDashboard.tsx         # Copier terminal: subscriptions + live KPIs + marketplace
+    │   │   ├── PnLChart.tsx                # Recharts area chart: cumulative PnL on CLOSED trades
+    │   │   ├── TradeHistoryModal.tsx        # Full-screen trade history overlay
+    │   │   ├── LiveTradeTable.tsx           # Deprecated WebSocket table wrapper (kept for compat)
+    │   │   ├── MasterProfileCard.tsx        # Deprecated profile card (kept for older callers)
+    │   │   └── MasterProfileSetup.tsx       # Deprecated standalone profile form (kept for older imports)
+    │   └── master/
+    │       └── TradeHistoryModal.tsx        # Re-export of dashboard/TradeHistoryModal (canonical import path)
+    ├── hooks/
+    │   └── useIncomingSignals.ts            # Socket: connect → register_node(SLAVE) → trade_execution
+    ├── redux/
+    │   └── slices/
+    │       ├── authSlice.ts                 # Auth state: user, accessToken, isAuthenticated, rehydratedFromStorage
+    │       └── store.ts                     # configureStore; exports RootState, AppDispatch
+    ├── services/
+    │   └── api.ts                           # Axios instance + 4 service objects + TypeScript interfaces
+    └── lib/
+        ├── cn.ts                            # clsx + tailwind-merge utility
+        ├── format.ts                        # formatCurrency, formatPercent, formatVolume, formatDate, formatDateTime, formatTime
+        ├── role-display.ts                  # Role → display label and color mapping
+        ├── avatar-color.ts                  # Deterministic hue from name string
+        └── mapMasterToTraderCard.ts         # MasterProfile/TopMaster → TraderCardData + proxyRoi30dFromTotals
 ```
 
 ---
 
-## 3) Runtime Architecture Overview
+## 3. App Router architecture
 
-### App Router Hierarchy
+### Root layout (`src/app/layout.tsx`)
 
-Global app shell (`src/app/layout.tsx`) wraps all routes with:
+Every route renders inside the root layout which wraps all content with:
 
-1. `ReduxProvider` (global Redux store context + auth hydration)
-2. `Navbar` (always visible)
-3. Central main container (`<main>`)
-4. `Toaster` from `sonner` for dark top-right toast notifications
+1. `ReduxProvider` — injects Redux store and runs `hydrateAuth()` before first paint
+2. `Navbar` from `components/navigation/Navbar.tsx` — sticky, role-aware
+3. `<main className="flex-grow container mx-auto px-4 py-8">` — page content slot
+4. `<Toaster richColors position="top-right" theme="dark" />` from `sonner`
 
-The legacy `components/layout/Footer.tsx` is not rendered by the root layout; the marketing landing page (`/`) includes `FooterStrip` instead.
+Fonts loaded via `next/font/google`: **Inter** (`--font-inter`) and **JetBrains Mono** (`--font-jetbrains`).
 
-Admin routes (`/admin/*`) have a nested layout (`src/app/admin/layout.tsx`) that keeps admin content full-width while the page owns the tab UI.
+### Auth hydration timing
 
-### Component Execution Model
+`ReduxProvider` uses `useLayoutEffect` (runs synchronously before paint) to dispatch `hydrateAuth()`. This reads `tsp_user` and `tsp_access_token` from `localStorage` and sets `rehydratedFromStorage = true` before any route guard runs.
 
-- Files without `'use client'` run as server components by default in App Router.
-- Interactive/Redux/router/state files explicitly use `'use client'`.
+**Critical:** Every gated page (`/dashboard`, `/admin`) waits for `rehydratedFromStorage` before making redirect decisions. Without this guard, a hard refresh drops logged-in users to `/login`.
+
+### Server vs. client components
+
+Files without `'use client'` are server components by default. All interactive, Redux-reading, or routing components are explicitly marked `'use client'`.
+
+Key server components:
+- `src/app/layout.tsx`
+- `src/app/page.tsx` (landing — async, fetches from backend)
+- `src/components/marketing/LiveTradeFeedCard.tsx`
 
 Key client components:
-
-- `register/page.tsx`
-- `dashboard/page.tsx`
-- `admin/page.tsx`
-- `ReduxProvider.tsx`
-- `Navbar.tsx`
-- `MarketTicker.tsx`, `ContactSection.tsx`, `VerifiedProviderShowcaseBlock.tsx`
-- all auth forms
-- all dashboard widgets including live table
+- All `'use client'` marked files — login/register pages, dashboard pages, admin page, traders pages, all dashboard components, `Navbar`, `MarketTicker`, `ContactSection`, `VerifiedProviderShowcaseBlock`, `ReduxProvider`
 
 ---
 
-## 4) Route-by-Route Behavior
+## 4. Routes — complete behavior map
 
-## `/` — Landing (`src/app/page.tsx`)
+### `/` — Marketing landing
 
-- Async server component; composes Phase 2 marketing sections plus Phase 4 dynamism
-- **Hero**, **MarketTicker**, **VerifiedProviderShowcaseBlock** (`GET /auth/top-masters`, `GET /auth/masters`, counts), **LiveTradeFeedCard**, **ContactSection**, **FooterStrip**
-- **MarketTicker** (client): live prices from CoinGecko (BTC, ETH, SOL, XRP, ADA, DOGE) and Frankfurter (EUR/USD, GBP/USD derived from USD→EUR/GBP rates); refreshes every **60s**; footnote when live quotes may be stale; no separate npm deps
-- **LiveTradeFeedCard**: server `fetch` to **`GET /trades/history`** (`http://localhost:3000`) with **`next.revalidate: 60`**; normalizes rows and keeps only **CLOSED** trades whose **action** is **BUY** or **SELL** (matches dashboard-style semantics); shows up to **5** rows; **6-column** table (Time, Symbol, Action, Volume, P&amp;L as dollars, Status); falls back to static demo rows if the fetch fails or yields no matching rows (legacy **`TradeLog`** SQL responses often lack `TradeLogs` fields, so empty matches are common until backend aligns)
-- **ContactSection**: Formspree POST for `{ name, email, message }` (see component for endpoint); success replaces form with inline confirmation
-- Provider showcase block uses live master APIs; hero decorative rails may still use sample trade rows for visuals
+**Type:** async server component (`src/app/page.tsx`)
 
-## `/traders` — Master Trader Marketplace (`src/app/traders/page.tsx`)
+**Data fetching:** Calls `GET /trades/history` at `http://localhost:3000` with `next: { revalidate: 60 }` (ISR, 60-second stale window). Normalizes rows keeping only CLOSED trades where action is BUY or SELL. Shows up to 5 rows. Falls back to empty array on fetch error.
 
-- Client page that fetches active masters via `GET /auth/masters`
-- Fetches live master IDs via `GET /auth/masters/live`
-- Fetches each master profile via `GET /auth/masters/:id/profile`
-- Renders `TraderCard` components in marketplace mode
-- Provides client-side risk filters: `All`, `Low Risk`, `Medium Risk`, `High Risk`
-- Shows loading skeletons and an empty state when no masters are available
+**Component composition order:**
+1. `Hero` — landing hero with product preview rail
+2. `MarketTicker` — live crypto/FX prices (client component, 60s refresh; CoinGecko BTC/ETH/SOL/XRP/ADA/DOGE + Frankfurter EUR/USD and GBP/USD)
+3. `VerifiedProviderShowcaseBlock` — client component; calls `GET /auth/top-masters` and `GET /auth/masters`
+4. `LiveTradeFeedCard` — receives server-fetched `recentTrades` prop; 6-column table (Time, Symbol, Action, Volume, P&L, Status)
+5. `ContactSection` — client; Formspree POST `{name, email, message}`; inline success state
+6. `FooterStrip` — 3-column marketing footer with dynamic copyright year
 
-## `/traders/:id` — Public provider detail (`src/app/traders/[id]/page.tsx`)
-
-- Public route with no auth guard
-- Fetches provider profile via `GET /auth/masters/:id/profile`
-- Fetches trade history via `GET /trades/master/:masterId/history`
-- Shows a graceful provider-not-found empty state when the backend returns an error
-- Allows unauthenticated visitors to view profile data; copy action redirects them to `/login?next=/traders/:id`
-- For authenticated `SLAVE` users, copy action calls `PATCH /auth/users/:slaveId/subscribe` with `{ masterId }`, updates Redux via `loginSuccess`, shows a Sonner toast, and redirects to `/dashboard`
-- `MASTER` users receive a Sonner error if they try to copy a provider; `ADMIN` users do not see the copy button
-
-## `/login` — Login page (`src/app/(auth)/login/page.tsx`)
-
-- Client split-screen auth page with dark token-based inputs and a decorative right rail
-- Calls `authService.login(email, password)` and dispatches `loginSuccess(user)` on success
-- Redirects to `/dashboard` after login
-- Uses `toast.success` / `toast.error` from Sonner instead of `alert()`
-- Email and password only; login is role-agnostic and the role comes from the `/auth/login` response
-- Validates required fields, email format, and password length inline before calling `POST /auth/login`
-
-## `/register` — Registration page (`src/app/(auth)/register/page.tsx`)
-
-- Client split-screen registration page with a role toggle between Provider and Copier
-- UI labels are Provider/Copier, but the request payload preserves exact backend role values: `MASTER` or `SLAVE`
-- Calls `authService.register({ fullName, email, password, role })`
-- Redirects to `/login` after successful registration
-- Uses `toast.success` / `toast.error` from Sonner instead of `alert()`
-- Validates full name, email format, and password length inline before calling `POST /auth/register`
-
-## `/dashboard` — Role-gated dashboard (`src/app/dashboard/page.tsx`)
-
-- Reads Redux auth state (`isAuthenticated`, `user`, `rehydratedFromStorage`)
-- Waits for `rehydratedFromStorage` before running auth redirects so localStorage sessions are not dropped on first paint
-- `useEffect` redirect logic:
-  1. not authenticated → `router.push('/login')`
-  2. authenticated + role ADMIN → `router.push('/admin')`
-- Returns `null` while redirecting (prevents flash)
-- Renders:
-  - `ProviderDashboard` for role `MASTER`
-  - `CopierDashboard` for role `SLAVE`
-
-## `/admin` — Admin panel (`src/app/admin/page.tsx`)
-
-- Fetches users via `adminService.getUsers()` on mount
-- Same `rehydratedFromStorage` wait as the dashboard: avoids redirecting admins or flashing login before `hydrateAuth` completes
-- Guards the page with Redux auth state and redirects non-admin users away
-- **Phase 5 KPI grid (four `KpiCard` tiles, no extra HTTP calls):** **Total Users**, **Active Subscriptions** (`SLAVE` + truthy **`subscribedToId`** from **`GET /auth/users`**), **Platform Masters** (`MASTER` + **`isActive`**), **Core Engine** (static **Operational**); all values derived from the in-memory **`users`** array returned by **`getUsers()`**; **`loading={isLoading}`** on each card; responsive grid (**2** columns at **≤900px**, **4** above), placed above role filter chips and search and the user table
-- Supports client-side role filter chips (`ALL`, `MASTER`, `SLAVE`, `ADMIN`) and search across full name, email, and license key
-- Single-page users console (no placeholder **Users / Nodes / Audit / Settings** sub-nav); future admin sections can add routes when built
-- Actions per row:
-- issue or regenerate master license keys via `POST /auth/users/:id/license`
-- toggle user active/disabled status via `PATCH /auth/users/:id/toggle-status`
-- Uses local state for users, loading, filter, search, and per-button loading
-- Uses `RoleBadge` for relabeled `Provider`, `Copier`, and `Admin` role display
-- License keys render only as mono mint-soft pills in the table
-- Admin rows render `Protected` instead of action buttons
-- Uses Sonner toasts for action results; no `alert()` calls remain in the admin flow
+**Note on `LiveTradeFeedCard`:** backend `/trades/history` currently returns `TradeLogs` rows. The normalizer silently drops OPEN trades and any rows with no symbol or unrecognized action, so zero displayed rows is normal when the DB is empty.
 
 ---
 
-## 5) State Management (Redux) Deep Dive
+### `/login` — Login page
+
+**Type:** `'use client'` (`src/app/(auth)/login/page.tsx`)
+
+**Layout:** Split-screen. Left: form. Right: decorative rail (equity curve card, recent-trades card, testimonial quote).
+
+**Flow:**
+1. Client-side validation runs on every keystroke (email regex, password ≥ 5 chars)
+2. Submit is disabled while validation errors exist or loading is true
+3. `authService.login(email, password)` → `POST /auth/login`
+4. On success: `dispatch(loginSuccess({ user: session.user, accessToken: session.access_token }))` → `router.push('/dashboard')` + Sonner success toast
+5. On failure: Sonner error toast + inline password field error
+
+**No auto-registration redirect after register.** Registration flow directs to `/login` separately.
+
+---
+
+### `/register` — Registration page
+
+**Type:** `'use client'` (`src/app/(auth)/register/page.tsx`)
+
+**Layout:** Split-screen. Left: form with role toggle. Right: role-contextual decorative rail.
+
+**Role toggle:** UI labels "I'm a Provider" / "I'm a Copier" map to backend values `MASTER` / `SLAVE`. Default is `SLAVE`.
+
+**Flow:**
+1. Client-side validation (full name required, email regex, password ≥ 5 chars)
+2. `authService.register({ fullName, email, password, role })` → `POST /auth/register`
+3. On success: Sonner toast "Account created. Sign in to continue" → `router.push('/login')`
+4. No auto-login. User must sign in after registering.
+
+---
+
+### `/dashboard` — Role-gated dashboard
+
+**Type:** `'use client'` (`src/app/dashboard/page.tsx`)
+
+**Guard logic (`useEffect` on `rehydratedFromStorage`, `isAuthenticated`, `user`, `router`):**
+- Wait for `rehydratedFromStorage` before acting
+- Not authenticated → `router.push('/login')`
+- Authenticated + role `ADMIN` → `router.push('/admin')`
+- Returns `null` during hydration or redirects (prevents content flash)
+
+**Renders:**
+- `ProviderDashboard` for `MASTER`
+- `CopierDashboard` for `SLAVE`
+
+---
+
+### `/admin` — Admin console
+
+**Type:** `'use client'` (`src/app/admin/page.tsx`)
+
+**Guard:** Same `rehydratedFromStorage` wait. Non-`ADMIN` roles are redirected to `/dashboard`.
+
+**Data:** `adminService.getUsers()` → `GET /auth/users` (JWT-protected; backend enforces ADMIN role).
+
+**KPI strip (4 tiles, derived from in-memory `users` array, no extra API calls):**
+- Total Users — `users.length`
+- Active Subscriptions — `SLAVE` users with truthy `subscribedToId`
+- Platform Masters — `MASTER` users with `isActive = true`
+- Core Engine — static "Operational"
+
+**User table features:**
+- Role filter chips: ALL / Providers (MASTER) / Copiers (SLAVE) / Admins (ADMIN)
+- Search across `fullName`, `email`, `licenseKey`
+- Per-row actions: MASTER rows get "Issue Key" / "Regenerate Key" (`POST /auth/users/:id/license`), all non-ADMIN rows get "Enable" / "Disable" (`PATCH /auth/users/:id/toggle-status`)
+- ADMIN rows show "Protected" with no actions
+- Loading state: 8-row skeleton
+- Error state: EmptyState with retry button
+
+---
+
+### `/traders` — Provider marketplace
+
+**Type:** `'use client'` (`src/app/traders/page.tsx`)
+
+**Data loading (parallel):**
+1. `marketplaceService.getActiveMasters()` → `GET /auth/masters`
+2. `marketplaceService.getLiveMasters()` → `GET /auth/masters/live`
+3. Per-master `marketplaceService.getMasterProfile(id)` → `GET /auth/masters/:id/profile` (sequential, not parallel)
+
+**Filter:** Client-side risk filter (ALL / LOW / MEDIUM / HIGH) derived from `profile.riskLevel`.
+
+**Cards:** `TraderCard` in `marketplace` mode, with `onAction` navigating to `/traders/:id`.
+
+---
+
+### `/traders/[id]` — Provider detail
+
+**Type:** `'use client'` (`src/app/traders/[id]/page.tsx`)
+
+**Data loading (parallel):**
+1. `marketplaceService.getMasterProfile(masterId)` → `GET /auth/masters/:id/profile`
+2. `marketplaceService.getMasterHistory(masterId)` → `GET /trades/master/:masterId/history`
+
+**Tabs:** Overview, Trade history, Stats, Reviews.
+- Overview and Trade history share the same content panel (2-col layout: chart/history left, risk/instruments/hours right)
+- Stats and Reviews render a "Coming soon" `EmptyState` placeholder
+- Trade history tab opens `TradeHistoryModal` overlay
+
+**Copy action (`handleCopyProvider`):**
+- Unauthenticated → `router.push('/login?next=/traders/:id')`
+- MASTER → Sonner error ("Providers can't subscribe to other providers")
+- SLAVE, not subscribed → `marketplaceService.updateSubscription(user.id, masterId)` → `PATCH /auth/users/:slaveId/subscribe` with `{ masterId }` → `dispatch(loginSuccess({...user, subscribedToId}))` → Sonner success → `router.push('/dashboard')`
+- ADMIN → copy button hidden (`copyHidden={isAdmin}`)
+
+**Sidebar cards:** `RiskProfileCard` (from `profile.riskMetrics`), `InstrumentsCard` (from `profile.instruments`), `TradingHoursCard` (from `profile.activeHoursSummary`)
+
+---
+
+### `/test-ui` — UI sandbox
+
+**Type:** `'use client'` (`src/app/test-ui/page.tsx`)
+
+Internal page for testing UI primitives. No auth guard. Not linked from the navigation.
+
+---
+
+## 5. Redux state management
 
 ### Store (`src/redux/slices/store.ts`)
 
-- Configured with one reducer slice: `auth`
-- Exports:
-  - `store`
-  - `RootState`
-  - `AppDispatch`
+Single reducer: `auth`. Exports `store`, `RootState`, `AppDispatch`.
 
-### Auth Slice (`src/redux/slices/authSlice.ts`)
+### Auth slice (`src/redux/slices/authSlice.ts`)
 
-Auth state shape:
+**State shape:**
+
+```ts
+interface AuthState {
+  user: {
+    id: string;
+    email: string;
+    fullName?: string;
+    role: 'MASTER' | 'SLAVE' | 'ADMIN' | null;
+    licenseKey?: string | null;       // read by ProviderDashboard LicenseKeyBlock
+    subscribedToId?: string | null;   // read by CopierDashboard for subscription routing
+  } | null;
+  accessToken: string | null;         // JWT; sent as Authorization: Bearer on API calls
+  isAuthenticated: boolean;
+  rehydratedFromStorage: boolean;     // guards against premature redirects on hard refresh
+}
+```
+
+**Storage keys:**
+
+| Key | Value |
+|-----|-------|
+| `tsp_user` | JSON-stringified user object |
+| `tsp_access_token` | Raw JWT string |
+
+**Reducers:**
+
+`loginSuccess(payload: { user, accessToken? })`
+- Sets `user`, `isAuthenticated = true`, `rehydratedFromStorage = true`
+- If `accessToken` is explicitly provided (non-undefined), stores it
+- If `accessToken` is omitted (undefined), keeps the existing token — used by subscription updates that patch user without re-issuing JWT
+- Persists to `localStorage`
+
+`logout()`
+- Clears user, accessToken, isAuthenticated
+- Removes `tsp_user` and `tsp_access_token` from `localStorage`
+- Sets `rehydratedFromStorage = true`
+
+`hydrateAuth()`
+- Reads `tsp_user` and `tsp_access_token` from `localStorage`
+- If both exist: restores state; if JSON parsing fails, clears bad data
+- If only `tsp_user` exists (no token): clears the orphaned user key
+- Always sets `rehydratedFromStorage = true` at the end
+
+**Provider wiring:** `ReduxProvider` wraps the app tree and calls `store.dispatch(hydrateAuth())` in `useLayoutEffect` for synchronous pre-paint hydration.
+
+---
+
+## 6. API service layer
+
+### Axios instance (`src/services/api.ts`)
+
+- `baseURL = 'http://localhost:3000'` (hardcoded)
+- Request interceptor: reads `tsp_access_token` from `localStorage` (client-side only), attaches `Authorization: Bearer <token>` when present
+- Response interceptor: on `401` for non-login/register URLs, dispatches `logout()` from the Redux store (auto-logout on expired JWT)
+
+### TypeScript interfaces
+
+```ts
+MasterRiskMetrics { maxDrawdownPercent, avgTradesPerDay, longestLosingStreakTrades, bestDayPnl }
+MasterProfile { id, email?, fullName, createdAt, totalTrades, closedTrades, winRate, avgVolume, totalPnL, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive, riskMetrics?, equitySparkline?, activeHoursSummary? }
+UpdateMasterProfileDto { bio?, tradingPlatform?, instruments?, strategyDescription?, riskLevel?, typicalHoldTime? }
+RegisterUserData { fullName, email, password, role: 'MASTER' | 'SLAVE' }
+AuthSessionUser { id, email, fullName?, role, licenseKey?, subscribedToId? }
+AuthSessionResponse { access_token, user: AuthSessionUser }
+MasterDashboardData { profile: MasterProfile, recentTrades: TradeHistoryEntry[], subscriberCount, openTrades, totalSignalsSent }
+TopMaster extends MasterProfile { openTrades }
+TradeHistoryEntry { id, symbol, action, volume, status: 'OPEN'|'CLOSED', pnl: number|null, createdAt, closedAt: string|null }
+```
+
+### Service methods
+
+**`authService`**
+| Method | HTTP call |
+|--------|-----------|
+| `login(email, password)` | `POST /auth/login` → `AuthSessionResponse` |
+| `register(userData)` | `POST /auth/register` → `AuthSessionResponse` |
+
+**`adminService`** (all require ADMIN JWT)
+| Method | HTTP call |
+|--------|-----------|
+| `getUsers()` | `GET /auth/users` |
+| `generateLicense(userId)` | `POST /auth/users/:id/license` |
+| `toggleUserStatus(userId)` | `PATCH /auth/users/:id/toggle-status` |
+
+**`marketplaceService`**
+| Method | HTTP call |
+|--------|-----------|
+| `getActiveMasters()` | `GET /auth/masters` |
+| `getLiveMasters()` | `GET /auth/masters/live` → `{ liveIds: string[] }` |
+| `getMasterProfile(masterId)` | `GET /auth/masters/:id/profile` → `MasterProfile` |
+| `getMasterHistory(masterId)` | `GET /trades/master/:masterId/history` → `TradeHistoryEntry[]` |
+| `updateSubscription(slaveId, masterId\|null)` | `PATCH /auth/users/:id/subscribe` with `{ masterId }` |
+
+**`profileService`**
+| Method | HTTP call |
+|--------|-----------|
+| `getMasterProfile(masterId)` | `GET /auth/masters/:id/profile` → `MasterProfile` |
+| `getMasterHistory(masterId)` | `GET /trades/master/:masterId/history` → `TradeHistoryEntry[]` |
+| `updateMasterProfile(masterId, dto)` | `PATCH /auth/masters/:id/profile` → `MasterProfileUpdateResult` |
+| `getMasterDashboard(masterId)` | `GET /auth/masters/:id/dashboard` → `MasterDashboardData` |
+| `getTopMasters()` | `GET /auth/top-masters` → `TopMaster[]` |
+
+**Note:** `marketplaceService.getMasterProfile` and `profileService.getMasterProfile` call the same backend endpoint. The duplication exists because both service objects evolved independently. Prefer `profileService` for dashboard contexts and `marketplaceService` for marketplace contexts.
+
+---
+
+## 7. WebSocket hook — `useIncomingSignals`
+
+**File:** `src/hooks/useIncomingSignals.ts`
+
+**Signature:** `useIncomingSignals(userEmail?: string | null)`
+
+**Returns:** `{ trades, isConnected, connectionState, todayCount, sessionPnl, mirroredTrades, avgLatency }`
+
+### Socket lifecycle
+
+```
+mount → io('http://localhost:3000')
+  connect event:
+    setIsConnected(true)
+    setConnectionState('connected')
+    if (userEmail) socket.emit('register_node', { role: 'SLAVE', identifier: userEmail })
+  disconnect event:
+    setIsConnected(false)
+    setConnectionState('disconnected')
+  trade_execution event:
+    prepend { ...data, time: new Date().toLocaleTimeString() } to trades buffer
+    cap buffer at 10 entries
+    increment sessionSignalTotal (unbounded)
+    if data.server_ts is number: compute latency = Date.now() - server_ts
+      accept if latency in [0, 60000) ms
+      keep rolling window of last 10 samples → update avgLatency
+unmount → socket.disconnect()
+```
+
+### Derived values
+
+| Return | Derivation |
+|--------|------------|
+| `todayCount` | `sessionSignalTotal` — monotonic counter, not capped by buffer size |
+| `sessionPnl` | `useMemo`: sum of `pnl` on trades where `event.toUpperCase() === 'CLOSE'` and `pnl` is a number |
+| `mirroredTrades` | `useMemo`: count of trades where `event.toUpperCase() === 'OPEN'` |
+| `avgLatency` | Rolling average of last 10 `server_ts` latency samples; `null` until first valid sample |
+
+### Usage in `CopierDashboard`
+
+`CopierDashboard` passes `user?.email` as identifier. The gateway uses this to join the copier to the room `room_master_<subscribedToId>` where it receives `trade_execution` events from the subscribed master.
+
+The hook emits `register_node` as `SLAVE` (not as a desktop client). This is purely for subscription room routing on the gateway side. The frontend does not trade; it only observes signals.
+
+---
+
+## 8. Dashboard components deep dive
+
+### `ProviderDashboard` (`src/components/dashboard/ProviderDashboard.tsx`)
+
+**Auth requirement:** `user.role === 'MASTER'`. Returns `null` otherwise.
+
+**Data:** `profileService.getMasterDashboard(user.id)` → `GET /auth/masters/:id/dashboard`
+
+**Tabs:** "Overview" and "Profile Setup"
+
+**Overview tab contents:**
+
+1. **LicenseKeyBlock** — reads `user.licenseKey` from Redux state (not from dashboard response). Shows mint-bordered mono key with clipboard copy. Shows "Awaiting admin issuance" warning if key is `null`.
+
+2. **ProviderKpiStrip** — 4 `KpiCard` tiles:
+   - Total Signals Sent (`data.totalSignalsSent`)
+   - Connected Copiers (`data.subscriberCount`)
+   - Open Trades (`data.openTrades`)
+   - Win Rate (`profile.winRate`; color: mint if `>50%`, danger if `<40%`, default otherwise; shows `--` if no closed trades)
+
+3. **First-time hero** (when `totalSignalsSent === 0 && profile.bio === null && profile.tradingPlatform === null`): broadcast tower SVG, CTA to download desktop client (points to placeholder `/downloads`) and set up profile.
+
+4. **MyPerformanceCard** — 3 metric cells: Total P&L, Avg Volume, Closed Trades.
+
+5. **RecentSignalHistory** — last 10 trades from `data.recentTrades`. Columns: Symbol, Action (BUY/SELL pills), Volume, P&L, Status, Date.
+
+6. **PublicProfilePreview** — `TraderCard` in `preview` mode using current profile data; "Edit Profile" CTA switches to profile tab.
+
+**Profile Setup tab:**
+
+`ProviderProfileForm` — tracks a `baseline` state (loaded profile) and `form` state (current edits). On submit, `changedProfileFields(baseline, form)` computes a diff and sends only changed keys to `PATCH /auth/masters/:id/profile`. Fields:
+- bio (textarea, 300 char limit, char counter turns danger at 270)
+- tradingPlatform (text input)
+- typicalHoldTime (custom `HoldTimeSelect` dropdown: Seconds/Minutes/Hours/Days/Weeks)
+- instruments (text input, comma-separated)
+- strategyDescription (text input)
+- riskLevel (three-button toggle: LOW/MEDIUM/HIGH)
+
+After a successful save, re-fetches dashboard and switches back to overview tab.
+
+**Provider status derivation:** `statusForDashboard` checks if any recent trade has `createdAt` matching today's date OR `subscriberCount > 0`. Returns `"broadcasting"` or `"idle"`. **TODO comment in code:** backend does not yet expose real desktop socket presence; this is a derived proxy.
+
+---
+
+### `CopierDashboard` (`src/components/dashboard/CopierDashboard.tsx`)
+
+**Auth requirement:** `user.role === 'SLAVE'`. Returns `null` otherwise.
+
+**State:**
+- `masters: MasterUser[]` — list from `GET /auth/masters`
+- `profilesByMaster: Record<string, MasterProfile>` — keyed by master ID
+- `currentSubscription: string | null` — initialized from `user.subscribedToId`; kept in sync with Redux via `useEffect`
+- `masterHistory: TradeHistoryEntry[]` — trade history for subscribed master (up to 10)
+- `historyLoading` — loading state for history
+
+**Data loading:**
+
+1. `fetchMasters` effect (on mount): loads `GET /auth/masters`, then for each master loads profile via `profileService.getMasterProfile` and history via `profileService.getMasterHistory`. Stores in `profilesByMaster` and `historyByMaster` (history by master ID, though only subscribed master's history is displayed).
+
+2. `currentSubscription` effect: when subscription changes, loads `profileService.getMasterHistory(currentSubscription)` → updates `masterHistory`. Cancels via closure flag if subscription changes again before response.
+
+3. `useIncomingSignals(user?.email)` — provides live signal KPIs.
+
+**Dashboard status logic:**
+
+```ts
+dashboardStatus =
+  !isSubscribed        → 'not-subscribed'
+  connectionState === 'connected' → 'listening'
+  connectionState === 'connecting' → 'idle'
+  else                 → 'disconnected'
+```
+
+**Subscribed layout (when `currentSubscription !== null`):**
+
+1. Three KPI tiles: Session P&L, Trades Copied (win rate subtext), Signals Today (avg latency subtext when available)
+2. `ActiveSubscriptionCard` — provider identity, stats (Provider's ROI, Today's signals, Session P&L, Mirrored trades), View/Unsubscribe actions
+3. Provider marketplace section (all masters, each card in `subscribed` or `marketplace` mode; subscribed master card labeled "View profile")
+4. `ProviderTradeHistoryTable` — last 10 rows from `masterHistory`; columns: Time, Symbol, Action, Status, P&L
+
+**Unsubscribed layout:**
+
+1. `CopierKpiStrip` — Active Provider (name + browse CTA), Latency (static `< 20 ms` synthetic estimate), Risk Multiplier (static "Managed by app")
+2. Empty state card with bridge illustration
+3. Trending providers section (first 3 masters)
+
+**`handleSubscribe(masterId)` flow:**
+1. `marketplaceService.updateSubscription(user.id, masterId)`
+2. `setCurrentSubscription(response.subscribedToId)`
+3. `dispatch(loginSuccess({ ...user, subscribedToId: response.subscribedToId }))` — no `accessToken` in payload, so existing token is preserved
+4. Sonner success/error toast
+
+---
+
+## 9. Marketplace components
+
+### `TraderCard` (`src/components/marketplace/TraderCard.tsx`)
+
+**`TraderCardData` interface** (exported):
 
 ```ts
 {
-  user: {
-	 id: string;
-	 email: string;
-	 fullName?: string;
-	 role: 'MASTER' | 'SLAVE' | 'ADMIN' | null;
-	 subscribedToId?: string | null;
-  } | null;
-  isAuthenticated: boolean;
-  rehydratedFromStorage: boolean;
-  accessToken: string | null;  // JWT; mirrored in localStorage as tsp_access_token
+  id: string;
+  fullName: string;
+  email?: string;
+  instruments: string | null;
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  roi30d?: number;                    // proxy from proxyRoi30dFromTotals; not a true 30d ROI
+  winRate: number;
+  subscriberCount: number;
+  isLive: boolean;
+  tradingPlatform: string | null;
+  typicalHoldTime: string | null;
+  strategyDescription: string | null;
+  bio: string | null;
+  equitySparkline?: number[];         // from profile analytics; renders mini chart when present
+  handle?: string;
+  primaryAsset?: string;
 }
 ```
 
-Reducers:
+**Modes:**
+- `preview` — full card for auth rails and "Your Public Profile" preview in ProviderDashboard
+- `marketplace` — card in provider marketplace grid with action button
+- `subscribed` — card for currently subscribed provider in CopierDashboard marketplace section
 
-1. `loginSuccess(payload)`
-	- sets `state.user = payload.user` and optionally `state.accessToken` when `payload.accessToken` is provided
-	- sets `state.isAuthenticated = true`
-	- sets `state.rehydratedFromStorage = true`
-	- persists the user to `localStorage` key `tsp_user` and the JWT to `tsp_access_token`
+**Props:** `trader: TraderCardData`, `mode`, `onAction?`, `actionLabel?`, `actionVariant?`
 
-2. `logout()`
-	- clears user
-	- sets `isAuthenticated = false`
-	- sets `rehydratedFromStorage = true`
-	- removes `tsp_user` and `tsp_access_token` from `localStorage`
+### `mapMasterToTraderCard.ts` (`src/lib/mapMasterToTraderCard.ts`)
 
-3. `hydrateAuth()`
-	- reads `tsp_user` and `tsp_access_token` from `localStorage`
-	- restores `state.user` and `state.isAuthenticated`
-	- sets `state.rehydratedFromStorage = true`
-	- removes invalid stored data if parsing fails
+`mapMasterProfileToTraderCardData(master, profile, liveIds)` — canonical conversion from backend data to `TraderCardData`. Used by `/traders` page and `VerifiedProviderShowcaseBlock`.
 
-### Store provider wiring
-
-- `src/components/layout/ReduxProvider.tsx` wraps app tree in `<Provider store={store}>`.
-- On mount, `ReduxProvider` dispatches `hydrateAuth()` inside `useLayoutEffect` so hydration runs before paint and route guards do not redirect away from a restored session.
-
-### Persistence note
-
-- Auth state persists the user under `tsp_user` and the JWT access token under `tsp_access_token`. The shared Axios instance in `services/api.ts` attaches `Authorization: Bearer …` when a token exists. No `redux-persist` package.
+`proxyRoi30dFromTotals(totalPnL, closedTrades)` — scales `totalPnL / 75`, clamped to ±99.9%, returns `undefined` if `closedTrades < 1`. Used as a visual proxy until backend exposes a real 30-day ROI field. **Known inaccuracy:** the divisor 75 is arbitrary; displayed ROI% on cards does not represent actual 30-day performance.
 
 ---
 
-## 6) Service Layer and Backend Contracts
+## 10. `KpiCard` component
 
-### API base (`src/services/api.ts`)
+**File:** `src/components/common/KpiCard.tsx`
 
-- Shared Axios instance:
-  - `baseURL = 'http://localhost:3000'`
-  - JSON content-type header
-  - Reads `tsp_access_token` from localStorage and attaches `Authorization: Bearer <token>` on requests when present
+**Props:**
 
-JWT contract note:
+| Prop | Type | Notes |
+|------|------|-------|
+| `title` | `string` | Label above value |
+| `value` | `string \| number` | Displayed in large mono font |
+| `subtext` | `string?` | Small text below value |
+| `icon` | `ReactNode` | Lucide icon; sized externally (e.g. `<Users size={18} />`) |
+| `valueColor` | `'default' \| 'mint' \| 'danger' \| 'violet'` | Maps to design tokens |
+| `loading` | `boolean` | Replaces content with pulsing skeleton bars |
 
-- Frontend registration and login receive `{ access_token, user }`.
-- Protected backend routes enforce JWT on the server side; frontend route guards are UX controls only and do not replace backend auth.
-- Public endpoints such as `/auth/verify-node`, `/auth/masters`, `/auth/masters/live`, and `/auth/top-masters` remain callable without a bearer token.
+**Hover behavior:** `translateY(-4px)`, mint border, mint glow shadow, icon wrapper gets `--color-mint-soft` background and `--color-mint` icon color.
 
-### `authService`
-
-1. `login(email, password)` → `POST /auth/login`
-2. `register(userData)` → `POST /auth/register`
-
-### `adminService`
-
-1. `getUsers()` → `GET /auth/users`
-2. `generateLicense(userId)` → `POST /auth/users/:id/license`
-3. `toggleUserStatus(userId)` → `PATCH /auth/users/:id/toggle-status`
-
-### `marketplaceService`
-
-1. `getActiveMasters()` → `GET /auth/masters`
-2. `getLiveMasters()` → `GET /auth/masters/live`
-3. `getMasterProfile(masterId)` → `GET /auth/masters/:id/profile`
-4. `getMasterHistory(masterId)` → `GET /trades/master/:masterId/history`
-5. `updateSubscription(slaveId, masterId)` → `PATCH /auth/users/:id/subscribe`
-
-### `profileService` (Phase 6/7)
-
-1. `getMasterProfile(masterId)` → `GET /auth/masters/:id/profile` — Returns aggregate stats for selected master
-2. `getMasterHistory(masterId)` → `GET /trades/master/:masterId/history` — Returns last 50 trades (OPEN + CLOSED)
-3. `updateMasterProfile(masterId, dto)` → `PATCH /auth/masters/:id/profile` — Saves master identity fields
-4. `getMasterDashboard(masterId)` → `GET /auth/masters/:id/dashboard` — Returns dashboard snapshot for master console
-5. `getTopMasters()` → `GET /auth/top-masters` — Returns public top-trader cards for landing page
-
-These endpoints are aligned with the backend behavior documented in `trade-sync-backend/backendReadme.md`.
+**Import path:** `import { KpiCard } from "@/components/common/KpiCard"` (via `@/*` tsconfig alias)
 
 ---
 
-## 7) Auth Forms: Methods and Flows
+## 11. Navigation
 
-## `LoginForm` (`src/components/auth/LoginForm.tsx`)
+### Active Navbar (`src/components/navigation/Navbar.tsx`)
 
-The active `/login` route (`src/app/(auth)/login/page.tsx`) owns the split-screen login UI: email, password, and Sign in (no OAuth or decorative role picker). This legacy `LoginForm` is retained for compatibility if reused elsewhere.
+Imported by root layout. Sticky glassmorphic (`backdrop-filter: blur(12px)`), `z-index: 50`.
 
-Hooks used:
+**Unauthenticated links:** Discover (`/traders`), How it works, Docs (anchor-only, no page) + "Sign in" ghost button + "Get started" primary button.
 
-- `useState` for form + loading
-- `useDispatch` for Redux update
-- `useRouter` for navigation
+**Authenticated links (role-dependent):**
 
-`handleSubmit` flow:
+| Role | Center links | Action buttons |
+|------|-------------|----------------|
+| MASTER | Dashboard | Dashboard (active highlight), Log out |
+| SLAVE | Discover, Dashboard | Dashboard, Log out |
+| ADMIN | Discover, Dashboard, Admin | Dashboard, Admin (danger highlight when active), Log out |
 
-1. prevent default form submit
-2. call `authService.login(email, password)`
-3. `dispatch(loginSuccess(user))`
-4. redirect to `/dashboard`
-5. show Sonner toast on failure
-6. client-side validation blocks invalid email/password before the request
+**Log out flow:** `dispatch(logout())` → Sonner "Signed out" toast → `router.push('/login')`.
 
-## `RegisterMasterForm`
+**Mobile behavior (< 640px):** center links and action buttons hidden via CSS; compact slot shows Dashboard or Sign in plus Log out.
 
-The active `/register` route now owns the split-screen Provider/Copier registration UI directly. This legacy form is retained for compatibility if reused elsewhere.
+**TODO in code:** Full mobile navigation is deferred; compact fallback is explicit in the component.
 
-`handleSubmit` sends:
+### Legacy Navbar (`src/components/layout/Navbar.tsx`)
 
-```json
-{
-  "fullName": "...",
-  "email": "...",
-  "password": "...",
-  "role": "MASTER"
-}
+Not imported by root layout. Retained in repo. Slate-themed, older design.
+
+---
+
+## 12. Design system (`src/components/ui/`)
+
+All primitives exported from `src/components/ui/index.ts`.
+
+### `Button`
+
+Variants: `primary`, `ghost`, `ghost-mint`, `ghost-danger`. Sizes: `sm`, `md` (default). Props: `loading` (disables + shows spinner), `disabled`, `leftIcon`, `rightIcon`, `fullWidth`, `type`, `style`, `onClick`.
+
+### `Card`
+
+`Card` container with `CardBody` (padded inner) and `CardHeader` sub-components. Variant: `role-violet` (violet border) and `role-danger` (danger border) for subscription and error cards.
+
+### `Input`
+
+Full-width input with optional `label`, `leftIcon`, `rightIcon`, `error` string (shows red helper text below). Passes all standard `<input>` props through.
+
+### `Avatar`
+
+Initials display using `avatar-color.ts` for deterministic hue from name. Props: `name: string`, `size: number` (pixel size).
+
+### `EmptyState`
+
+Centered layout: `icon` slot (ReactNode), `iconFrame` bool (wraps in bordered circle by default), `title`, `description`, `action` slot. Used throughout for loading errors, empty lists, and placeholder tabs.
+
+### `Pill`
+
+Inline label. Variants: `default`, `mint`, `danger`, `violet`, `outline-mint`, `outline-warn`, `outline-danger`. Thin, capitalized text.
+
+### `RoleBadge`
+
+Accepts `role: 'MASTER' | 'SLAVE' | 'ADMIN'`. Renders:
+- MASTER → "Provider" (mint-tinted pill)
+- SLAVE → "Copier" (violet-tinted pill)
+- ADMIN → "Admin" (danger-tinted pill)
+
+### `SectionEyebrow`
+
+Small all-caps label above section headings. Color: `mint`, `violet`, or uncolored (default).
+
+### `Skeleton`
+
+Pulsing grey bar. Variant `line` (default, short bar) and `rect` (block). Width/height configurable.
+
+### `StatusPill`
+
+Status with colored dot + label. Statuses: `live`, `broadcasting`, `listening`, `idle`, `disconnected`, `not-subscribed`. `mono` prop renders label in monospace.
+
+### `Logo`
+
+TradeSync Pro wordmark. Sizes: `sm`, `md`, `lg`. `asLink` wraps in `<Link href="/">`.
+
+---
+
+## 13. Utility library (`src/lib/`)
+
+### `format.ts`
+
+```ts
+formatCurrency(n, { sign?: boolean }) → "+$123.45" or "$123.45"
+formatPercent(n, { sign?, fractionDigits? }) → "71.0%" or "+71.0%"
+formatVolume(n) → "1.00"  // 2 decimal places
+formatDate(d) → en-GB locale date string
+formatDateTime(d) → en-GB locale date+time string
+formatTime(d) → en-GB 24h time string
 ```
 
-On success: Sonner toast + redirect `/login`.
-Client-side validation blocks missing name/email/password, invalid email format, and passwords shorter than 5 characters before the request.
+### `mapMasterToTraderCard.ts`
 
-## `RegisterSlaveForm`
+`proxyRoi30dFromTotals(totalPnL, closedTrades)` — see section 9.
 
-The active `/register` route uses Copier as the UI label, but the backend role value remains `SLAVE`.
+`mapMasterProfileToTraderCardData(master, profile, liveIds)` — merges list row + profile + live status check into `TraderCardData`. `isLive` is `true` if master.id is in `liveIds` OR `profile.isLive === true`.
 
-`handleSubmit` sends:
+### `avatar-color.ts`
 
-```json
-{
-  "fullName": "...",
-  "email": "...",
-  "password": "...",
-  "role": "SLAVE"
-}
+`getAvatarColor(name)` — returns a hue value (number) by summing char codes of name. Used by `Avatar` component.
+
+### `cn.ts`
+
+`cn(...inputs)` — `clsx` + `tailwind-merge` combination. Use for conditional Tailwind class merging.
+
+### `role-display.ts`
+
+`getRoleLabel(role)` and `getRoleColor(role)` — returns display label and CSS color token for each role.
+
+---
+
+## 14. Styling architecture
+
+### Tailwind v4
+
+No `tailwind.config.ts`. Configured via:
+- `postcss.config.mjs` — `@tailwindcss/postcss` plugin
+- `src/app/globals.css` — `@import "tailwindcss"` and `@theme { ... }` token definitions
+
+### Design token map (from `globals.css`)
+
+| Token | Purpose |
+|-------|---------|
+| `--color-bg` | `#0a0e0d` — dark app background |
+| `--color-surface` | Card/panel background |
+| `--color-surface-2` | Elevated surface |
+| `--color-line` | Border/divider |
+| `--color-line-2` | Elevated border |
+| `--color-text` | Primary text |
+| `--color-text-2` | Secondary text |
+| `--color-text-3` | Muted/hint text |
+| `--color-mint` | `#00c389` — primary accent |
+| `--color-mint-soft` | Mint tinted surface |
+| `--color-violet` | `#7c5cff` — secondary accent (copier/slave UI) |
+| `--color-violet-soft` | Violet tinted surface |
+| `--color-danger` | Red — errors and destructive actions |
+| `--color-danger-soft` | Danger tinted surface |
+| `--color-warn` | Amber — warnings |
+| `--color-warn-soft` | Warn tinted surface |
+| `--font-inter` | Inter variable |
+| `--font-jetbrains` | JetBrains Mono variable |
+
+### Font class
+
+`font-mono-tnum` — applies JetBrains Mono with tabular numbers. Used on all numeric displays (prices, KPIs, ticket numbers).
+
+---
+
+## 15. Dependencies
+
+### Runtime
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `next` | 16.1.6 | App Router framework |
+| `react` | 19.2.3 | UI runtime |
+| `react-dom` | 19.2.3 | DOM renderer |
+| `@reduxjs/toolkit` | ^2.11.2 | Redux store + slices |
+| `react-redux` | ^9.2.0 | React-Redux bindings |
+| `axios` | ^1.13.4 | HTTP client |
+| `socket.io-client` | ^4.8.3 | WebSocket client |
+| `recharts` | ^3.8.1 | PnL area chart in `PnLChart.tsx` |
+| `lucide-react` | ^0.563.0 | Icon library |
+| `sonner` | ^2.0.7 | Toast notifications |
+| `clsx` | ^2.1.1 | Conditional class names |
+| `tailwind-merge` | ^3.4.0 | Tailwind class deduplication |
+
+### Dev
+
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `typescript` | ^5 | Type checker |
+| `tailwindcss` | ^4 | CSS framework |
+| `@tailwindcss/postcss` | ^4 | PostCSS bridge for Tailwind v4 |
+| `eslint` | ^9 | Linter |
+| `eslint-config-next` | 16.1.6 | Next.js ESLint rules |
+
+---
+
+## 16. File-to-file communication map
+
+```
+src/app/layout.tsx
+  └─ ReduxProvider (dispatches hydrateAuth on useLayoutEffect)
+  └─ Navbar (reads auth from Redux; dispatches logout)
+  └─ Toaster (global toast surface)
+
+src/app/(auth)/login/page.tsx
+  └─ authService.login() → POST /auth/login
+  └─ dispatch(loginSuccess({user, accessToken}))
+  └─ router.push('/dashboard')
+
+src/app/(auth)/register/page.tsx
+  └─ authService.register() → POST /auth/register
+  └─ router.push('/login')  [no auto-login]
+
+src/app/dashboard/page.tsx
+  └─ reads Redux { isAuthenticated, user, rehydratedFromStorage }
+  └─ renders ProviderDashboard (MASTER) or CopierDashboard (SLAVE)
+
+src/components/dashboard/ProviderDashboard.tsx
+  └─ profileService.getMasterDashboard() → GET /auth/masters/:id/dashboard
+  └─ profileService.updateMasterProfile() → PATCH /auth/masters/:id/profile
+  └─ reads user.licenseKey from Redux
+
+src/components/dashboard/CopierDashboard.tsx
+  └─ marketplaceService.getActiveMasters() → GET /auth/masters
+  └─ profileService.getMasterProfile(id) per master
+  └─ profileService.getMasterHistory(id) per master + subscribed master
+  └─ marketplaceService.updateSubscription() → PATCH /auth/users/:id/subscribe
+  └─ dispatch(loginSuccess({ ...user, subscribedToId }))  [no accessToken]
+  └─ useIncomingSignals(user.email) → WebSocket trade_execution
+
+src/app/traders/page.tsx
+  └─ marketplaceService.getActiveMasters() → GET /auth/masters
+  └─ marketplaceService.getLiveMasters() → GET /auth/masters/live
+  └─ marketplaceService.getMasterProfile(id) per master
+
+src/app/traders/[id]/page.tsx
+  └─ marketplaceService.getMasterProfile(id)
+  └─ marketplaceService.getMasterHistory(id)
+  └─ marketplaceService.updateSubscription() on copy action
+  └─ dispatch(loginSuccess({ ...user, subscribedToId }))
+
+src/app/admin/page.tsx
+  └─ adminService.getUsers() → GET /auth/users
+  └─ adminService.generateLicense(id) → POST /auth/users/:id/license
+  └─ adminService.toggleUserStatus(id) → PATCH /auth/users/:id/toggle-status
+
+src/hooks/useIncomingSignals.ts
+  └─ io('http://localhost:3000')
+  └─ socket.emit('register_node', { role: 'SLAVE', identifier: email })
+  └─ socket.on('trade_execution', ...)
 ```
 
-On success: Sonner toast + redirect `/login`.
-Client-side validation blocks missing name/email/password, invalid email format, and passwords shorter than 5 characters before the request.
+---
+
+## 17. Known issues and TODOs
+
+The following are real code-level observations, not documentation errors:
+
+1. **Hardcoded backend URL** (`http://localhost:3000`) appears in three places: `services/api.ts`, `useIncomingSignals.ts`, and `app/page.tsx`. No `process.env.NEXT_PUBLIC_API_URL` usage. Moving to an env var requires updating all three and adding a `.env.local` template.
+
+2. **ROI proxy inaccuracy:** `proxyRoi30dFromTotals` divides total P&L by 75 (arbitrary). The displayed "ROI%" on `TraderCard` does not represent actual 30-day returns. A `// TODO` comment in both `ProviderDashboard.tsx` and `CopierDashboard.tsx` notes this.
+
+3. **Provider status is derived, not real:** `statusForDashboard` in `ProviderDashboard` uses today's trade presence as a proxy for "broadcasting." The backend has no endpoint for live desktop socket presence. A `// TODO` comment is present.
+
+4. **Legacy duplicate components:** Three legacy components in `src/components/auth/` (`LoginForm`, `RegisterMasterForm`, `RegisterSlaveForm`) are not imported by the active auth pages. The active pages own their forms inline. These legacy components should not be confused with the active implementation.
+
+5. **Two Navbar files:** `src/components/layout/Navbar.tsx` (legacy, not used) and `src/components/navigation/Navbar.tsx` (active, used by root layout). Only the `navigation/` version should be modified.
+
+6. **`profileService` and `marketplaceService` duplicate profile/history methods:** Both service objects expose `getMasterProfile` and `getMasterHistory` pointing to identical endpoints. This is a historical artifact; they can be safely deduplicated.
+
+7. **`CopierDashboard` fetches all master histories on mount:** The bootstrap `useEffect` loads `profileService.getMasterHistory` for every active master. This causes N+1 requests on load and is a performance concern as the number of masters grows.
+
+8. **Latency KPI is synthetic when `server_ts` is absent:** `useIncomingSignals` shows `< 20 ms` as a static display value in `CopierKpiStrip` regardless of actual latency. The dynamic `avgLatency` from `server_ts` only works when the backend gateway injects `server_ts` into `trade_execution` payloads.
+
+9. **`/downloads` route is a placeholder:** `FirstTimeProviderHero` CTA navigates to `/downloads` which does not exist. A TODO comment is present.
+
+10. **Mobile navigation is incomplete:** A `// TODO` in `Navbar.tsx` marks the compact mobile fallback as a temporary placeholder pending a full mobile nav redesign.
+
+11. **Stats and Reviews tabs are placeholder EmptyState:** `/traders/[id]` tabs for "Stats" and "Reviews" show "Coming soon" with a TODO comment.
+
+12. **`recharts` is used only for `PnLChart.tsx`:** If chart functionality is added elsewhere, import from the existing `recharts` dependency. Do not add a second chart library.
 
 ---
 
-## 8) Dashboard Components and Realtime Flow
+## 18. Safe extension rules for AI agents
 
-## `ProviderDashboard`
+1. **Never rename socket events.** `register_node` and `trade_execution` are defined in `SYSTEM_CONTRACT_MATRIX.md`. `useIncomingSignals` depends on both.
 
-- Two-tab provider console with `Overview` and `Profile Setup`
-- Loads `GET /auth/masters/:id/dashboard` on mount using the authenticated master ID from Redux
-- Overview tab shows:
-	- provider header with derived `broadcasting` or `idle` status
-	- read-only license key display with clipboard copy and Sonner feedback
-	- 4 KPI tiles via shared `KpiCard` (`totalSignalsSent`, `subscriberCount`, `openTrades`, and `profile.winRate` with conditional win-rate coloring)
-	- performance boxes for total P&L, average volume, and closed trades
-	- recent signal history table for the last 10 trades
-	- public profile preview rendered with the shared `TraderCard` in `preview` mode
-- Empty overview state appears when `totalSignalsSent === 0`, `profile.bio === null`, and `profile.tradingPlatform === null`
-- Profile Setup tab owns the Phase 6 profile form directly. The deprecated `MasterProfileSetup` component remains only for older imports.
-- Saving the profile computes a diff against the loaded profile and calls `PATCH /auth/masters/:id/profile` with only changed keys from `{ bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime }`
-- `riskLevel` values remain uppercase `LOW`, `MEDIUM`, or `HIGH`; `typicalHoldTime` values match the custom dropdown labels exactly
-- Decorative/TODO items:
-	- provider status uses `subscriberCount > 0` or recent trades from today until backend exposes real desktop presence
-	- connected copiers live sub-count is placeholder copy until backend exposes a live count endpoint
-	- 30-day ROI in the preview uses total P&L as a temporary visual proxy until backend exposes real ROI
-	- desktop download CTA points to placeholder `/downloads` until desktop packaging is available
+2. **Never change the Redux user shape without updating all consumers.** `user.licenseKey` is read by `ProviderDashboard`; `user.subscribedToId` is read by `CopierDashboard` and `/traders/[id]`.
 
-## `CopierDashboard`
+3. **Never change storage key names.** `tsp_user` and `tsp_access_token` are read by `api.ts` interceptor and `hydrateAuth`. Changing them silently logs everyone out.
 
-Core responsibilities:
+4. **Never call `loginSuccess` without the `accessToken` field when logging in.** On login, include `accessToken: session.access_token`. Omitting `accessToken` (undefined) keeps the old token — this is intentional for subscription updates only.
 
-1. Fetch active providers from backend
-2. Track current copier subscription
-3. Allow subscribe/unsubscribe actions
-4. Sync updated `subscribedToId` back into Redux user state
-5. Render active and empty copier dashboard states
-6. Use **`useIncomingSignals(user?.email)`** for **`trade_execution`** data (KPI row, **`ActiveSubscriptionCard`** stats); the hook emits **`register_node`** on socket connect so the copier joins the provider room; subscribed view does **not** render a live incoming-signals table (history-only table; see **8**)
-7. **Subscribed state only:** three **`KpiCard`** tiles (grid **2** columns **≤900px**, **3** above): **Session P&amp;L**, **Trades Copied**, **Signals Today**; values from **`useIncomingSignals`** only (no new API calls). **`CopierKpiStrip`** (Active Provider / Latency / Risk cards) is **not** rendered when subscribed. **Signals Today** subtext: **`Avg latency: Nms`** when **`avgLatency`** is set (**`server_ts`** on **`trade_execution`**), else **From your provider**
-8. **Subscribed state only:** **Provider Trade History** card below the marketplace **section**: **`profileService.getMasterHistory(currentSubscription)`** when the subscribed master id changes (`GET /trades/master/:masterId/history`); stores up to **10** **`TradeHistoryEntry`** rows, **`historyLoading`** skeleton (three placeholder rows), empty message **No trade history yet for this provider.**; compact grid columns Time (**`formatDateTime(createdAt)`**), Symbol, Action (**BUY**/**SELL** chips), Status (**OPEN** muted / **CLOSED** pill), **P&amp;L** (**`formatCurrency`** with mint only if **`pnl > 0`** on CLOSED, **`pnl === null`** shows **—**)
+5. **Always wait for `rehydratedFromStorage` in gated pages.** Adding new gated routes must follow the same pattern as `/dashboard` and `/admin`. Checking only `isAuthenticated` without waiting on `rehydratedFromStorage` redirects users away on hard refresh.
 
-Hooks used:
+6. **Keep toast as the only user-facing error surface.** No `alert()` or browser dialog calls. Use `toast.error(message)` from `sonner` and `console.error(...)` for logging.
 
-- `useSelector` → current auth user
-- `useDispatch` → update user after subscribe change
-- `useState` → masters, loading, current subscription, **`masterHistory`**, **`historyLoading`**
-- `useEffect` → fetch active masters on mount
-- `useEffect` → fetch subscribed provider trade history via **`profileService.getMasterHistory`** when **`currentSubscription`** changes (clear when unsubscribed)
-- `useIncomingSignals` → shared `trade_execution` socket listener and signal counters
+7. **Use `@/...` imports everywhere.** The `tsconfig.json` maps `@/*` to `./src/*`. All component and service imports should use this alias, not relative `../../` paths.
 
-Marketplace/profile components:
+8. **Do not add Tailwind config for new custom values.** Tailwind v4 uses CSS `@theme` tokens in `globals.css`. Add new design tokens there, not in a `tailwind.config.ts` (which does not exist and is not needed).
 
-- Public marketplace pages use `TraderCard` from `src/components/marketplace/TraderCard.tsx`
-- Copier dashboard uses `TraderCard` in marketplace and subscribed modes
-- Active subscription card shows the selected provider, risk pill, signal count, session P&L, and unsubscribe action
-- Empty state shows a provider-selection CTA and a three-card marketplace teaser
-- Marketplace bootstrap **`useEffect`** still loads **`profileService.getMasterProfile(masterId)`** and **`profileService.getMasterHistory(masterId)`** for each active master on mount (existing behavior); the **Provider Trade History** UI performs its own **`profileService.getMasterHistory(currentSubscription)`** when the copier’s subscribed master id changes
+9. **New admin sub-sections get their own route, not a tab in `admin/page.tsx`.** The admin layout supports nested routing. Add `/admin/nodes`, `/admin/audit`, etc. as new page files.
 
-`handleSubscribe(masterId)` flow:
+10. **Do not install a second socket library.** `socket.io-client` is already present. New realtime features should extend `useIncomingSignals` or add a new hook that reuses the same backend namespace.
 
-1. call `marketplaceService.updateSubscription(user.id, masterId)`
-2. update local `currentSubscription`
-3. dispatch `loginSuccess({...user, subscribedToId})`
-4. show a Sonner toast for success or failure
-
-UI behavior:
-
-- If already subscribed, that provider card renders in subscribed mode and other cards can replace the subscription
-- Unsubscribe action uses `masterId = null`
-
-### Phase 5 (copier — completed)
-
-- **KPI grid (three `KpiCard` components):** Session P&amp;L, Trades Copied (win-rate subtext from **`trades`**), Signals Today (**`avgLatency`** in subtext when available; see responsibility **7**).
-- **Provider trade history:** inline table after marketplace when subscribed — **`profileService.getMasterHistory`** → **`GET /trades/master/:masterId/history`**, up to **10** rows (see responsibilities **7–8** above).
-- **`useIncomingSignals`** exposes **`avgLatency`** (rolling average, last **10** samples); surfaced on **Signals Today** **`KpiCard`** subtext when **`server_ts`** is present on **`trade_execution`**.
-
-## `useIncomingSignals`
-
-Hooks:
-
-- `useState<IncomingTrade[]>`
-- `useRef<number[]>` — rolling buffer for latency samples
-- `useEffect` for socket lifecycle
-
-Realtime flow:
-
-1. connect to `io('http://localhost:3000')`
-2. on **`connect`**, if **`userEmail`** is set (copier logged in), emit **`register_node`** with **`{ role: 'SLAVE', identifier: userEmail }`** so the gateway joins **`room_master_<subscribedToId>`** (see **`SYSTEM_CONTRACT_MATRIX.md`** §4.2). **`CopierDashboard`** passes **`user?.email`**. Optional arg; callers without email still connect but do not join a master room.
-3. listen for `trade_execution` events
-4. prepend row with local timestamp
-5. keep only latest 10 entries
-6. disconnect socket on unmount
-7. expose connection state, **`todayCount`** (monotonic session total of **`trade_execution`** events, not capped by the 10-row buffer), session P&L, mirrored-trade count, and **`avgLatency`**
-8. **Latency (Phase 5.5):** when the payload includes optional **`server_ts`** (Unix ms from gateway), compute **`Date.now() - server_ts`**, ignore samples outside **[0, 60000)** ms, keep a rolling average of the last **10** readings, expose **`avgLatency: number | null`** (null until the first valid sample)
-9. **`sessionPnl`** / **`mirroredTrades`** treat **`event`** case-insensitively (**`OPEN`** / **`CLOSE`**)
-
-Expected trade payload fields consumed:
-
-- `event`
-- `symbol`
-- `action`
-- `volume`
-- `master_ticket`
-- optional **`server_ts`** (see **`SYSTEM_CONTRACT_MATRIX.md`** `trade_execution` schema)
-
-## `IncomingSignalsTable` and `LiveTradeTable`
-
-- **`CopierDashboard`** no longer renders an incoming-signals feed table (removed Fix 5-B); **`useIncomingSignals`** **`trades`** buffer remains for **`LiveTradeTable`** and KPI / card stats only.
-- `LiveTradeTable` is deprecated and retained as a compatibility wrapper around `useIncomingSignals`
+11. **Update `SYSTEM_CONTRACT_MATRIX.md` and this file whenever an API call, socket event, or route is added.** These two files are the source of truth for inter-service contracts.
 
 ---
 
-## 9) Layout and Navigation Components
+## 19. Local development
 
-## `Navbar` (`src/components/navigation/Navbar.tsx`)
+```bash
+# from trade-sync-frontend/
+npm install
+npm run dev      # http://localhost:3001
+npm run build    # production build
+npm run start    # serve production build
+npm run lint     # ESLint
+```
 
-Dynamic navigation logic based on Redux auth state:
-
-- Show `Sign in`/`Get started` when not authenticated
-- Show public links `Discover`, `How it works`, and `Docs` when not authenticated
-- Show role-aware links when authenticated:
-  - `MASTER` sees `Dashboard`
-  - `SLAVE` sees `Discover` and `Dashboard`
-  - `ADMIN` sees `Discover`, `Dashboard`, and `Admin`
-- Show `Admin` actions only if `user.role === 'ADMIN'`
-- When authenticated, a **Log out** ghost `Button` dispatches `logout()` (clears Redux, `tsp_user`, and `tsp_access_token`), shows a Sonner success toast, and navigates to `/login` (client-side session only; no server revoke endpoint)
-
-Other details:
-
-- Uses `usePathname` for active link styles
-- Uses the Phase 1 `Logo` and `Button` primitives with Tailwind v4 theme tokens
-- Mobile is currently a compact Logo + primary **Dashboard** or **Sign in** plus **Log out** when authenticated; full mobile navigation is deferred
-
-## Composite UI Components
-
-- `EquityCurve` renders the deterministic SVG curve used by cards and marketing previews
-- `TradeRow` supplies decorative rows inside **Hero** and similar rails (no HTTP)
-- `MarketTicker` is a client component that pulls live crypto and FX prices over the public internet (see `/` landing notes)
-- `TraderCard`, `TraderCardSkeleton`, and `RiskFilter` support provider marketplace UI
-- `Hero`, `HowItWorks`, `ProviderShowcase`, `VerifiedProviderShowcaseBlock` (real `GET /auth/top-masters` + `GET /auth/masters` counts), `LiveTradeFeedCard`, `ContactSection`, and `FooterStrip` compose the landing page
-
-## `Footer` (`src/components/layout/Footer.tsx`)
-
-- Present in the repo for reuse; **not** mounted from root `layout.tsx`. Landing uses **`FooterStrip`** instead.
-
-## `AdminLayout`
-
-- Keeps `/admin` content full width and lets `src/app/admin/page.tsx` own the Phase 7 tab UI
+Backend must be running at `http://localhost:3000` for all API calls and WebSocket connections.
 
 ---
 
-## 10) UI Primitive Components
+## 20. Canonical contract pointer
 
-## `Button`
+For shared backend/frontend/client integration contracts (REST routes, socket events, payload schemas, auth model):
 
-- Variants: `primary`, `secondary`, `danger`
-- Supports `isLoading` spinner
-- Disables button when `isLoading || props.disabled`
+→ `SYSTEM_CONTRACT_MATRIX.md` at workspace root
 
-## `Input`
-
-- Optional `label`
-- Pass-through of all standard `<input>` props
-
-## `Card`
-
-- Dashboard metric widget
-- Color theme union:
-  - `blue`, `emerald`, `purple`, `yellow`, `red`
-- Accepts Lucide icon component and renders value/title
-
-## `KpiCard` (`src/components/common/KpiCard.tsx`)
-
-- Phase 5 premium KPI tile; props-only (no data fetching)
-- `title`, `value` (`string | number`), optional `subtext`, `icon` as **`ReactNode`** (pass a sized Lucide icon, e.g. `<Users size={18} />`)
-- Optional `valueColor`: `default` | `mint` | `danger` | `violet` (maps to design tokens)
-- `loading`: pulsing skeleton bars (title/value/subtext placeholders + icon placeholder)
-- Hover: lift (`translateY(-4px)`), mint border and glow shadow; icon wrapper uses **`group-hover`** (`--color-mint-soft` background, `--color-mint` icon color)
-- Import: `import { KpiCard } from "@/components/common/KpiCard"` (`tsconfig` maps `@/*` → `./src/*`)
-
----
-
-## 11) Styling and Frontend Build Tooling
-
-### `globals.css`
-
-- Imports Tailwind via `@import "tailwindcss"`
-- Defines Tailwind v4 `@theme` tokens for dark background, surfaces, text, mint, violet, danger, and warning colors
-- Maps `--font-sans` to Inter and `--font-mono` to JetBrains Mono font variables
-- Body sets the dark app background, default text color, font smoothing, and global letter spacing
-- Includes tabular-number helpers, autofill styling, and shared animation keyframes
-
-### Tailwind/PostCSS
-
-- `postcss.config.mjs` uses `@tailwindcss/postcss`
-- Tailwind runtime is v4 (`tailwindcss: ^4`)
-
-### Lint/Type safety
-
-- ESLint uses Next core-web-vitals + TypeScript presets
-- TypeScript strict mode is enabled (`strict: true`)
-
----
-
-## 12) Dependencies and Versions
-
-From `package.json` / lockfile:
-
-### Runtime dependencies
-
-- `next`: `16.1.6`
-- `react`: `19.2.3`
-- `react-dom`: `19.2.3`
-- `@reduxjs/toolkit`: `^2.11.2`
-- `react-redux`: `^9.2.0`
-- `axios`: `^1.13.4`
-- `socket.io-client`: `^4.8.3`
-- `lucide-react`: `^0.563.0`
-- `clsx`: `^2.1.1`
-- `sonner`: `^2.0.7`
-- `tailwind-merge`: `^3.4.0`
-
-### Dev dependencies
-
-- `typescript`: `^5`
-- `eslint`: `^9`
-- `eslint-config-next`: `16.1.6`
-- `tailwindcss`: `^4`
-- `@tailwindcss/postcss`: `^4`
-- React/Node type packages (`@types/*`)
-
----
-
-## 13) File-to-File Communication Map
-
-1. `src/app/layout.tsx`
-	- imports `ReduxProvider`, `Navbar` (no global `Footer`; landing includes `FooterStrip` in `page.tsx`)
-2. `ReduxProvider`
-	- injects `store` from `redux/slices/store.ts`
-	- dispatches `hydrateAuth()` on mount
-3. Auth forms
-	- call service layer in `services/api.ts`
-	- dispatch `loginSuccess` from `authSlice`
-	- navigate with Next router
-4. `dashboard/page.tsx`
-	- consumes Redux auth state
-	- selects provider/copier dashboard component
-5. `CopierDashboard`
-	- calls `marketplaceService`
-	- updates local + Redux subscription state
-	- uses **`useIncomingSignals`** for KPIs and provider card stats; subscribed layout shows **`ProviderTradeHistoryTable`** (no incoming-signals table)
-6. `admin/page.tsx`
-	- calls `adminService`
-	- updates local users table state
-7. `useIncomingSignals`
-	- opens socket directly to backend
-	- listens for incoming `trade_execution` payloads
-8. `LiveTradeTable`
-	- deprecated compatibility wrapper around `useIncomingSignals`
-
----
-
-## 14) Current Known Issues / Inconsistencies (Important)
-
-These are present in current source and should be considered before new coding:
-
-1. `Navbar` mobile menu state exists but no mobile link panel is rendered.
-
-These are not documentation errors; they reflect current code reality.
-
----
-
-## 15) Relationship to Backend Contracts
-
-Frontend assumes backend at `http://localhost:3000` and relies on:
-
-- `/auth/register`, `/auth/login`
-- `/auth/users`, `/auth/users/:id/license`, `/auth/users/:id/toggle-status`
-- `/auth/masters`, `/auth/users/:id/subscribe`
-- socket event `trade_execution`
-
-From backend architecture:
-
-- Admin and user-management actions are backend-authorized and require a valid bearer token plus role checks.
-- Marketplace subscription writes `subscribedToId` in backend user model.
-- Trade feed is room/routing-aware in backend, but frontend socket consumer currently just listens globally.
-
----
-
-## 16) Safe Extension Rules for AI Models
-
-If using AI to generate code changes, apply these constraints:
-
-1. Preserve existing route paths and form submission payload contracts.
-2. Keep Redux state shape backward-compatible (`user`, `isAuthenticated`, `subscribedToId`, and `rehydratedFromStorage` for session hydration).
-3. Do not rename `loginSuccess` reducer without updating all auth forms and marketplace update flow.
-4. If moving API base URL to env vars, keep current default behavior for local dev.
-5. If adding admin pages (`/nodes`, `/audit`, `/settings`), wire them from the main shell or a dedicated admin layout as new routes.
-6. If changing socket logic, preserve display behavior expected by `useIncomingSignals` and `LiveTradeTable`.
-7. Prefer additive changes over destructive refactors.
-8. Update this document whenever API contracts, state shape, or route behavior changes.
-
----
-
-## 17) Local Development Commands
-
-From frontend root:
-
-- `npm install`
-- `npm run dev` (development)
-- `npm run build` (production build)
-- `npm run start` (run built app)
-- `npm run lint` (ESLint)
-
-Default dev URL: `http://localhost:3001`.
-
----
-
-## 18) Phase 6: Master Profile & Trading History (Completed)
-
-Phase 6 implementation added the legacy master profile card grid and trade history modal to the former `SlaveDashboard`. Phase 5 of the UI overhaul replaced that screen with `CopierDashboard` and marketplace `TraderCard` rendering.
-
-### New Components
-
-1. **`MasterProfileCard.tsx`** — Displays individual master profile with:
-   - Master name, creation date, and subscription buttons
-   - Stats grid: total trades, closed trades, win rate, total PnL, average volume
-   - Embedded `PnLChart` with cumulative profit/loss visualization
-   - "View Trade History" link that triggers `TradeHistoryModal`
-
-2. **`TradeHistoryModal.tsx`** — Full-screen overlay showing:
-   - Table of last 50 trades (OPEN and CLOSED status)
-   - Columns: Symbol, Action, Status, PnL, Created Date, Closed Date
-   - Color-coded rows (green for profitable, red for loss, gray for open)
-   - ESC key and backdrop click to close
-
-3. **`PnLChart.tsx`** — Recharts area chart showing:
-   - Cumulative PnL evolution over time (filtered to CLOSED trades only)
-   - Dynamic gradient color (profit = green, loss = red)
-   - Responsive layout with tooltip on hover
-
-### API Integration
-
-- `profileService.getMasterProfile(masterId)` fetches aggregate master stats
-- `profileService.getMasterHistory(masterId)` fetches last 50 trades
-- Both methods are integrated into `CopierDashboard` via `useEffect` and state management
-
-### Dependencies Added
-
-- `recharts` (`^3.8.1`) for PnL chart visualization
-
-### Integration Pattern
-
-- `CopierDashboard` renders a grid of `TraderCard` components; `MasterProfileCard` remains deprecated for older dashboard callers
-- Each card is independent and can fetch/display its own data
-- **Phase 8:** trade history is exposed on the public provider detail page (`/traders/[id]`, **Trade history** tab) via `components/master/TradeHistoryModal`; copier dashboard cards do not open the modal
-
----
-
-## 19) Suggested Next Improvements (Non-Breaking)
-
-1. Fix `RootState` import path inconsistencies.
-2. Keep toasts as the only user-facing error surface (no `alert()` in `src/`).
-3. Add API request typing instead of broad `any` usage.
-4. Add dedicated admin routes or sections for nodes, audit logs, and settings when those features ship.
-5. Centralize socket management if multiple realtime widgets are added.
-
----
-
-## 20) Phase 8: final polish (error UI, auth persistence, trade history)
-
-### App shell and errors
-
-- `src/app/not-found.tsx` — 404, token background, primary/ghost actions
-- `src/app/error.tsx` — route error boundary, `reset()` and home link
-- `src/app/global-error.tsx` — root segment error UI (includes `globals.css` so design tokens load)
-- `src/app/(auth)/layout.tsx` — min-height + dark background for login and register only
-
-### Auth persistence (no `redux-persist`)
-
-- `loginSuccess` / `logout` / `hydrateAuth` in `authSlice` sync `tsp_user` and `tsp_access_token` in `localStorage`
-- `ReduxProvider` runs `hydrateAuth` in `useLayoutEffect`
-- Gated pages wait on `rehydratedFromStorage` so hard refresh keeps the session and logged-out users still reach `/login`
-
-### Trade history modal
-
-- Canonical import: `src/components/master/TradeHistoryModal.tsx` (re-exports the dashboard implementation)
-- Primary UX: public provider detail `src/app/traders/[id]/page.tsx` — **Trade history** tab opens the modal; dashboard cards do not open it
-
-### Phase 8 ship checklist
-
-- [ ] Hard refresh while logged in keeps you logged in
-- [ ] Hard refresh on `/dashboard` while logged out redirects to `/login` after hydration
-- [ ] Unknown URL shows `not-found`
-- [ ] Login and register validate email and password length client-side with inline `Input` errors; submit disabled when invalid or loading
-- [ ] No `alert()` in `src/`
-- [ ] All main routes load: `/`, `/login`, `/register`, `/traders`, `/traders/[id]`, `/dashboard`, `/admin`
-
----
-
-## 21) Canonical contract pointer
-
-For shared backend/frontend/client integration contracts, use:
-
-- `SYSTEM_CONTRACT_MATRIX.md` (workspace root)
-
-When API paths, response/request schemas, socket events, or role/identity behavior change, update that matrix first, then align this frontend guide.
-
----
-
-## 22) Phase 4: Landing Page Dynamism (Completed)
-
-Shipped items aligned with `frontend_phase4_guide.md`, with implementation notes where behavior diverged from the earliest draft:
-
-- **4.1 Navbar:** Public links are **Discover**, **How it works**, **Docs** (no Pricing).
-- **4.2 Login:** Email + password + submit only; decorative role tabs and Google button removed.
-- **4.3 / 4.3b MarketTicker:** Live **CoinGecko** (six cryptos: BTC, ETH, SOL, XRP, ADA, DOGE) plus **Frankfurter** forex (EUR/USD, GBP/USD); **60s** polling; **`fetch`** with **`cache: "no-store"`**; stale footnote when APIs fail; scroll animation preserved.
-- **4.4 LiveTradeFeedCard:** Server-side **`GET /trades/history`** with **`fetch`** and **`next: { revalidate: 60 }`**; strict **CLOSED** + **BUY**/**SELL** filter; dollar-formatted P&amp;L; **6-column** layout (Time, Symbol, Action, Volume, P&amp;L, Status); demo fallback rows when empty; backend currently returns legacy **`TradeLog`** rows for that route in many setups, so real rows depend on DB/API shape.
-- **4.5 FooterStrip:** Full **3-column** marketing footer + legal strip (`FooterStrip` export name unchanged).
-- **4.6 ContactSection:** **`id="contact"`**; Formspree JSON **`fetch`** POST; primary **Button** submit with loading state.
-- **4.7 Docs:** This section plus **`SYSTEM_CONTRACT_MATRIX.md`** updates for **`/trades/history`** consumers.
-
----
-
-## 23) Phase 5: KPI dashboards + live trade history + latency measurement (Completed)
-
-Aligned with **`frontend_phase5_guide.md`**:
-
-- **Shared `KpiCard`** (`src/components/common/KpiCard.tsx`): hover lift, mint border glow, icon tint on **`group-hover`**, skeleton **`loading`** state; design tokens from **`globals.css`**.
-- **Admin (`/admin`):** four KPI cards atop the Users tab — **Total Users**, **Active Subscriptions**, **Platform Masters**, **Core Engine** — all derived from **`adminService.getUsers()`** only.
-- **Copier (`CopierDashboard`):** three KPI cards when subscribed (Session P&amp;L, Trades Copied, Signals Today); **`CopierKpiStrip`** hidden when subscribed; **Provider Trade History** table (**`GET /trades/master/:masterId/history`**, up to 10 rows) after marketplace (no incoming-signals feed table).
-- **Latency:** backend **`trade_execution`** optional **`server_ts`**; **`useIncomingSignals`** **`avgLatency`**; **Signals Today** **`KpiCard`** subtext **`Avg latency: Nms`** when **`avgLatency`** is non-null.
-
----
-
-Treat this file as the frontend source-of-truth for architecture and integration behavior when extending `trade-sync-frontend`.
+When API paths, response schemas, socket event names, or role/identity behavior change, update that matrix first, then align this frontend guide.

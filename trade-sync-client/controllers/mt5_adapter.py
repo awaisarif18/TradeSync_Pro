@@ -6,7 +6,7 @@ class MT5Adapter:
         # Standard paths for common brokers (User can customize in code if needed)
         self.broker_paths = {
             "XM": r"C:\Program Files\XM Global MT5\terminal64.exe",
-            "Vantage": r"C:\Program Files\Vantage International MT5\terminal64.exe",
+            "Vantage": r"C:\Program Files\Vantage Markets MT5 Terminal\terminal64.exe",
             "Exness": r"C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe",
             "Exness Slave": r"C:\MT5_Exness_Slave\terminal64.exe"
         }
@@ -38,6 +38,26 @@ class MT5Adapter:
             error = mt5.last_error()
             return False, f"Auth Failed: {error}"
         
+    def get_symbol_point(self, symbol):
+        """Returns the point size for a symbol, or None if unavailable."""
+        if not self.connected:
+            return None
+        mt5.symbol_select(symbol, True)
+        info = mt5.symbol_info(symbol)
+        if not info:
+            return None
+        return getattr(info, 'point', None)
+
+    def get_execution_price(self, symbol, action):
+        """Returns the fill-side quote: ask for BUY, bid for SELL. None if unavailable."""
+        if not self.connected:
+            return None
+        mt5.symbol_select(symbol, True)
+        tick = mt5.symbol_info_tick(symbol)
+        if not tick:
+            return None
+        return tick.ask if action.upper() == "BUY" else tick.bid
+
     def execute_trade(self, symbol, action, volume, deviation: int = 10):
         if not self.connected: return None
         

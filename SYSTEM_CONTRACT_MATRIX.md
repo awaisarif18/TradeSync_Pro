@@ -94,11 +94,11 @@ JWT enforcement contract for web REST:
 | /auth/masters | GET | AuthController.getActiveMasters | Frontend SlaveDashboard | none | active master[] | **Public.** Marketplace source |
 | /auth/masters/live | GET | AuthController.getLiveMasters | Frontend trader cards | none | { liveIds: string[] } | **Public.** Returns currently connected master socket user IDs. Used for real LIVE badges. |
 | /auth/users/:id/subscribe | PATCH | AuthController.updateSubscription | Frontend SlaveDashboard | { masterId: string|null } | { message, subscribedToId } | **JWT required.** Authenticated user id must match `:id`, or caller is ADMIN. null means unsubscribe |
-| /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend SlaveDashboard (MasterProfileCard) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive, riskMetrics?, equitySparkline?, activeHoursSummary? } | **Public.** Returns aggregate stats, live socket status, and public profile fields for one active master. Added Phase 6, isLive added Phase 9. **Phase 3:** When the capped CLOSED sample is non-empty, `riskMetrics`, `equitySparkline`, and `activeHoursSummary` are **implemented** (from the last **2000** CLOSED `TradeLogs`, newest by `COALESCE(closedAt, createdAt)`, via `buildAnalytics`). Fields omitted when there are no rows in that sample or when a given analytic has insufficient data (e.g. sparkline needs ≥2 closes). |
+| /auth/masters/:id/profile | GET | AuthController.getMasterProfile | Frontend `/traders` marketplace page (`marketplaceService.getMasterProfile`); Frontend `/traders/:id` detail page; Frontend `CopierDashboard` (`profileService.getMasterProfile` per master on mount); Frontend `ProviderDashboard` (via `getMasterDashboard` response; standalone profile calls via `profileService`); Python `MasterWindow.load_performance_stats` (called on dashboard show) | none | { id, fullName, createdAt, totalTrades, closedTrades, winRate, totalPnL, avgVolume, bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime, subscriberCount, isLive, riskMetrics?, equitySparkline?, activeHoursSummary? } | **Public.** Returns aggregate stats, live socket status, and public profile fields for one active master. Added Phase 6, isLive added Phase 9. **Phase 3:** When the capped CLOSED sample is non-empty, `riskMetrics`, `equitySparkline`, and `activeHoursSummary` are **implemented** (from the last **2000** CLOSED `TradeLogs`, newest by `COALESCE(closedAt, createdAt)`, via `buildAnalytics`). Fields omitted when there are no rows in that sample or when a given analytic has insufficient data (e.g. sparkline needs ≥2 closes). |
 | /auth/masters/:masterId/subscribers | GET | AuthController.getMasterSubscribers | Python MasterController.fetch_subscribers | none | { id, fullName, email, isActive, totalCopied, totalPnL }[] | **Public.** Returns per-slave trade summary using TradeLogs.slaveId. Historical records show 0 until slaveId is populated. |
 | /auth/masters/:id/profile | PATCH | AuthController.updateMasterProfile | Frontend MasterProfileSetup | { bio?, tradingPlatform?, instruments?, strategyDescription?, riskLevel?, typicalHoldTime? } | updated user object | **JWT required.** Caller must be master `:id` or ADMIN |
-| /auth/masters/:id/dashboard | GET | AuthController.getMasterDashboard | Frontend MasterDashboard | none | { profile, recentTrades, subscriberCount, openTrades, totalSignalsSent } | **JWT required.** Caller must be master `:id` or ADMIN |
-| /auth/top-masters | GET | AuthController.getTopMasters | Frontend TopTradersSection (landing page) | none | enriched master array (max 3) | **Public.** Top 3 most active masters. Added Phase 7. |
+| /auth/masters/:id/dashboard | GET | AuthController.getMasterDashboard | Frontend `ProviderDashboard` (`profileService.getMasterDashboard`, on mount and after profile save) | none | { profile, recentTrades, subscriberCount, openTrades, totalSignalsSent } | **JWT required.** Caller must be master `:id` or ADMIN |
+| /auth/top-masters | GET | AuthController.getTopMasters | Frontend `VerifiedProviderShowcaseBlock` (client component on landing page, `profileService.getTopMasters`) | none | enriched master array (max 3) | **Public.** Top 3 most active masters. Added Phase 7. |
 
 ### 3.2 Trade REST
 
@@ -106,7 +106,7 @@ JWT enforcement contract for web REST:
 |---|---|---|---|---|---|---|
 | /trades/history | GET | TradeController.getTradeHistory | Frontend landing page `LiveTradeFeedCard` (server-side fetch, 60s revalidation); dashboards (potential) | none | latest logs array | **Public.** Returns top 50 via TradeService (`getLatestLogs`; legacy raw `TradeLog` table shape may differ from `TradeLogs` entity rows) |
 | /trades/stats | GET | TradeController.getStats | Frontend dashboards (potential) | none | placeholder stats object | **Public.** Currently stub/static |
-| /trades/master/:masterId/history | GET | TradeController.getMasterHistory | Frontend SlaveDashboard (TradeHistoryModal) | none | { symbol, action, status, pnl, createdAt, closedAt }[] | **Public.** Returns last 50 trades per master (OPEN + CLOSED). Added Phase 6. |
+| /trades/master/:masterId/history | GET | TradeController.getMasterHistory | Frontend `CopierDashboard` — `ProviderTradeHistoryTable` (up to 10 rows for subscribed master, reloads when subscription changes); Frontend `/traders/:id` detail page (full history for PnL chart + last 10 in recent signals table + `TradeHistoryModal`) | none | { id, symbol, action, volume, status, pnl, createdAt, closedAt }[] | **Public.** Returns last 50 trades per master (OPEN + CLOSED). Added Phase 6. |
 
 ### 3.3 Status Code Tolerance Matrix
 
@@ -127,10 +127,11 @@ Compatibility recommendation:
 
 | Event Name | Direction | Producer | Consumer | Purpose |
 |---|---|---|---|---|
-| register_node | client -> backend | Python Master/Slave nodes | Backend TradeGateway | Role + identifier registration and room join |
+| register_node | client -> backend | Python Master/Slave nodes; Frontend `useIncomingSignals` hook (role=SLAVE, identifier=email) | Backend TradeGateway | Role + identifier registration and room join |
 | node_registered | backend -> client | Backend TradeGateway | Python SocketManager | Confirms successful room join after register_node |
 | test_signal | client -> backend | Python Master node (MasterRecorder) | Backend TradeGateway | Raw trade lifecycle signal ingestion |
-| trade_execution | backend -> clients | Backend TradeGateway | Python Slave + Frontend LiveTradeTable | Fanout execution signal stream |
+| trade_execution | backend -> clients | Backend TradeGateway | Python Slave; Frontend `useIncomingSignals` hook (CopierDashboard) | Fanout execution signal stream |
+| trade_execution_ack | client -> backend | Python Slave (SlaveController) | Backend TradeGateway | Slave reports OPEN execution result (executed/blocked/failed) + copier-side slippage diagnostics |
 | subscriber_update | backend -> master client | Backend TradeGateway | Python MasterController (+ `MasterWindow` / `SubscribersView`) | Notifies master when a subscribed slave connects or disconnects |
 
 ### 4.2 Payload Schemas
@@ -146,6 +147,8 @@ Compatibility recommendation:
 
 #### node_registered payload
 
+Success (MASTER always; SLAVE when subscribed):
+
 ```json
 {
   "success": true,
@@ -154,6 +157,19 @@ Compatibility recommendation:
   "timestamp": "ISO string"
 }
 ```
+
+Failure (SLAVE only, when `subscribedToId` is null at registration time):
+
+```json
+{
+  "success": false,
+  "role": "SLAVE",
+  "error": "Room assignment failed",
+  "timestamp": "ISO string"
+}
+```
+
+Note: A SLAVE that receives `success: false` is connected to the socket but not in any master room. It will not receive `trade_execution` events until it subscribes to a master (via `PATCH /auth/users/:id/subscribe`) and reconnects or re-emits `register_node`.
 
 #### test_signal payload (from MasterRecorder)
 
@@ -165,9 +181,12 @@ Compatibility recommendation:
   "action": "BUY | SELL | CLOSE",
   "volume": 0.1,
   "pnl": 0.0,
+  "masterPrice": 2418.40,
   "trace_id": "uuid-optional"
 }
 ```
+
+`masterPrice` — Optional float. Added in slippage hardening. OPEN uses the master position open price (`pos.price_open`); CLOSE uses the captured closing deal price. Omitted when unavailable. Used by the slave slippage drift guard and persisted on the OPEN `TradeLog` row.
 
 #### trade_execution payload (to consumers)
 
@@ -181,6 +200,7 @@ Current backend emits original signal plus optional server-side additions:
   "action": "BUY | SELL | CLOSE",
   "volume": 0.1,
   "pnl": 0.0,
+  "masterPrice": 2418.40,
   "trace_id": "uuid-optional",
   "signalId": 101,
   "server_ts": 1748000000000
@@ -196,11 +216,36 @@ Consumer-required keys (must remain stable):
 
 Optional compatibility keys:
 - trace_id (for observability only)
+- pnl — Optional float. Present on CLOSE signals from MasterRecorder (sum of MT5 deal profits). Slave `on_trade_signal` reads this as `data.get('pnl', 0.0)` for `daily_pnl` accumulation and loss-limit triggering. Frontend may use for display. Defaults to `0.0` if absent.
+- masterPrice — Optional float. Passed through unchanged from `test_signal` (gateway spreads `...data`). The slave drift guard reads it as `data.get('masterPrice')`; absent means the guard skips and the copy proceeds.
 - signalId (server-side trade log linkage when present)
 - server_ts — Optional. Unix millisecond timestamp. Added Phase 5. Used by frontend for latency display. All existing consumers safely ignore unknown fields.
 
 Note:
 - Backend tags TradeLogs.slaveId when exactly one slave is in the room.
+
+#### trade_execution_ack payload (from Slave to backend)
+
+Additive event. The slave reports its OPEN execution result so the backend can persist copier-side pricing and slippage diagnostics on the matching OPEN `TradeLog` row.
+
+```json
+{
+  "master_ticket": 123456,
+  "slave_ticket": 555,
+  "symbol": "XAUUSD.m",
+  "status": "EXECUTED | BLOCKED_SLIPPAGE | FAILED",
+  "masterPrice": 2418.40,
+  "copierPrice": 2418.55,
+  "slippagePointsConfigured": 20.0,
+  "slippagePointsActual": 1.5,
+  "slippageBlocked": false,
+  "trace_id": "uuid"
+}
+```
+
+Backend resolves `masterId` from the slave socket's room context, finds the newest OPEN `TradeLog` for (`masterId`, `master_ticket`), and updates `copierPrice`, `slippagePointsConfigured`, `slippagePointsActual`, `slippageBlocked`, and `masterPrice` (only if still null).
+
+Multi-slave caveat: a single master OPEN row is shared across all subscribed slaves, so ACK diagnostics are exact for single-slave rooms and best-effort (last writer) otherwise. Per-slave rows are a future enhancement (mirrors the existing `slaveId` single-slave limitation).
 
 #### subscriber_update payload
 
@@ -250,6 +295,11 @@ Breaking impact warning:
 | Risk Level | Users.riskLevel | MasterProfileSetup, MasterProfileCard, TopTradersSection | marketplace risk badge and filtering context |
 | Typical Hold Time | Users.typicalHoldTime | MasterProfileSetup, MasterProfileCard, MasterDashboard | identity and trading style context |
 | Subscriber Count | derived from Users.subscribedToId | MasterProfileCard, MasterDashboard, TopTradersSection | popularity and social proof display |
+| Master entry price | TradeLogs.masterPrice (from `masterPrice` payload) | not used | MasterRecorder emits; slave drift guard input |
+| Copier fill price | TradeLogs.copierPrice (from `trade_execution_ack`) | not used | slave reports its fill-side quote |
+| Slippage threshold | TradeLogs.slippagePointsConfigured | not used | slave `max_slippage_points` setting (0.0 = disabled) |
+| Slippage actual | TradeLogs.slippagePointsActual | not used | computed drift `abs(copier-master)/point` |
+| Slippage blocked | TradeLogs.slippageBlocked | not used | true when slave hard-blocked the OPEN |
 
 ---
 
@@ -265,10 +315,12 @@ Breaking impact warning:
 | Trade lifecycle logs | Backend DB + Python logs | TradeGateway/TradeService + controllers | Admin/dashboard APIs + UI logs |
 | Risk settings state | Python AppState | RiskPanel UI ↔ SlaveController guards | on_trade_signal() execution path |
 | Daily PnL tracker | Python AppState.daily_pnl | SlaveController CLOSE handler | RiskPanel display, loss limit trigger |
-| Copy mode settings | Python AppState (copy_mode, fixed_lot_size, reverse_copy, slippage_points) | Copy Mode UI in slave window Tab 1 | on_trade_signal() volume + action calculation |
+| Copy mode settings | Python AppState (copy_mode, fixed_lot_size, reverse_copy) | Copy Mode UI in slave window Tab 1 | on_trade_signal() volume + action calculation |
+| MT5 fill tolerance | Python AppState.slippage_points | no UI (fixed default 10; control removed) | passed as `deviation` to MT5 `execute_trade` on OPEN |
 | Session tracking | Python AppState (session_pnl, open_trades, closed_trades) | SlaveController toggle_listening + on_trade_signal | TradesPanel display |
 | Equity protection | Python AppState.equity_floor | RiskPanel equity section | Guard -1 in on_trade_signal() |
 | Unmapped symbol behavior | Python AppState.unmapped_symbol_behavior | SymbolMapPanel dropdown | on_trade_signal() symbol mapping logic |
+| Max slippage drift | Python AppState.max_slippage_points (points) | CopyView "Max Slippage Drift" spinbox (pips; stored as points × 100) | Guard 4 in on_trade_signal() hard-blocks OPEN on breach |
 | Subscriber online status | Python AppState.subscriber_online_status | MasterController on_subscriber_update handler | `SubscribersView` STATUS column (design-system `StatusPill`) |
 
 ---

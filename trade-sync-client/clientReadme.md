@@ -7,46 +7,32 @@ It is written so humans and AI coding models can extend the client safely withou
 
 ## Scope Lock (Current Phase)
 
-Current implementation scope includes Phase 1 stabilization and implemented Phase 2 desktop UI refactor milestones.
+Current implementation includes Phase 1 stabilization, Phase 2 desktop UI refactor, Phase 7.1 Slave UI overhaul, Phase 8 risk management, and Phase 8.1 Master subscriber system.
 
-Client work allowed in this phase:
-1. Critical-flow contract stabilization (MASTER/SLAVE verify + socket registration + OPEN/CLOSE handling)
-2. Structured logging with trace IDs across master and slave paths
-3. Reconnect and health-state handling for practical runtime resilience
+Client work delivered and stable:
+1. `SocketManager` reconnect/backoff with auto `register_node` on every connect/reconnect
+2. Duplicate listener protection via `register_handler` with `_registered_events` set
+3. Trace-aware structured logs and `trace_id` propagation in master/slave paths
+4. `health_state` field in `BaseState` for socket lifecycle visibility
+5. Minimal contract tests in `tests/test_slave_controller.py`
+6. Master shell: frameless `TitleBar` + `WindowShell(role='master')` injecting `BroadcastView`, `SubscribersView`, `PerformanceView`
+7. Slave shell: frameless `TitleBar` + `WindowShell(role='slave')` injecting `CopyView`, `SymbolsView`, `RiskView`, `TradesView`
+8. `PerformanceView` aggregates raw signals by `master_ticket` for OPEN/CLOSE lifecycle table
+9. Master EventLog filters: `ALL`, `SIGNAL`, `SESSION`, `MT5`, `ERR`
+10. `MasterController.revoke_subscriber` calls `POST /auth/node-action/revoke-subscriber`
 
 Client work deferred for later phases:
 1. Multi-profile MT5/node management at scale
 2. Persistent local settings for advanced preferences
-3. Telemetry buffering platform features beyond current delivery
-4. Full graceful-shutdown hardening expansion beyond immediate recorder/socket safety
-
-Lightweight testing policy for this project stage:
-- Keep automated tests focused on core execution logic with mocks
-- Prefer a small reliable suite over extensive coverage
-- Ensure no contract drift from SYSTEM_CONTRACT_MATRIX.md
-
-Implemented in Phase 1 and Phase 2 client scope:
-1. `SocketManager` reconnect/backoff configuration with health callbacks
-2. Auto `register_node` on every connect/reconnect
-3. Duplicate listener protection via `register_handler`
-4. Trace-aware logs and `trace_id` propagation in master/slave paths
-5. Shared state includes `health_state` in `models/app_state.py`
-6. Minimal client tests in `tests/test_slave_controller.py` for OPEN/CLOSE ticket-map behavior
-7. Master shell refactor delivered: frameless `TitleBar` + `WindowShell(role='master')` with injected `BroadcastView`, `SubscribersView`, and `PerformanceView`
-8. Master `EventLog` filters are role-aware (`ALL`, `SIGNAL`, `SESSION`, `MT5`, `ERR`), while slave keeps copy-centric filters
-9. `PerformanceView` now aggregates recent raw signals by `master_ticket`, so OPEN/CLOSE lifecycle updates one row with final closed P&L
-
-Manual smoke expectation (client side):
-1. Clients move through `CONNECTED`, `RECONNECTING`, `DISCONNECTED` transitions in logs
-2. After backend restart, both master and slave reconnect automatically
-3. First post-reconnect signal is executed/received without manual socket restart
+3. Telemetry buffering platform features
+4. Full graceful-shutdown hardening
 
 ---
 
 ## 1) Project Identity
 
 - **Project:** `trade-sync-client`
-- **Language:** Python
+- **Language:** Python 3.9+
 - **UI Framework:** PySide6
 - **Broker Bridge:** MetaTrader 5 (`MetaTrader5` package)
 - **Realtime Transport:** Socket.IO client (`python-socketio[client]`)
@@ -60,7 +46,7 @@ Primary responsibilities:
 3. Connect to MT5 terminal and execute trading actions
 4. Handle realtime socket communication with NestJS backend
 5. Broadcast master events (`OPEN`/`CLOSE`) and consume copied events on slave
-6. Provide operator UI for risk multiplier and symbol mapping
+6. Provide operator UI for risk multiplier, copy mode, symbol mapping, risk guards
 
 ---
 
@@ -68,214 +54,265 @@ Primary responsibilities:
 
 ```text
 trade-sync-client/
-├─ clientReadme.md                          # This document
-├─ requirements.txt                         # Python dependency list
-├─ main_master.py                           # Master GUI entrypoint
-├─ main_slave.py                            # Slave GUI entrypoint
-├─ main.py                                  # Legacy CLI slave flow (stale)
-├─ master_recorder.py                       # Master trade monitor + broadcaster
+├─ clientReadme.md                              # This document
+├─ requirements.txt                             # Python dependency list
+├─ main_master.py                               # Master GUI entrypoint
+├─ main_slave.py                                # Slave GUI entrypoint
+├─ main.py                                      # Legacy CLI slave flow (stale/unused)
+├─ master_recorder.py                           # Master trade monitor + broadcaster
 ├─ controllers/
-│  ├─ __init__.py                           # Empty package marker
-│  ├─ mt5_adapter.py                        # MT5 login/order/close adapter
-│  ├─ socket_manager.py                     # Socket client wrapper
+│  ├─ mt5_adapter.py                            # MT5 login/order/close adapter
+│  ├─ socket_manager.py                         # Socket.IO client wrapper with reconnect + health
 │  └─ ui_controllers/
-│     ├─ master_controller.py               # Master orchestration logic
-│     └─ slave_controller.py                # Slave orchestration logic
+│     ├─ master_controller.py                   # Master orchestration: verify, connect, broadcast
+│     └─ slave_controller.py                    # Slave orchestration: verify, connect, copy signals
 ├─ data/
-│  ├─ __init__.py                           # Package marker
-│  └─ broker_symbols.py                     # Broker preset symbol name mappings
+│  ├─ __init__.py                               # Package marker
+│  └─ broker_symbols.py                         # BROKER_PRESETS + COMMON_MASTER_SYMBOLS
 ├─ models/
-│  ├─ __init__.py                           # Re-export model classes
-│  ├─ app_state.py                          # Composed AppState facade
-│  ├─ base_state.py                         # Shared fields (logs, health, connection)
-│  ├─ master_state.py                       # Master-only fields and methods
-│  ├─ slave_state.py                        # Slave-only fields and methods
-│  └─ trade_signal.py                       # Lightweight trade DTO helper
-├─ views/
-│  ├─ qt/
-│  │  ├─ theme.py                           # Design tokens, fonts, global QSS builder
-│  │  ├─ primitives.py                       # Styled atoms and molecules (cards, inputs, chips)
-│  │  ├─ custom_widgets.py                   # Custom paint: PulseDot, sparkline, histogram, sweep
-│  │  ├─ shell.py                            # TitleBar, Sidebar (role + NAV_ITEMS_*; master SVGs radio/users/activity), HeaderStripMaster (handle/instruments/risk/ROI + `set_profile_data`), KPI/header strips, FooterStrip, EventLog, WindowShell
-│  │  ├─ master_window.py                   # PySide6 Master desktop UI
-│  │  ├─ slave_window.py                    # PySide6 Slave desktop UI (WindowShell scaffold)
-│  │  ├─ views/                             # Shell tab bodies (replacing placeholders)
-│  │  │  ├─ __init__.py                    # Package marker
-│  │  │  ├─ copy_view.py                   # COPY tab: master summary, settings, listen control
-│  │  │  ├─ symbols_view.py                 # SYMBOLS tab: presets, map table, unmapped behavior
-│  │  │  ├─ risk_view.py                   # RISK tab: guards, daily status, whitelist chips
-│  │  │  ├─ trades_view.py                 # TRADES tab: session summary, open + history tables
-│  │  │  ├─ broadcast_view.py               # Master BROADCAST tab: toggle, license, account
-│  │  │  ├─ subscribers_view.py            # Master SUBSCRIBERS tab: roster, activity (design-system)
-│  │  │  └─ performance_view.py              # Master PERFORMANCE tab: KPIs, optional analytics, recent broadcasts
-│  │  ├─ ui_bridge.py                       # Thread-safe Signal/Slot bridge
-│  │  ├─ subscribers_panel.py               # Legacy SubscribersPanel (retained; not used by WindowShell)
-└─ __pycache__/ + nested __pycache__/       # Compiled Python bytecode
+│  ├─ __init__.py                               # Re-exports AppState, TradeSignal
+│  ├─ app_state.py                              # AppState facade (multiple inheritance composition)
+│  ├─ base_state.py                             # BaseState: shared MT5/connection/log fields
+│  ├─ master_state.py                           # MasterState: subscribers, signals, session
+│  ├─ slave_state.py                            # SlaveState: risk, copy, session tracking + methods
+│  └─ trade_signal.py                           # Thin TradeSignal DTO helper
+├─ tests/
+│  └─ test_slave_controller.py                  # Unit tests for OPEN/CLOSE ticket-map behavior
+├─ assets/
+│  ├─ fonts/                                    # Inter (18pt/24pt/28pt) + JetBrains Mono TTF files
+│  └─ icons/                                    # activity.svg, radio.svg, users.svg, copy.svg,
+│                                               #   risk.svg, symbols.svg, trades.svg,
+│                                               #   chevron-down.svg, chevron-up.svg
+├─ design/
+│  └─ slave-desktop-a (3).jsx                   # Reference JSX design mockup (not executed)
+└─ views/
+   ├─ master_ui.py                              # Legacy CustomTkinter master UI (stale/unused)
+   ├─ slave_ui.py                               # Legacy CustomTkinter slave UI (stale/unused)
+   └─ qt/
+      ├─ theme.py                               # Design tokens, fonts, global QSS builder
+      ├─ primitives.py                          # Styled atoms (Card, Btn, inputs, chips, spinboxes)
+      ├─ custom_widgets.py                      # Custom paint widgets: PulseDot, EquitySparkline,
+      │                                         #   ActiveHoursHistogram, SweepBand
+      ├─ shell.py                               # TitleBar, Sidebar, WindowShell, KPI strips,
+      │                                         #   HeaderStripMaster/Slave, FooterStrip, EventLog
+      ├─ ui_bridge.py                           # Thread-safe QObject signal bridge
+      ├─ master_window.py                       # PySide6 Master desktop UI (MasterWindow + MasterLoginCard)
+      ├─ slave_window.py                        # PySide6 Slave desktop UI (SlaveWindow + SlaveLoginCard)
+      ├─ subscribers_panel.py                   # Legacy SubscribersPanel (retained; superseded by subscribers_view.py)
+      └─ views/
+         ├─ __init__.py                         # Empty package marker
+         ├─ broadcast_view.py                   # Master BROADCAST tab
+         ├─ subscribers_view.py                 # Master SUBSCRIBERS tab
+         ├─ performance_view.py                 # Master PERFORMANCE tab
+         ├─ copy_view.py                        # Slave COPY tab
+         ├─ symbols_view.py                     # Slave SYMBOLS tab
+         ├─ risk_view.py                        # Slave RISK tab
+         └─ trades_view.py                      # Slave TRADES tab
 ```
 
-Notes:
+**Not active source files:**
+- `main.py` — legacy CLI slave, calls `MT5Adapter.connect(choice)` with obsolete signature
+- `views/master_ui.py`, `views/slave_ui.py` — legacy CustomTkinter UI (pre-PySide6)
+- `views/qt/subscribers_panel.py` — legacy Bloomberg-style panel; superseded by `subscribers_view.py`
 
-- `__pycache__` files are generated artifacts and not source-of-truth.
-- `main_master.py` and `main_slave.py` are the active launch points.
-- `main.py` is older CLI logic and does not match the current MT5 adapter signature.
+**Stale `__pycache__` entries** for `risk_panel`, `symbol_map_panel`, `trades_panel` indicate those `.py` files were removed in Phase 1.6.
 
 ---
 
 ## 3) Runtime Architecture Overview
 
-## High-level execution model
+### High-level execution model
 
-The client has two operational roles:
+Two separate desktop processes; each launched independently:
 
-1. **Master Node**
-	- verifies identity with backend using license key
-	- logs into MT5
-	- connects socket and joins master room
-	- runs polling recorder thread
-	- emits `test_signal` events with trade data
+1. **Master Node** (`main_master.py`):
+   - Verifies identity with backend via license key
+   - Logs into MT5 terminal
+   - Connects socket and joins `room_master_<id>`
+   - Runs polling recorder thread to detect trade opens/closes
+   - Emits `test_signal` events with trade data
 
-2. **Slave Node**
-	- verifies identity with backend using registered email
-	- logs into MT5
-	- connects socket and joins subscribed master room
-	- listens for `trade_execution` events
-	- applies risk + symbol mapping
-	- opens/closes local positions and maintains ticket map
+2. **Slave Node** (`main_slave.py`):
+   - Verifies identity with backend via registered email
+   - Logs into MT5 terminal
+   - Connects socket and joins subscribed master's room
+   - Listens for `trade_execution` events
+   - Applies risk guards, copy mode, symbol mapping
+   - Opens/closes local positions; maintains ticket map
 
-## Layered architecture
+### Layered architecture
 
-1. **View layer** (`views/*.py`)
-	- collects user input
-	- renders status + logs
-	- dispatches actions to UI controllers
+1. **View layer** (`views/qt/*.py`, `views/qt/views/*.py`): Collects user input, renders status/logs, dispatches to controllers
+2. **Controller layer** (`controllers/ui_controllers/*.py`): Orchestrates cloud verify, MT5 connect, socket lifecycle, signal logic
+3. **Service adapters**: `MT5Adapter` (broker terminal), `SocketManager` (cloud socket)
+4. **Model/state layer**: `AppState` (mutable state/log buffer), `TradeSignal` (DTO)
 
-2. **Controller layer** (`controllers/ui_controllers/*.py`)
-	- orchestrates cloud verification, MT5 connect, socket lifecycle
-	- manages running state
-	- handles incoming signal logic (slave) and recorder lifecycle (master)
+### Thread safety
 
-3. **Service adapters**
-	- `MT5Adapter`: broker terminal operations
-	- `SocketManager`: socket connection and emit wrapper
+Background threads (recorder, Socket.IO callbacks) communicate with the Qt main thread via `UIBridge`:
 
-4. **Model/state layer**
-	- `AppState`: mutable state/log buffer
-	- `TradeSignal`: basic signal serialization utility
+```python
+# views/qt/ui_bridge.py
+class UIBridge(QObject):
+    ui_update_requested = Signal()
+
+    def request_update(self):
+        self.ui_update_requested.emit()
+```
+
+Controllers receive `update_callback = self.bridge.request_update`. When controllers call it from a background thread, the Qt signal is safely dispatched to `update_ui()` on the main thread.
 
 ---
 
-## 4) Entry Points and Process Flows
+## 4) Entry Points
 
-## `main_master.py`
-
-```python
-import sys
-from PySide6.QtWidgets import QApplication
-from views.qt.master_window import MasterWindow
-from views.qt.theme import load_fonts
-
-if __name__ == "__main__":
-	app = QApplication(sys.argv)
-	load_fonts()
-	window = MasterWindow()
-	window.show()
-	sys.exit(app.exec())
-```
-
-- Starts the PySide6 master terminal UI (loads design fonts before creating the window).
-
-## `main_slave.py`
+### `main_master.py`
 
 ```python
-import sys
-from PySide6.QtWidgets import QApplication
-from views.qt.slave_window import SlaveWindow
-from views.qt.theme import apply_app_font, load_fonts
-
-if __name__ == "__main__":
-	app = QApplication(sys.argv)
-	load_fonts()
-	apply_app_font(app)
-	window = SlaveWindow()
-	window.show()
-	sys.exit(app.exec())
+app = QApplication(sys.argv)
+load_fonts()
+window = MasterWindow()
+window.show()
+sys.exit(app.exec())
 ```
 
-- Starts the PySide6 slave terminal UI (loads fonts then applies app-wide font).
+`load_fonts()` registers Inter and JetBrains Mono TTF files from `assets/fonts/` into the Qt font database before the window is created.
 
-## `main.py` (Legacy)
+### `main_slave.py`
 
-- Contains an older CLI slave controller implementation.
-- Includes hardcoded symbol whitelist and direct socket callback wiring.
-- Calls `MT5Adapter.connect(choice)` with obsolete signature.
-- Should be treated as legacy/stale unless intentionally modernized.
+```python
+app = QApplication(sys.argv)
+load_fonts()
+apply_app_font(app)
+window = SlaveWindow()
+window.show()
+sys.exit(app.exec())
+```
+
+`apply_app_font(app)` sets the application-wide default font after loading (Inter Regular).
 
 ---
 
-## 5) Dependency and Environment Notes
+## 5) Dependencies
 
-## `requirements.txt`
+### `requirements.txt`
 
-Listed dependencies:
+```
+python-socketio[client]
+requests
+colorama
+MetaTrader5
+PySide6
+```
 
-- `python-socketio[client]`
-- `requests`
-- `colorama`
-- `MetaTrader5`
-- `PySide6`
+Install with: `pip install -r requirements.txt`
 
-Implication:
-
-- Install dependencies with `pip install -r requirements.txt` before launching.
+Note: `MetaTrader5` only works on Windows with a MetaTrader 5 terminal installed.
 
 ---
 
 ## 6) Model Layer Deep Dive
 
-## `models/app_state.py`
+### Composition Pattern
 
-AppState composes BaseState, MasterState, and SlaveState via multiple inheritance. All external code imports AppState as before. BaseState: shared fields. MasterState: master-only. SlaveState: slave-only.
+```python
+class AppState(BaseState, MasterState, SlaveState):
+    def __init__(self):
+        BaseState.__init__(self)
+        MasterState.__init__(self)
+        SlaveState.__init__(self)
+```
 
-Methods:
+Python multiple inheritance. All external code `from models.app_state import AppState` — no direct import of the component classes needed.
 
-- `add_log(message)`
-  - prefixes timestamp `[HH:MM:SS]`
-  - appends to log list
-  - trims buffer to max 50 entries
+`models/__init__.py` re-exports: `AppState`, `TradeSignal`.
 
-- `reset_daily_stats()`
-  - resets `daily_pnl` to `0.0`
-  - sets `copying_paused_by_loss` to `False`
-  - logs reset event to both AppState and terminal
+---
 
-- `start_session()`
-  - sets `session_start_time` to current `HH:MM:SS`
-  - resets `session_pnl`, `open_trades`, `closed_trades`
-  - logs `[SESSION] Session started at ...`
-  - called by `toggle_listening()` when listening starts
+### `models/base_state.py` — `BaseState`
 
-- `add_open_trade(master_ticket, slave_ticket, symbol, action, volume)`
-  - appends trade dict to `open_trades` with `open_time` timestamp
-  - called after successful OPEN execution in `on_trade_signal()`
+Shared fields for both roles:
 
-- `close_trade_record(master_ticket, pnl)`
-  - moves matching trade from `open_trades` to `closed_trades`
-  - adds `pnl` and `close_time` fields
-  - accumulates `session_pnl`
-  - caps `closed_trades` at 50 entries (drops oldest)
-  - called after successful CLOSE execution in `on_trade_signal()`
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `mt5_login` | `int` | `0` | MT5 account login ID |
+| `mt5_password` | `str` | `""` | MT5 password |
+| `mt5_server` | `str` | `""` | MT5 server string |
+| `mt5_path` | `str` | `""` | Path to terminal64.exe |
+| `license_key` | `str` | `""` | Stored after successful verify-node (MASTER only) |
+| `role` | `str` | `""` | `"MASTER"` or `"SLAVE"` — set by controller |
+| `mt5_connected` | `bool` | `False` | Set `True` after `MT5Adapter.connect` succeeds |
+| `socket_connected` | `bool` | `False` | Set `True` after socket connects |
+| `health_state` | `str` | `"DISCONNECTED"` | `"CONNECTED"`, `"RECONNECTING"`, `"DISCONNECTED"` |
+| `is_running` | `bool` | `False` | Broadcasting (master) or listening (slave) active |
+| `logs` | `list[str]` | `[]` | UI log buffer; capped at 50 entries |
 
-## `models/trade_signal.py`
+**`add_log(message)`**: Prefixes `[HH:MM:SS]`, appends to `logs`, trims to 50.
 
-- Thin DTO-like helper with fields:
-  - `symbol`
-  - `action`
-  - `volume`
-- `to_dict()` returns serializable dict
+---
 
-## `models/__init__.py`
+### `models/master_state.py` — `MasterState`
 
-- Re-exports `AppState` and `TradeSignal` for easier imports.
+Master-only fields:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `subscribers` | `list` | `[]` | List of dicts from `GET /auth/masters/:id/subscribers`: `{ id, fullName, email, isActive, totalCopied, totalPnL }` |
+| `subscriber_online_status` | `dict` | `{}` | `{ email: bool }` — `True` = currently connected socket. Updated by `subscriber_update` events |
+| `master_user_id` | `str` | `""` | UUID set from `verify-node` response `id` field. Used for subscriber API calls and `GET .../profile` |
+| `signals_sent` | `int` | `0` | Incremented by `MasterSignalTrackingSocket.emit_signal` on every `test_signal` emit |
+| `session_start_time_master` | `str` | `""` | `HH:MM:SS` timestamp set when broadcasting starts |
+| `recent_signals` | `list` | `[]` | Ring buffer of last 50 broadcast signal dicts. Each dict is a full copy of the signal payload plus `time: HH:MM:SS` |
+
+---
+
+### `models/slave_state.py` — `SlaveState`
+
+Slave-only fields:
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `risk_multiplier` | `float` | `1.0` | Volume multiplier for MULTIPLIER copy mode |
+| `symbol_map` | `dict` | `{}` | `{ master_symbol: slave_symbol }` |
+| `max_lot_size` | `float` | `0.0` | Max copy volume cap per trade. `0.0` = disabled (Guard 3) |
+| `max_concurrent_trades` | `int` | `0` | Max open copied positions at once. `0` = disabled (Guard 1) |
+| `daily_loss_limit` | `float` | `0.0` | Auto-pause threshold: pauses when `daily_pnl <= -daily_loss_limit`. `0.0` = disabled (Guard 0) |
+| `daily_pnl` | `float` | `0.0` | Accumulated PnL from CLOSE signals today |
+| `copying_paused_by_loss` | `bool` | `False` | Set `True` when `daily_loss_limit` hit; reset via `reset_daily_stats()` |
+| `symbol_whitelist` | `list` | `[]` | Slave-side symbols allowed. Checked after mapping. Empty = all allowed (Guard 2) |
+| `copy_mode` | `str` | `'MULTIPLIER'` | `'MULTIPLIER'` or `'FIXED_LOT'` |
+| `fixed_lot_size` | `float` | `0.01` | Volume used when `copy_mode == 'FIXED_LOT'` |
+| `reverse_copy` | `bool` | `False` | Flips BUY→SELL and SELL→BUY before execution |
+| `slippage_points` | `int` | `10` | `deviation` parameter passed to MT5 order requests (broker fill tolerance). Fixed at the default `10`; the COPY-tab control was removed, so it is no longer user-editable. |
+| `max_slippage_points` | `float` | `0.0` | Strict master-vs-copier drift threshold in points. `0.0` = disabled. Hard-blocks OPEN when `abs(copierPrice - masterPrice) / point` exceeds it (Guard 4). Distinct from `slippage_points`. The COPY-tab spinbox shows pips and writes `pips × POINTS_PER_PIP (100)`; the value stored here is always in points. |
+| `unmapped_symbol_behavior` | `str` | `'IGNORE'` | `'IGNORE'` = skip unmapped; `'COPY_AS_IS'` = pass master symbol directly |
+| `equity_floor` | `float` | `0.0` | Min equity required for OPEN. Checked via `mt5.account_info().equity`. `0.0` = disabled (Guard -1) |
+| `session_start_time` | `str` | `""` | `HH:MM:SS` set when listening starts |
+| `session_pnl` | `float` | `0.0` | PnL accumulated since listening started |
+| `open_trades` | `list` | `[]` | Active copied positions: `{ master_ticket, slave_ticket, symbol, action, volume, open_time }` |
+| `closed_trades` | `list` | `[]` | Session history: adds `pnl`, `close_time`. Capped at 50 entries |
+
+**`reset_daily_stats()`**: Sets `daily_pnl = 0.0`, `copying_paused_by_loss = False`, logs `[RISK] Daily stats reset.`
+
+**`start_session()`**: Called by `toggle_listening()` on start. Sets `session_start_time` to current `HH:MM:SS`; resets `session_pnl`, `open_trades`, `closed_trades`. Logs `[SESSION] Session started at HH:MM:SS`.
+
+**`add_open_trade(master_ticket, slave_ticket, symbol, action, volume)`**: Appends trade dict with `open_time` to `open_trades`.
+
+**`close_trade_record(master_ticket, pnl: float)`**: Moves matching trade from `open_trades` to `closed_trades` (with `pnl` and `close_time`); accumulates `session_pnl`; caps `closed_trades` at 50 (drops oldest).
+
+---
+
+### `models/trade_signal.py` — `TradeSignal`
+
+Thin DTO helper:
+
+```python
+class TradeSignal:
+    def __init__(self, symbol, action, volume): ...
+    def to_dict(self) -> dict: ...
+```
+
+Not used by the current active code paths; exists for potential future use.
 
 ---
 
@@ -283,60 +320,64 @@ Methods:
 
 File: `controllers/mt5_adapter.py`
 
-Class: `MT5Adapter`
+### `__init__`
 
-## `__init__`
+Predefined `broker_paths` dict:
 
-- `self.connected = False`
-- predefined `broker_paths` for:
-  - XM
-  - Vantage
-  - Exness
+| Key | Path |
+|---|---|
+| `"XM"` | `C:\Program Files\XM Global MT5\terminal64.exe` |
+| `"Vantage"` | `C:\Program Files\Vantage International MT5\terminal64.exe` |
+| `"Exness"` | `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe` |
+| `"Exness Slave"` | `C:\MT5_Exness_Slave\terminal64.exe` (second Exness instance) |
 
-## `connect(broker_name, login, password, server)`
+If broker name is not in the dict (or `"Auto-Detect"` / `"Auto-detect"`), `mt5.initialize()` is called without a path.
 
-Flow:
+### `connect(broker_name, login, password, server) -> tuple[bool, str]`
 
-1. Resolve broker executable path (if known)
-2. Initialize MT5 with `mt5.initialize(path=...)` or auto initialize
-3. Perform strict login with `mt5.login(login=int(login), password=password, server=server)`
-4. Set connected flag and return tuple:
-	- success: `(True, "Connected: ...")`
-	- failure: `(False, "Init Failed/Auth Failed: ...")`
+1. Resolves terminal path from `broker_paths`
+2. Calls `mt5.initialize(path=...)` or `mt5.initialize()` (auto)
+3. Calls `mt5.login(login=int(login), password=password, server=server)` — strict login with server string
+4. Returns `(True, "Connected: {name} ({server})")` or `(False, "Init/Auth Failed: {error}")`
 
-## `execute_trade(symbol, action, volume)`
+### `get_symbol_point(symbol) -> float | None`
 
-Flow:
+1. Returns `None` if `not self.connected`
+2. `mt5.symbol_select(symbol, True)`, then reads `mt5.symbol_info(symbol).point`
+3. Returns the point size or `None` if symbol info is unavailable
+4. Used by the slave slippage drift guard (Guard 4) to convert price difference into points
 
-1. skip if not connected
-2. ensure symbol selected in Market Watch
-3. fetch tick price
-4. determine order type from `BUY`/`SELL`
-5. send `mt5.order_send(request)` with:
-	- `TRADE_ACTION_DEAL`
-	- `magic=234000`
-	- `comment="TradeSync Copy"`
-	- `ORDER_TIME_GTC`
-	- `ORDER_FILLING_IOC`
+### `get_execution_price(symbol, action) -> float | None`
 
-Returns MT5 result object (or `None`).
+1. Returns `None` if `not self.connected`
+2. `mt5.symbol_select(symbol, True)`, then reads `mt5.symbol_info_tick(symbol)`
+3. Returns `tick.ask` for BUY, `tick.bid` for SELL; `None` if the tick is unavailable
+4. Provides the copier fill-side quote for the slippage drift guard
 
-## `close_trade(ticket, symbol)`
+### `execute_trade(symbol, action, volume, deviation: int = 10) -> OrderSendResult | None`
 
-Flow:
+1. Skips if `not self.connected`
+2. `mt5.symbol_select(symbol, True)` ensures symbol is in Market Watch
+3. Fetches current tick price
+4. Determines `ORDER_TYPE_BUY` or `ORDER_TYPE_SELL`
+5. Sends `mt5.order_send()` with:
+   - `TRADE_ACTION_DEAL`, `magic=234000`, `comment="TradeSync Copy"`
+   - `ORDER_TIME_GTC`, `ORDER_FILLING_IOC`
+   - `deviation` from parameter (default 10; configurable via `slippage_points` in slave state)
+6. Returns MT5 result object or `None`
 
-1. load open position by ticket
-2. compute opposite order side
-3. select symbol + load tick
-4. send close request with:
-	- `position=ticket`
-	- `deviation=20`
-	- `magic=234000`
-	- `comment="TradeSync Close"`
-	- `ORDER_TIME_GTC`
-	- `ORDER_FILLING_IOC`
+### `close_trade(ticket, symbol) -> OrderSendResult | None`
 
-Returns MT5 result object (or `None`).
+1. `mt5.positions_get(ticket=ticket)` — fetches open position
+2. Computes opposite order type (`BUY` if was SELL, `SELL` if was BUY; checks `pos.type == 0`)
+3. `mt5.symbol_select(symbol, True)` + fetches tick
+4. Sends close request with:
+   - `position=ticket`, `deviation=20` (hardcoded; not using slippage setting)
+   - `magic=234000`, `comment="TradeSync Close"`
+   - `ORDER_TIME_GTC`, `ORDER_FILLING_IOC`
+5. Returns MT5 result object or `None`
+
+**Critical:** `magic=234000` is the loop-prevention sentinel. The master recorder skips any position with this magic number to avoid broadcasting trades it placed itself.
 
 ---
 
@@ -344,39 +385,47 @@ Returns MT5 result object (or `None`).
 
 File: `controllers/socket_manager.py`
 
-Class: `SocketManager`
+### Constructor
 
-State:
+```python
+SocketManager(server_url, mt5_adapter, node_role=None, node_identifier=None, health_callback=None)
+```
 
-- `self.sio = socketio.Client()`
-- `self.server_url`
-- `self.mt5`
-- `self.is_connected`
+- `socketio.Client(reconnection=True, reconnection_attempts=0, reconnection_delay=1, reconnection_delay_max=8)` — infinite reconnection with 1–8s exponential backoff
+- Stores `node_role`, `node_identifier` for auto-registration on every connect/reconnect
+- Registers standard internal handlers on init: `connect`, `disconnect`, `node_registered`
+- `_registered_events: set` — tracks registered custom events to prevent duplicate listeners
 
-Methods:
+### Methods
 
-1. `connect()`
-	- attempts websocket transport connection
-	- sets `is_connected=True` on success
-	- logs socket errors with colorized output
+**`register_handler(event_name, handler)`**: Registers a custom Socket.IO event handler. Guards against duplicate registration — if `event_name` is already in `_registered_events`, the call is a no-op.
 
-2. `on_connect()`
-	- logs session id (`self.sio.sid`)
+**`set_node_context(role, identifier)`**: Updates `node_role` and `node_identifier` after construction. Called by controllers before `connect()`.
 
-3. `on_node_registered(data)`
-	- handles `node_registered` event confirming successful room registration
-	- logs successful registration or room-assignment failure
+**`connect()`**: Calls `sio.connect(server_url, transports=['websocket'])`. Sets health to `"RECONNECTING"` before attempt; if exception, sets to `"DISCONNECTED"`.
 
-4. `emit_signal(signal_dict)`
-	- emits socket event `test_signal`
+**`emit_signal(signal_dict)`**: Injects `trace_id` (UUID4) if not already present, then calls `sio.emit('test_signal', signal_dict)`.
 
-Socket events used by wider system:
+**`emit_event(event_name, payload)`**: Generic emitter for additive events. Injects `trace_id` if missing, logs `emit_event`, then `sio.emit(event_name, payload)`. Used by the slave to send `trade_execution_ack`.
 
-- outbound: `test_signal`
-- inbound configured by controllers: `trade_execution`, `connect`
-- inbound handled directly: `node_registered`
+### Event Handlers
 
-SocketManager now handles node_registered event confirming successful room registration.
+**`on_connect()`**:
+1. Sets `is_connected = True`, `_reconnect_attempts = 0`
+2. Calls `_set_health("CONNECTED")` → triggers `health_callback`
+3. If `node_role` and `node_identifier` are set: automatically emits `register_node { role, identifier }`
+4. This fires on **both initial connection and every reconnect** — ensuring room re-registration after backend restarts
+
+**`on_disconnect()`**:
+1. Sets `is_connected = False`, increments `_reconnect_attempts`
+2. Calls `_set_health("RECONNECTING")`
+
+**`on_node_registered(data)`**:
+- `data.success == True`: prints `[SOCKET] Registered as {role} in room: {room}` in cyan
+- `data.success == False`: prints `[SOCKET] Registration FAILED: {error}` in red
+- If `self.state` is set, also calls `self.state.add_log(msg)`
+
+Note: `self.state` is declared as `None` in `__init__` and is not set by current controllers. The log-to-AppState path for `node_registered` is currently a no-op; only terminal output is produced.
 
 ---
 
@@ -384,501 +433,744 @@ SocketManager now handles node_registered event confirming successful room regis
 
 File: `master_recorder.py`
 
-Class: `MasterRecorder`
-
-State:
+Class `MasterRecorder(socket_client)`:
 
 - `tracked_tickets: dict[ticket -> symbol]`
-- `is_running`
-- `magic_number=234000`
-- `client` (SocketManager-like object)
+- `is_running: bool = True`
+- `magic_number: int = 234000`
 
-## `get_active_positions()`
+### `get_active_positions() -> dict[ticket -> Position]`
 
-- returns dict of active MT5 positions keyed by ticket.
+Returns current open MT5 positions as a dict. Returns `{}` if none.
 
-## `start_monitoring()`
+### `start_monitoring()`
 
 Core polling loop (`sleep(0.5)`):
 
-1. Bootstrap tracked positions (excluding self-copied `magic=234000` positions)
-2. Compare current tickets vs known tickets
-3. For new tickets:
-	- register ticket
-	- `broadcast_event('OPEN', pos=...)`
-4. For missing tickets (closed):
-	- compute realized PnL by summing `mt5.history_deals_get(position=t).profit`
-	- `broadcast_event('CLOSE', ticket=t, symbol=symbol, pnl=pnl)`
-	- remove tracked mapping
+1. **Bootstrap**: Load current positions; add non-self-copied tickets to `tracked_tickets` (filter `pos.magic != 234000`)
+2. **Open detection** (`current_tickets - known_tickets`): For each new ticket, if `pos.magic != 234000`, register and call `broadcast_event('OPEN', pos=pos)`
+3. **Close detection** (`known_tickets - current_tickets`): For each gone ticket:
+   - Sum `deal.profit` across all `mt5.history_deals_get(position=t)` deals for PnL
+   - Capture the last deal `price` as the closing reference (`close_price`)
+   - Call `broadcast_event('CLOSE', ticket=t, symbol=symbol, pnl=pnl, master_price=close_price)`
+   - Remove from `tracked_tickets`
 
-## `broadcast_event(...)`
+### `broadcast_event(event_type, pos=None, ticket=None, symbol=None, pnl=0.0, master_price=None)`
 
-Builds payload:
+Builds payload dict:
 
-```json
+```python
 {
-  "event": "OPEN|CLOSE",
-  "master_ticket": number,
-  "symbol": "...",
-  "action": "BUY|SELL|CLOSE",
-  "volume": number,
-  "pnl": number
+    "event": "OPEN" | "CLOSE",
+    "master_ticket": pos.ticket or ticket,
+    "symbol": pos.symbol or symbol,
+    "action": "BUY" | "SELL" | "CLOSE",  # CLOSE payload has action="CLOSE"
+    "volume": pos.volume or 0,
+    "pnl": round(pnl, 2),
+    "trace_id": str(uuid4()),
+    "masterPrice": float(...),  # added only when available
 }
 ```
 
+`masterPrice` (additive, optional): OPEN uses `pos.price_open`; CLOSE uses the captured closing deal price (`master_price` arg). Omitted when no price is available. Consumed by the slave slippage drift guard and persisted on the backend OPEN `TradeLog` row.
+
 Emission strategy:
+- `client.emit_signal(data)` if the client has that method (preferred — uses `MasterSignalTrackingSocket`)
+- Falls back to `client.sio.emit('test_signal', data)`
 
-- prefers `client.emit_signal(data)` when available
-- falls back to direct `client.sio.emit('test_signal', data)`
-
-Important:
-
-- CLOSE payload action is literal `"CLOSE"` from recorder.
+**Note:** CLOSE payload action field is `"CLOSE"` — not `"BUY"` or `"SELL"`. Backend and slave handle this correctly via the `event` field.
 
 ---
 
 ## 10) UI Controller Layer Deep Dive
 
-## `controllers/ui_controllers/master_controller.py`
+### `controllers/ui_controllers/master_controller.py`
 
-Class: `MasterController`
+#### `MasterSignalTrackingSocket`
 
-Composition:
+Wrapper around `SocketManager` that intercepts `emit_signal` calls:
 
-- `AppState`
-- `MT5Adapter`
-- `SocketManager` (lazy init)
-- `MasterRecorder` (lazy init)
-- UI callback (`update_ui`) for rendering logs
+1. Increments `state.signals_sent`
+2. Calls `socket_manager.emit_signal(signal_dict)`
+3. Copies the full signal dict, adds `time: HH:MM:SS`
+4. Appends to `state.recent_signals` (ring buffer, cap 50)
 
-### `login_mt5(broker, login, password, server, license_key)`
+This is the object passed to `MasterRecorder` as `socket_client`.
 
-2-stage authentication flow:
+#### `MasterController.__init__`
 
-1. Cloud verify call:
-	- `POST http://localhost:3000/auth/verify-node`
-	- body: `{ role: 'MASTER', identifier: license_key }`
-	- accepts status `200` or `201`
-2. MT5 login via adapter
-3. on success:
-	- sets state flags
-	- stores license key
-	- calls `connect_cloud(license_key)`
+- Creates `AppState()`, sets `state.role = "MASTER"`
+- Creates `MT5Adapter()`
+- `socket = None`, `recorder = None` (lazy init)
+- Stores `update_callback` as `self.update_ui`
+- Creates `_stop_event = threading.Event()`
 
-### `connect_cloud(identifier)`
+#### `MasterController.login_mt5(broker, login, password, server, license_key)`
 
-Flow:
+**Stage 1 — Cloud verify:**
+1. Calls `POST /auth/verify-node` with `{ role: 'MASTER', identifier: license_key, trace_id: uuid4() }`
+2. Accepts status `200` or `201`
+3. On failure: logs rejection message and returns `False`
+4. On success: reads `id` from response → sets `state.master_user_id`
+5. Logs warning if `id` is missing from response
+6. Reads `fullName` from response for display log
 
-1. create `SocketManager`
-2. clears existing handlers if accessible (`self.socket.sio.handlers = {}`)
-3. defines `connect` event callback that emits:
-	- `register_node` payload `{ role: 'MASTER', identifier }`
-4. marks socket connected state
+**Stage 2 — MT5 login:**
+7. Calls `MT5Adapter.connect(broker, login, password, server)`
+8. On success: sets `state.mt5_connected = True`, stores `state.license_key = license_key`
+9. Calls `connect_cloud(license_key)` to establish socket
+10. Returns `True`
 
-### `MasterSignalTrackingSocket.emit_signal(signal_dict)`
+**Fallback `_resolve_master_user_id(full_name)` (not called in normal flow):**
+- Calls `GET /auth/masters` and matches by `fullName`
+- Sets `state.master_user_id` if exactly one match found
+- Present in code as a fallback; not invoked since verify-node now returns `id`
 
-When the master recorder emits through the tracking wrapper, each **OPEN** and **CLOSE** payload is appended to `AppState.recent_signals` as a **full copy** of `signal_dict` plus a UI `time` stamp (`HH:MM:SS`). The ring buffer caps at **50** entries so an OPEN typically remains available when its matching CLOSE arrives. `PerformanceView` pairs these rows for the Recent Broadcasts table.
+#### `MasterController.connect_cloud(identifier)`
 
-### `toggle_broadcasting()`
+1. Creates `SocketManager` with `node_role="MASTER"`, `node_identifier=identifier`, `health_callback=self._on_health_change`
+2. Calls `self.socket.set_node_context("MASTER", identifier)`
+3. Registers `subscriber_update` handler via `socket.register_handler()`:
+   - Updates `state.subscriber_online_status[email] = online`
+   - Logs to terminal with `Fore.CYAN` (online) or `Fore.YELLOW` (offline)
+   - Calls `state.add_log(msg)` and `update_ui()`
+4. Calls `socket.connect()` — on connect, `SocketManager` auto-emits `register_node { role: 'MASTER', identifier }`
 
-- Starts/stops recorder thread and updates state/logs.
-- On start:
-  - sets `state.is_running=True`
-  - creates recorder
-  - daemon thread target `_run_recorder`
-- On stop:
-  - sets `state.is_running=False`
-  - flips recorder `is_running=False`
+#### `MasterController.fetch_subscribers()`
 
-### `_run_recorder()`
+1. Reads `state.master_user_id`; skips if not set
+2. `GET http://localhost:3000/auth/masters/{master_id}/subscribers`
+3. On `200`: sets `state.subscribers = response.json()`
+4. Logs count to terminal + AppState
 
-- wrapper around `recorder.start_monitoring()` with exception logging.
+#### `MasterController.revoke_subscriber(slave_id: str)`
 
-## `controllers/ui_controllers/slave_controller.py`
+1. Reads `state.license_key`; aborts if missing
+2. `POST /auth/node-action/revoke-subscriber` with `{ masterLicenseKey, slaveId }`
+3. Accepts `200` or `201`
+4. Logs success or failure to AppState; calls `update_ui()` then `fetch_subscribers()` to refresh list
 
-Class: `SlaveController`
+#### `MasterController.toggle_broadcasting()`
 
-Composition:
+**Start:**
+1. Sets `state.is_running = True`
+2. Sets `state.session_start_time_master` to current `HH:MM:SS`
+3. Resets `state.signals_sent = 0`
+4. Clears `_stop_event`
+5. Creates `MasterSignalTrackingSocket(self.socket, self.state)`
+6. Creates `MasterRecorder(tracking_socket)`
+7. Starts daemon thread → `_run_recorder()`
 
-- `AppState`
-- `MT5Adapter`
-- `SocketManager` (lazy)
-- local `ticket_map` (`master_ticket -> slave_ticket`)
+**Stop:**
+1. Sets `state.is_running = False`
+2. Sets `recorder.is_running = False`
 
-### `login_mt5(broker, login, password, server, email_identifier)`
+#### `MasterController._on_health_change(health_state)`
 
-2-stage authentication flow:
-
-1. Cloud verify call:
-	- `POST /auth/verify-node`
-	- body: `{ role: 'SLAVE', identifier: email_identifier }`
-	- accepts status `200` or `201`
-2. MT5 login
-3. on success calls `connect_cloud(email_identifier)`
-
-### `connect_cloud(identifier)`
-
-Flow:
-
-1. create `SocketManager`
-2. subscribe `trade_execution -> self.on_trade_signal`
-3. on connect emit:
-	- `register_node` payload `{ role: 'SLAVE', identifier }`
-4. mark connected state
-
-### `toggle_listening()`
-
-- toggles `state.is_running` for whether incoming signals are executed.
-
-### `add_symbol_mapping(master_sym, slave_sym)` / `remove_mapping(master_sym)`
-
-- mutate `state.symbol_map` and log updates.
-
-### `on_trade_signal(data)`
-
-Core copy engine:
-
-1. return early if not listening
-2. risk guard block (Guards -1 through 1 — see §11.1)
-3. parse event + ticket + symbol
-4. apply symbol mapping policy:
-	- if map dict is empty → copy all
-	- if map exists and symbol present → translate
-	- if map exists and symbol NOT present:
-	  - `unmapped_symbol_behavior == 'COPY_AS_IS'` → use master symbol
-	  - `unmapped_symbol_behavior == 'IGNORE'` → ignore signal
-5. Guard 2 (symbol whitelist)
-6. OPEN handling:
-	- copy mode volume calculation (MULTIPLIER or FIXED_LOT)
-	- enforce minimum volume `0.01`
-	- Guard 3 (max lot size cap)
-	- reverse copy (flip BUY↔SELL if enabled)
-	- execute trade with slippage
-	- if retcode `10009` success:
-	  - save `ticket_map[master_ticket] = slave_order`
-	  - record open trade in session tracking
-7. CLOSE handling:
-	- lookup mapped slave ticket
-	- close trade
-	- if retcode `10009`:
-	  - remove ticket mapping
-	  - accumulate daily PnL
-	  - record closed trade in session tracking
-	  - check daily loss limit auto-pause
-8. push UI log updates (single `update_ui()` at method end)
+Sets `state.health_state`, updates `state.socket_connected`, adds log, calls `update_ui()`.
 
 ---
 
-## 11) View Layer Deep Dive (PySide6)
+### `controllers/ui_controllers/slave_controller.py`
 
-The UI layer has been migrated to PySide6. To ensure thread safety between the core execution engine (which relies on background MT5 polling and Socket.IO threads) and the Qt event loop, all UI files utilize a custom `UIBridge` (`QObject`). Background threads emit Qt Signals through this bridge, triggering `@Slot()` methods on the main thread to safely mutate widgets.
+#### `SlaveController.__init__`
 
-## `views/qt/master_window.py`
+- Creates `AppState()`, sets `state.role = "SLAVE"`
+- Creates `MT5Adapter()`
+- `socket = None` (lazy init)
+- `ticket_map: dict = {}` — `{ master_ticket: slave_ticket }` for close symmetry
 
-Class: `MasterWindow(QMainWindow)`
+#### `SlaveController.login_mt5(broker, login, password, server, email_identifier)`
 
-Design: Bloomberg Terminal-inspired minimal dark theme (global QSS via `theme.build_global_qss()`). Post-login chrome matches the Slave pattern: frameless window (`Qt.WindowType.FramelessWindowHint`) plus custom `TitleBar`, then `WindowShell(role='master')`.
+**Stage 1 — Cloud verify:**
+1. `POST /auth/verify-node` with `{ role: 'SLAVE', identifier: email_identifier, trace_id: uuid4() }`
+2. Accepts `200` or `201`
+3. On failure: logs rejection and returns `False`
+4. On success: logs `fullName` from response
 
-Dashboard layout (not `QTabWidget`): sidebar navigation keys `broadcast`, `subscribers`, `performance`; center column is header strip + KPI strip + `QStackedWidget` pages; right column is `EventLog`. Placeholder stack pages are swapped for real views via `_replace_shell_placeholder()`. The master sidebar top margin is adjusted when the `TitleBar` sits outside the shell (same idea as `SlaveWindow`).
+**Stage 2 — MT5 login:**
+5. Calls `MT5Adapter.connect(broker, login, password, server)`
+6. On success: sets `state.mt5_connected = True`
+7. Calls `connect_cloud(email_identifier)` and returns `True`
 
-Flow:
-1. Login screen rendered via `QStackedWidget` (`MasterLoginCard`).
-2. `on_login_submit()` extracts MT5 credentials plus master license key and calls `MasterController.login_mt5()`.
-3. On success, `show_dashboard()` switches to the dashboard, loads master performance stats (`GET /auth/masters/:id/profile`), and schedules subscriber fetch.
-4. `update_ui()` runs every 500ms and refreshes shell header/KPI/footer, event log tail, `BroadcastView`, `SubscribersView`, and `PerformanceView` (via `refresh_performance` + `state.recent_signals`).
+Note: SLAVE does not set `state.master_user_id` — the master ID is handled by the backend room routing. SLAVE only needs its registered email.
 
-Key widgets and controls:
-- **Login entries:** `MasterLoginCard` — MT5 login/password, server, broker `DarkDropdown`, license `MonoInput`, `Btn` submit.
-- **Dashboard — BROADCAST:** `views/qt/views/broadcast_view.py` — start/stop broadcasting, license display, MT5 account summary; syncs from `AppState`.
-- **Dashboard — SUBSCRIBERS:** `SubscribersView` — summary `CountChip` row, roster table (`StatusPill` live/offline, `GhostIconBtn` revoke → `MasterController.revoke_subscriber`), HTML activity log.
-- **Dashboard — PERFORMANCE:** `PerformanceView` (`views/qt/views/performance_view.py`) — six KPI cards from profile JSON; optional analytics row (`EquitySparkline`, risk metrics list, `ActiveHoursHistogram`) shown only when both `riskMetrics` and `equitySparkline` are present; **Recent broadcasts** table walks `AppState.recent_signals` with a **list-based queue matcher** so each CLOSE merges into the newest matching OPEN (by ticket when present, else symbol+volume), with P&L shown when closed.
-- **Event log:** `shell.EventLog` filter chips are role-aware: master uses `ALL`, `SIGNAL`, `SESSION`, `MT5`, `ERR`; slave keeps `COPY` instead of `SESSION`.
+#### `SlaveController.connect_cloud(identifier)`
 
-Methods:
-- `build_login_screen()` / `build_dashboard_screen()`: UI layout generation (TitleBar + shell + view injection).
-- `show_login()` / `show_dashboard()`: Switch stacked views and load dashboard data.
-- `on_login_submit()`: Extracts text from Qt inputs and triggers `MasterController.login_mt5()`.
-- `on_toggle_broadcast()`: Legacy hook; broadcasting is driven from `BroadcastView` → controller.
-- `load_performance_stats()`: HTTP fetch of `/auth/masters/:id/profile` into `performance_data`; calls `refresh_performance`.
-- `refresh_performance(stats)`: Delegates KPI + signals table to `PerformanceView.sync_from_state`.
-- `_update_session_clock()`: Computes elapsed broadcast time string for header refresh.
-- `update_ui()`: Thread-safe `@Slot()` that tails logs into `EventLog`, syncs shell chrome, broadcast/subscribers views, and performance view.
+1. Creates `SocketManager` with `node_role="SLAVE"`, `node_identifier=identifier`, `health_callback=self._on_health_change`
+2. Calls `socket.set_node_context("SLAVE", identifier)`
+3. Registers `trade_execution` handler: `socket.register_handler('trade_execution', self.on_trade_signal)`
+4. Calls `socket.connect()` — on connect, auto-emits `register_node { role: 'SLAVE', identifier: email }`
 
-## Master Subscriber System
+#### `SlaveController.toggle_listening()`
 
-The master subscriber system lets the Python master desktop app see which subscribed slaves are assigned to the master and whether they are currently online.
+**Start:**
+1. Sets `state.is_running = True`
+2. Calls `state.start_session()` (resets session PnL, open/closed trade lists)
+3. Logs listening started with current `risk_multiplier`
 
-Controller behavior:
-- `MasterController.fetch_subscribers()` calls `GET /auth/masters/:id/subscribers` and stores the response in `AppState.subscribers`.
-- `MasterController.connect_cloud()` registers a `subscriber_update` socket listener using `SocketManager.register_handler()`.
-- On `subscriber_update`, the controller updates `AppState.subscriber_online_status[email]`, writes a `[MASTER]` colorama terminal log, appends a UI log entry, and requests a UI refresh.
+**Stop:**
+1. Sets `state.is_running = False`
+2. Logs `[SESSION] Ended. Session PnL: $X.XX`
 
-Socket event:
-- `subscriber_update` is emitted by the backend to the master's room when a subscribed slave registers or disconnects.
-- Payload shape: `{ slaveEmail, online, timestamp }`.
+#### `SlaveController.add_symbol_mapping(master_sym, slave_sym)` / `remove_mapping(master_sym)`
 
-UI behavior:
-- `SubscribersView` renders the subscriber list from `AppState.subscribers` and calls `POST /auth/node-action/revoke-subscriber` on revoke (license key from `AppState.license_key`).
-- The STATUS column reads `AppState.subscriber_online_status` and displays online vs offline via `StatusPill` widgets.
-- The view includes a manual refresh (`Btn` ghost) and a 20-entry activity log for connect/disconnect changes.
+Mutate `state.symbol_map` and log updates.
 
-## `views/qt/slave_window.py`
+#### `SlaveController.on_trade_signal(data)`
 
-Class: `SlaveWindow(QMainWindow)`
+Core copy engine. Called from Socket.IO event thread.
 
-Design: Bloomberg Terminal-inspired minimal dark theme.
-Palette: `#0a0a0a` background, `#1a1a1a` surfaces, `#2a2a2a` borders, `#00d4aa` accent, `#ff4444` errors.
+**Full execution flow:**
 
-Flow:
-1. Login screen rendered via `QStackedWidget`.
-2. Credentials extracted (strictly using Email as the identifier).
-3. Cloud verify + MT5 connect (`SlaveController.login_mt5`).
-4. Dashboard: `TitleBar` + `WindowShell(role='slave')` (sidebar, KPI, header, stack, footer, `EventLog`).
+```
+1. Extract trace_id (from data or new UUID4)
+2. Structured log: trade_signal_received
+3. Return early if not state.is_running
 
-Key widgets and controls:
-- **Login:** `SlaveLoginCard` — email, MT5 login/password, server, broker name (`LineInput` / `MonoInput`).
-- **Shell:** Sidebar keys slave `copy` / `symbols` / `risk` / `trades` (emoji fallbacks or `assets/icons/{id}.svg`), master `broadcast` / `subscribers` / `performance` with SVG assets `radio.svg`, `users.svg`, `activity.svg`; KPI/footer/header from `AppState`; `update_ui()` appends `state.logs` to `EventLog` (filters: ALL, SIGNAL, COPY, MT5, ERR).
-- **COPY:** `views/qt/views/copy_view.py` — master status summary, segmented `MULTIPLIER` \| `FIXED_LOT`, spinboxes (`risk_multiplier`, `fixed_lot_size`, `slippage_points`), reverse checkbox, `toggle_listening()` + `SweepBand` when running.
-- **SYMBOLS:** `views/qt/views/symbols_view.py` — broker presets, mapping table, and `unmapped_symbol_behavior`; stacked as the shell `"symbols"` page.
-- **RISK:** `views/qt/views/risk_view.py` — guards and controls (`equity_floor`, `max_concurrent_trades`, `daily_loss_limit`, `max_lot_size`, whitelist, daily P&L / pause / reset).
-- **TRADES:** `views/qt/views/trades_view.py` — open positions and session history tables (`TradesView`).
+[RISK GUARDS — OPEN only unless noted]
+Guard -1: Equity floor
+  → if equity_floor > 0: check mt5.account_info().equity
+  → if equity < floor: block OPEN, log [RISK], return
 
-Methods:
-- `build_login_screen()` / `build_dashboard_screen()`: layouts plus `WindowShell`; `_replace_shell_placeholder()` swaps a stack widget by nav key without editing `shell.py`.
-- `on_login_submit()` calls `SlaveController.login_mt5(...)`.
-- `_show_dashboard()` switches the stack to the dashboard, resets log and header guards, runs `update_ui()`.
-- `update_ui()` (`@Slot()`): footer, `HeaderStripSlave`, KPI strip, tails `state.logs` into `EventLog`; `CopyView.sync_from_state()`; `SymbolsView.refresh_display()`; `RiskView.refresh_display()`; `TradesView.refresh_display()`.
+Guard 0: Daily loss pause
+  → if copying_paused_by_loss: block OPEN, log [RISK], return
 
-`_slave_log_category` maps log lines into `EventLog` filter categories.
+Guard 1: Max concurrent trades
+  → if len(ticket_map) >= max_concurrent_trades > 0: block OPEN, log [RISK], return
 
-## 11.1) Risk Management System
+[SYMBOL MAPPING]
+  → if symbol_map is empty: use master_symbol as-is (copy all symbols)
+  → if symbol in map: translate to slave_symbol
+  → if symbol NOT in map:
+      - 'COPY_AS_IS': use master_symbol directly
+      - 'IGNORE': log + return
 
-`SlaveController.on_trade_signal()` executes 5 risk guards before trade execution:
+Guard 2: Symbol whitelist (OPEN only)
+  → if symbol_whitelist non-empty and slave_symbol not in list: skip, log [RISK], return
 
-1. **Guard -1 — Equity Floor:** If `equity_floor > 0`, calls `mt5.account_info()`. If `account.equity < equity_floor`, OPEN is blocked. Prefix `[RISK]`, color `Fore.RED`.
-2. **Guard 0 — Daily Loss Pause:** If `copying_paused_by_loss` is `True`, all OPEN signals are blocked. User must reset via Risk tab.
-3. **Guard 1 — Max Concurrent Trades:** If `len(ticket_map) >= max_concurrent_trades`, OPEN is blocked.
-4. **Guard 2 — Symbol Whitelist:** After symbol mapping, if `symbol_whitelist` is non-empty and `slave_symbol` is not in the list, OPEN is skipped.
-5. **Guard 3 — Max Lot Size Cap:** After volume calculation, if `new_vol > max_lot_size`, volume is clamped.
+[OPEN execution]
+  → Volume calculation:
+      - MULTIPLIER: copy_volume = master_volume * risk_multiplier
+      - FIXED_LOT: copy_volume = fixed_lot_size
+  → Floor volume at 0.01
+  → Guard 3: if max_lot_size > 0 and copy_volume > max_lot_size: clamp, log [RISK]
+  → Reverse copy: if reverse_copy and action in (BUY, SELL): flip action
+  → Guard 4: Strict slippage drift (OPEN only)
+      - threshold (state.max_slippage_points) is in points; the COPY-tab UI sets it as pips × 100
+      - master_price = data.get('masterPrice')
+      - copier_price = MT5Adapter.get_execution_price(slave_symbol, exec_action)
+      - point = MT5Adapter.get_symbol_point(slave_symbol)
+      - if all valid: actual = abs(copier_price - master_price) / point
+          - if max_slippage_points > 0 and actual > max_slippage_points:
+                block OPEN, log [RISK] slippage_guard_blocked,
+                emit trade_execution_ack(status=BLOCKED_SLIPPAGE, slippageBlocked=True), return
+      - if any value missing/invalid: log slippage_check_skipped_missing_price, continue (compat)
+  → MT5Adapter.execute_trade(slave_symbol, exec_action, new_vol, deviation=slippage_points)
+  → if retcode 10009 (success):
+      - ticket_map[master_ticket] = res.order
+      - state.add_open_trade(...)
+      - emit trade_execution_ack(status=EXECUTED, copierPrice, slippagePointsActual)
+  → else: log FAILED, emit trade_execution_ack(status=FAILED)
 
-After a successful CLOSE, PnL from the signal is accumulated into `daily_pnl`. If `daily_pnl <= -daily_loss_limit`, `copying_paused_by_loss` is set to `True`.
+[CLOSE execution]
+  → s_ticket = ticket_map.get(master_ticket)
+  → if no mapping: log warning (orphaned close), return
+  → MT5Adapter.close_trade(s_ticket, slave_symbol)
+  → if retcode 10009 (success):
+      - del ticket_map[master_ticket]
+      - pnl_value = float(data.get('pnl', 0.0) or 0.0)   ← from socket payload
+      - state.daily_pnl += pnl_value
+      - state.close_trade_record(master_ticket, pnl_value)
+      - if daily_loss_limit > 0 and daily_pnl <= -daily_loss_limit:
+            state.copying_paused_by_loss = True
+            log [RISK] DAILY LOSS LIMIT HIT
 
-All risk events are logged to terminal with `colorama` colors (`Fore.YELLOW` for warnings, `Fore.RED` for blocks, `Fore.CYAN` for info) and prefixed with `[RISK]`.
-
-## 11.2) Copy Modes
-
-Two copy modes control how volume is calculated in `on_trade_signal()` OPEN handling:
-
-- **MULTIPLIER** (default): `copy_volume = master_volume × risk_multiplier`. Multiplier is configurable from `0.01` to `10.0` in the COPY tab.
-- **FIXED_LOT**: `copy_volume = fixed_lot_size` regardless of master volume. Fixed lot is configurable from `0.01` to `100.0` in the COPY tab.
-
-In both modes, volume is floored at `0.01` and optionally clamped by `max_lot_size` (Guard 3).
-
-Additional copy features:
-- **Reverse Copy**: When `reverse_copy == True`, BUY signals are executed as SELL and vice versa. Logged as `[COPY] Reverse copy: BUY -> SELL`.
-- **Slippage**: `slippage_points` is passed as the `deviation` parameter to `MT5Adapter.execute_trade()`. Default `10` points.
-
-## 11.3) Session Tracking
-
-`AppState` tracks trade activity per listening session:
-
-- `start_session()` is called when `toggle_listening()` starts. Resets `session_pnl`, `open_trades`, `closed_trades`, and records `session_start_time`.
-- `add_open_trade()` is called after each successful OPEN. Appends a dict `{master_ticket, slave_ticket, symbol, action, volume, open_time}` to `open_trades`.
-- `close_trade_record()` is called after each successful CLOSE. Moves the trade from `open_trades` to `closed_trades`, adds `pnl` and `close_time`, and accumulates `session_pnl`.
-- When listening stops, `toggle_listening()` logs `[SESSION] Ended. Session PnL: $X.XX`.
-
-`TradesView` is the active TRADES UI; legacy panel files were removed in Phase 1.6.
-
-`views/qt/views/trades_view.py` (`TradesView`) is the design-system slave TRADES tab wired into `WindowShell`; it displays:
-- Session summary bar: open count, closed count, session P&L, session start time (when set)
-- Open positions `Card`: TICKET, SYMBOL, ACTION (`TradeChip`), VOLUME, OPENED
-- Session history `Card`: same columns + P&L (`ACCENT` / `DANGER`) + CLOSED time
-- `refresh_display()` is called by `SlaveWindow.update_ui()` on every UI sync
-
-## 11.4) Symbol Mapping System
-
-`data/broker_symbols.py` contains `BROKER_PRESETS` — a dict of broker names to symbol translation dicts. Supported brokers: Vantage, XM, Exness, IC Markets, Pepperstone.
-
-`views/qt/views/symbols_view.py` (`SymbolsView`) provides:
-- Dual broker dropdown: "Master's broker" + "Your broker" for cross-broker preset loading
-- When "Load Preset" is clicked: iterates `BROKER_PRESETS[master_broker]` keys, looks up corresponding slave symbol from `BROKER_PRESETS[my_broker]`, and adds to `symbol_map` if not already present
-- Input row for manual master→slave symbol entry
-- `QTableWidget` showing all active mappings with per-row Remove buttons
-- Unmapped symbol behavior dropdown:
-  - `Ignore (skip trade)` → `state.unmapped_symbol_behavior = 'IGNORE'` (default)
-  - `Copy as-is (same name)` → `state.unmapped_symbol_behavior = 'COPY_AS_IS'`
-
-This solves the problem of different MT5 brokers using completely different symbol names (e.g., Vantage: `XAUUSD` vs XM: `GOLD` vs Exness: `XAUUSDm`). The underlying `AppState.symbol_map` dict structure is unchanged, so `on_trade_signal()` logic remains compatible.
-
-
-## 12) End-to-End Communication Contracts
-
-This section is critical for preserving cross-project compatibility.
-
-## A) Client ↔ Backend HTTP contract
-
-Endpoints used:
-
-- `POST http://localhost:3000/auth/verify-node`
-- `POST http://localhost:3000/auth/node-action/revoke-subscriber` (master desktop only; authenticates with `masterLicenseKey` from `AppState.license_key`, no JWT)
-
-Auth boundary note:
-
-- Node verification and subscriber revoke are intentionally public for desktop MASTER bootstrap flows.
-- JWT bearer authentication is used by web/admin REST flows (frontend to backend), not by verify-node or revoke-subscriber.
-- After verification, realtime authorization continues through `register_node` role/identifier semantics and backend room routing.
-
-Master request:
-
-```json
-{ "role": "MASTER", "identifier": "<license_key>" }
+5. update_ui() at end
 ```
 
-Slave request:
+---
 
-```json
-{ "role": "SLAVE", "identifier": "<registered_email>" }
+## 11) View Layer Deep Dive
+
+### Thread Safety Model
+
+All UI updates go through `UIBridge`. Background threads call `update_callback()` → `bridge.request_update()` → Qt signal → `update_ui()` on main thread. No direct widget mutation from background threads.
+
+---
+
+### `views/qt/ui_bridge.py`
+
+```python
+class UIBridge(QObject):
+    ui_update_requested = Signal()
+    def request_update(self):
+        self.ui_update_requested.emit()
 ```
 
-Expected successful response includes at least:
+Passed to controllers as `update_callback`. Controllers call it after state mutations. Windows connect `bridge.ui_update_requested` to their `update_ui` slot.
 
-- `message`
-- `role`
-- `fullName`
+---
 
-Revoke subscriber (master only; body JSON):
+### `views/qt/master_window.py` — `MasterWindow`
 
-```json
-{ "masterLicenseKey": "<TSP-…>", "slaveId": "<subscriber_user_uuid>" }
+**Login card:** `MasterLoginCard` (fixed 400px width)
+- Fields: License key (`MonoInput`, placeholder `TSP-XXXX-XXXX`), MT5 account ID, MT5 password, Server string, Broker path (dropdown: Vantage/XM/Exness/Exness Slave/Auto-Detect)
+- Inline validation before submit: login must be digits; license key must match `^TSP-[A-Z0-9]{4}-[A-Z0-9]{4}$`
+
+**Dashboard layout:**
+- `TitleBar(role="Master Node", window=self)`
+- `WindowShell(role='master')` — sidebar keys: `broadcast`, `subscribers`, `performance`
+- Three real views injected via `_replace_shell_placeholder()`:
+  - `BroadcastView(controller)` → key `"broadcast"`
+  - `SubscribersView(controller)` → key `"subscribers"`
+  - `PerformanceView(controller)` → key `"performance"`
+
+**Timers:**
+- `ui_timer` — 500ms, calls `update_ui()` (refresh UI state)
+- `session_timer` — 1000ms, calls `_update_session_clock()` (elapsed broadcast time)
+
+**Key methods:**
+
+`show_dashboard()`:
+1. Switches to dashboard stack widget
+2. Resets `_master_header_signature` and log cursor
+3. Calls `load_performance_stats()` (HTTP `GET /auth/masters/:id/profile`)
+4. Schedules `fetch_subscribers()` 1000ms after (via `QTimer.singleShot`)
+
+`load_performance_stats()`:
+- Uses `state.master_user_id`; skips if not set
+- `GET http://localhost:3000/auth/masters/{master_id}/profile` (timeout 5s)
+- Stores `response.json()` in `self.performance_data`
+- Calls `refresh_performance(self.performance_data)`
+
+`refresh_performance(stats: dict)`:
+- Calls `performance_view.sync_from_state(stats, state.recent_signals)`
+
+`update_ui()` (500ms slot):
+1. Guard: skip if dashboard widget not visible
+2. Update footer connection indicator
+3. `_master_sync_header_strip()` — rebuild `HeaderStripMaster` if variant/name/elapsed changed
+4. `_apply_master_header_profile()` — populate handle, instruments, risk, ROI proxy (uses `winRate`)
+5. Update shell KPI strip: `signals_sent`, `subscriber count`, `win_rate`, `total_pnl`, `avg_volume`
+6. Tail new log lines into `shell.event_log` (cursor-based, avoids re-rendering old lines)
+7. `broadcast_view.sync_from_state()`
+8. `refresh_performance(performance_data)`
+9. `_sync_subscriber_activity()` — detect status changes and call `subscribers_view.log_activity(email, online)`
+10. `subscribers_view.refresh_display()`
+
+`_master_log_category(line)` maps log lines to EventLog filter keys:
+- `ERR`: contains ERROR/FAILED/REJECTED
+- `MT5`: contains [RISK] (reused for risk events in master)
+- `SESSION`: contains SOCKET/CONNECTED/DISCONNECTED
+- `SIGNAL`: contains OPEN/CLOSE/SIGNAL
+- else `INFO`
+
+---
+
+### `views/qt/slave_window.py` — `SlaveWindow`
+
+**Login card:** `SlaveLoginCard` (fixed 400px width)
+- Fields: Registered email, MT5 account ID, MT5 password, Server string, Broker path (dropdown: Auto-detect/Vantage/XM/Exness/Exness Slave)
+- No regex validation on login submit; error shown in `error_label` on failure
+
+**Dashboard layout:**
+- `TitleBar(role="Slave Node", window=self)`
+- `WindowShell(role='slave')` — sidebar keys: `copy`, `symbols`, `risk`, `trades`
+- Four real views injected via `_replace_shell_placeholder()`:
+  - `CopyView(controller)` → key `"copy"`
+  - `SymbolsView(controller)` → key `"symbols"`
+  - `RiskView(controller)` → key `"risk"`
+  - `TradesView(controller)` → key `"trades"`
+
+**Timers:**
+- `session_timer` — 1000ms, calls `_tick_session_clock()` → updates `shell.kpi.update_kpis(session=elapsed)`
+- No separate 500ms `ui_timer`; `update_ui()` is driven by `UIBridge` signal from controller thread
+
+`_slave_log_category(line)` maps log lines to EventLog filter keys:
+- `MT5`: contains [RISK], MT5 Error, MT5 login
+- `COPY`: contains OPEN SUCCESS, [COPY], Copying, CLOSE SUCCESS, SOCKET
+- `SESSION`: contains [SESSION]
+- `ERR`: contains DAILY LOSS, FAILED, CLOUD REJECTED, CLOUD ERROR
+- else `INFO`
+
+`_slave_header_variant(state) -> str`:
+- Both connected + running → `"listening"`
+- Both connected + not running → `"idle"`
+- MT5 connected + socket not + RECONNECTING → `"reconnect"`
+- else → `"error"`
+
+`update_ui()`:
+1. Guard: skip if dashboard not visible
+2. Footer connection indicator
+3. `_slave_sync_header_strip()` — rebuild `HeaderStripSlave` if variant/name changed
+4. Shell KPI update: `session_pnl`, `open_trades` count, `closed_trades` count
+5. Tail log lines into EventLog
+6. `copy_view.sync_from_state()`
+7. `symbols_view.refresh_display()`
+8. `risk_view.refresh_display()`
+9. `trades_view.refresh_display()`
+
+---
+
+### `views/qt/views/broadcast_view.py` — `BroadcastView`
+
+Master BROADCAST stack page. Three cards:
+
+1. **Broadcast control card**: `START/STOP BROADCASTING` button (`Btn`), `SweepBand` animation (visible when running)
+2. **License card**: `MiniChip("Active · 5 seats")` (static), `license_lbl` (reads from `state.license_key`)
+3. **MT5 account card**: Reads `mt5.account_info()` live: account ID, server, balance, equity. Balance shown in accent/danger color based on equity vs balance.
+
+`sync_from_state()`: Called by `MasterWindow.update_ui()`. Reads `state.is_running`, `state.license_key`, calls `mt5.account_info()` if `state.mt5_connected`.
+
+---
+
+### `views/qt/views/subscribers_view.py` — `SubscribersView`
+
+Master SUBSCRIBERS stack page. Three cards:
+
+1. **Summary card**: `CountChip` for TOTAL / ONLINE / SIGNALS SENT; `↻ REFRESH` ghost button
+2. **Roster table**: 6 columns — NAME, EMAIL, STATUS (`StatusPill`: `broadcasting`=LIVE or `idle`=OFFLINE), COPIED, P&L (accent/danger), ACTION (revoke `×` button via `GhostIconBtn`)
+3. **Activity log card**: `QTextEdit` (read-only HTML); capped at 20 entries
+
+**`log_activity(email, online)`**: Appends HTML entry with timestamp, email, and `→ ONLINE/OFFLINE` in color. Auto-scrolls to bottom. Called by `MasterWindow._sync_subscriber_activity()` when status changes are detected.
+
+**`refresh_display()`**: Rebuilds the table from `state.subscribers` and `state.subscriber_online_status`. Updates TOTAL, ONLINE, SIGNALS SENT chips.
+
+---
+
+### `views/qt/views/performance_view.py` — `PerformanceView`
+
+Master PERFORMANCE stack page. Three sections:
+
+1. **KPI grid (3×2)**: `_KpiCard` widgets for Total trades, Closed trades, Win rate, Total P&L, Avg volume, Subscribers
+2. **Analytics container** (conditionally visible): Equity sparkline (`EquitySparkline`), Risk metrics list (`lbl_drawdown`, `lbl_avg_day`, `lbl_losing_streak`, `lbl_best_day`), Active hours histogram (`ActiveHoursHistogram`) + `lbl_hours_summary`. Visible only when both `riskMetrics` and `equitySparkline` are present in stats.
+3. **Recent broadcasts table**: 7 columns — TIME, SYMBOL, ACTION (`TradeChip`), VOLUME, STATUS (`StatusChip`), P&L, ACKED
+
+**`sync_from_state(stats: dict, recent_signals: list)`**:
+
+KPI update from `stats` dict (profile API response):
+- `totalTrades`, `closedTrades`, `winRate`, `totalPnL`, `avgVolume`, `subscriberCount`
+
+Analytics section: shown when `stats.riskMetrics` and `stats.equitySparkline` are both truthy. Active hours accepts both dict format (`{ bars: [...] }`) and string format from API.
+
+**Recent broadcasts list-based queue matcher**: Iterates `recent_signals` in order. For OPEN signals: appends new unified trade with `_is_closed=False`. For CLOSE signals: reverse-iterates `unified_trades` to find latest unmatched OPEN by ticket (primary) or symbol+volume (fallback). On match: sets `_is_closed=True`, merges `pnl`, `close_time`. Orphaned CLOSEs (no matching OPEN) are appended as-is. Displays last 10 unified trades (reversed = newest first).
+
+---
+
+### `views/qt/views/copy_view.py` — `CopyView`
+
+Slave COPY stack page. Three cards:
+
+1. **Master card**: Shows `state.master_name` or connection status text
+2. **Copy settings card** (accent):
+   - `SegmentedToggle([("MULTIPLIER", "MULTIPLIER"), ("FIXED LOT", "FIXED_LOT")])` — sets `state.copy_mode`
+   - `DarkSpinbox` for risk multiplier (0.01–10.0), fixed lot (0.01–100.0), and Max Slippage Drift (0–500 integer **pips**; 0 = off). The drift spinbox displays pips and writes `pips × POINTS_PER_PIP (100)` into `state.max_slippage_points` (points); `sync_from_state` divides by `POINTS_PER_PIP` to display. The old "Slippage (points)" spinbox was removed (`state.slippage_points` keeps its default `10` for MT5 `deviation`).
+   - `DarkCheckBox("Invert BUY ↔ SELL on execution")` for `state.reverse_copy`
+   - Fixed lot spinbox column hidden when mode is MULTIPLIER; shown when FIXED_LOT
+3. **Listen control**: `START/STOP LISTENING` button + `SweepBand` animation
+
+`sync_from_state()`: Mirrors all `AppState` fields into widgets without feedback loops (uses `_syncing_ui` guard and `blockSignals`).
+
+Spinbox change handlers directly mutate `state.*` fields:
+- `_on_copy_mode_changed` → `state.copy_mode`
+- `_on_multiplier_changed` → `state.risk_multiplier`
+- `_on_fixed_lot_changed` → `state.fixed_lot_size`
+- `_on_max_slippage_changed` → `state.max_slippage_points` (float, points = UI pips × `POINTS_PER_PIP`)
+- `_on_reverse_toggled` → `state.reverse_copy`
+
+---
+
+### `views/qt/views/symbols_view.py` — `SymbolsView`
+
+Slave SYMBOLS stack page. Three cards:
+
+1. **Broker preset loader card** (accent):
+   - Two `DarkDropdown` widgets: Master's broker + Your broker (same `BROKER_LIST`)
+   - `BROKER_LIST = ["Select broker...", "Vantage", "XM", "Exness", "IC Markets", "Pepperstone", "Custom"]`
+   - `"Custom"` is in UI list but not in `BROKER_PRESETS`; clicking Load Preset with Custom selected is a no-op
+   - On Load Preset: iterates `BROKER_PRESETS[master_broker]`, looks up corresponding slave sym from `BROKER_PRESETS[my_broker]`, adds only if master_broker_sym not already in `state.symbol_map`
+2. **Symbol mappings card**:
+   - `LineInput` for master symbol → slave symbol + Add button
+   - `QTableWidget` (3 cols: Master Symbol, Your Symbol, × remove button)
+   - `_map_sig_cache` prevents unnecessary re-renders (only rebuilds when map changes)
+3. **Unmapped symbols card**: `DarkDropdown` ["Ignore (skip trade)", "Copy as-is (same name)"] → `state.unmapped_symbol_behavior`
+
+`refresh_display()`: Called by `SlaveWindow.update_ui()`. Only rebuilds table if `symbol_map` signature changed.
+
+---
+
+### `views/qt/views/risk_view.py` — `RiskView`
+
+Slave RISK stack page. Three cards:
+
+1. **Trade guards card** (accent, 2×2 grid): Each guard is a cell with title, subtitle, `DarkCheckBox("On")` toggle, `DarkSpinbox`. Guards: equity floor, max concurrent trades, daily loss limit, max lot cap. When checkbox is unchecked, the corresponding `state.*` is set to 0/0.0. When checked, spinbox is enabled; if current value is ≤ 0, sets to a sensible default.
+2. **Daily loss status card**: `lbl_daily_pnl`, `lbl_copy_status` (Active/Paused), warning card (hidden unless `copying_paused_by_loss`), "Reset & resume copying" button → `state.reset_daily_stats()`
+3. **Symbol whitelist card**: `LineInput` + Add button → `state.symbol_whitelist.append(sym)`. `MiniChip` + `GhostIconBtn(×)` per symbol in a grid. Hint: "Leave empty to allow all mapped symbols."
+
+`refresh_display()`: Called by `SlaveWindow.update_ui()`. Syncs guard checkboxes and spinboxes from state; refreshes daily PnL display and warning card.
+
+---
+
+### `views/qt/views/trades_view.py` — `TradesView`
+
+Slave TRADES stack page. Two-column layout (`QHBoxLayout`):
+
+**Left — Open positions card**: Session summary bar (OPEN chip, CLOSED chip, session P&L label, session start time label, info tooltip), then `table_open` (5 cols: TICKET, SYMBOL, ACTION (`TradeChip`), VOLUME, OPENED)
+
+**Right — Session history card**: `table_closed` (7 cols: TICKET, SYMBOL, ACTION (`TradeChip`), VOLUME, P&L, OPENED, CLOSED)
+
+`refresh_display()`: Rebuilds both tables from `state.open_trades` and `state.closed_trades` (reversed for newest-first in history). Updates count chips and session P&L/time labels.
+
+---
+
+## 12) Symbol Mapping Data (`data/broker_symbols.py`)
+
+### `BROKER_PRESETS`
+
+Maps broker name → standard symbol → broker-specific symbol name:
+
+| Standard | Vantage | XM | Exness | IC Markets | Pepperstone |
+|---|---|---|---|---|---|
+| `XAUUSD` | `XAUUSD` | `XAUUSD` | `XAUUSDm` | `XAUUSD` | `XAUUSD` |
+| `XAGUSD` | `XAGUSD` | `XAGUSD` | `XAGUSDm` | `XAGUSD` | `XAGUSD` |
+| `EURUSD` | `EURUSD` | `EURUSD` | `EURUSDm` | `EURUSD` | `EURUSD` |
+| `GBPUSD` | `GBPUSD` | `GBPUSD` | `GBPUSDm` | `GBPUSD` | `GBPUSD` |
+| `USDJPY` | `USDJPY` | `USDJPY` | `USDJPYm` | `USDJPY` | `USDJPY` |
+| `US30` | `US30` | `US30Cash` | `US30m` | `US30` | `US30Cash` |
+| `US100` | `NAS100` | `US100Cash` | *(missing)* | `US100` | `NAS100` |
+| `BTCUSD` | `BTCUSD` | `BTCUSD` | `BTCUSDm` | `BTCUSD` | `BTCUSD` |
+
+Note: Exness preset does not include `US100`. Vantage and Pepperstone map `US100` → `NAS100`.
+
+### `COMMON_MASTER_SYMBOLS`
+
+```python
+["XAUUSD", "XAGUSD", "EURUSD", "GBPUSD", "USDJPY", "US30", "US100", "BTCUSD", "ETHUSD"]
 ```
 
-Success response shape: `{ "message": "Subscriber revoked", "slaveId": "<uuid>" }`. Backend clears that slave’s `subscribedToId` for this master (unsubscribe); it does not disable the slave account.
+Used as reference for preset loading display. `ETHUSD` is listed here but not in any broker preset (brokers use `ETHUSD`, `ETHUSDm`, etc.).
 
-## B) Client ↔ Backend Socket contract
+---
 
-On connect, both roles emit `register_node`:
+## 13) Testing
+
+### `tests/test_slave_controller.py`
+
+Uses `unittest.TestCase`. Run from `trade-sync-client` root: `python -m pytest tests/` or `python tests/test_slave_controller.py`.
+
+**`FakeMT5`**: Mock adapter. `__init__(point=0.01, execution_price=2000.0)` for slippage simulation. `execute_trade(symbol, action, volume, deviation=10)` records calls (including `deviation`) and returns `SimpleNamespace(retcode=10009, order=555, comment='ok')`. `close_trade` returns `SimpleNamespace(retcode=10009, comment='ok')`. `get_symbol_point` returns the configured point; `get_execution_price` returns the configured price. The slave controller never attaches a socket in tests, so `_emit_execution_ack` no-ops safely.
+
+**Tests:**
+
+1. `test_open_maps_master_ticket_to_slave_ticket`:
+   - Sends OPEN signal for `XAUUSD` ticket `1001`
+   - Asserts `ticket_map[1001] == 555`
+   - Asserts 1 MT5 execute call
+
+2. `test_close_uses_ticket_map_and_removes_mapping`:
+   - Pre-seeds `ticket_map[1001] = 555`
+   - Sends CLOSE signal for ticket `1001`
+   - Asserts 1 MT5 close call
+   - Asserts `1001` removed from `ticket_map`
+
+3. `test_open_blocked_when_slippage_exceeds_threshold`:
+   - `max_slippage_points = 10`, master 2000.0 vs copier 2002.0, point 0.01 → 200 pts drift
+   - Asserts 0 execute calls and ticket not mapped (Guard 4 hard-block)
+
+4. `test_open_allowed_when_slippage_within_threshold`:
+   - Master 2000.0 vs copier 2000.05, point 0.01 → 5 pts drift ≤ 10
+   - Asserts 1 execute call and ticket mapped
+
+5. `test_open_executes_when_master_price_missing`:
+   - No `masterPrice` in payload → guard skips, trade proceeds
+   - Asserts 1 execute call and ticket mapped
+
+---
+
+## 14) End-to-End Communication Contracts
+
+### A) Client ↔ Backend HTTP
+
+| Endpoint | Caller | Auth | When |
+|---|---|---|---|
+| `POST /auth/verify-node` | Both controllers | Public | Pre-login, verifies license/email + active status |
+| `GET /auth/masters/:id/subscribers` | `MasterController.fetch_subscribers` | Public | Dashboard load and after revoke |
+| `POST /auth/node-action/revoke-subscriber` | `MasterController.revoke_subscriber` | Public (license key) | Revoke button in SubscribersView |
+| `GET /auth/masters/:id/profile` | `MasterWindow.load_performance_stats` | Public | Dashboard load |
+| `GET /auth/masters` | `MasterController._resolve_master_user_id` | Public | Fallback (not used in normal flow) |
+
+All HTTP calls use `requests` with hardcoded `http://localhost:3000`. Timeouts: 5–10s.
+
+**`verify-node` response consumed by client:**
 
 ```json
-{ "role": "MASTER|SLAVE", "identifier": "..." }
+{
+  "message": "Node Verified",
+  "role": "MASTER | SLAVE",
+  "fullName": "string",
+  "id": "uuid-string",
+  "trace_id": "uuid-string"
+}
 ```
 
-Master emits `test_signal` payloads from recorder.
+`id` is read by `MasterController` to populate `state.master_user_id`. SLAVE does not read `id`.
 
-Slave listens to `trade_execution` payloads and executes local trades.
+**Revoke request:**
 
-Payload fields used by slave logic:
+```json
+{ "masterLicenseKey": "<TSP-XXXX-XXXX>", "slaveId": "<uuid>" }
+```
 
-- `event`
-- `master_ticket`
-- `symbol`
-- `action`
-- `volume`
+### B) Client ↔ Backend Socket
 
-Backend currently routes by master room; client behavior depends on backend `register_node` + room join semantics.
+**Emitted by client:**
 
-## C) Client ↔ Frontend relationship
+`register_node` — emitted automatically by `SocketManager.on_connect()` on every connect/reconnect:
+```json
+{ "role": "MASTER | SLAVE", "identifier": "<license_key | email>" }
+```
 
-- Frontend and client do not call each other directly.
-- Both consume backend contracts:
-  - auth/identity data
-  - live signal stream (`trade_execution`)
-- Consistency in payload keys and role semantics is mandatory across both consumers.
+`test_signal` — emitted by `MasterSignalTrackingSocket.emit_signal()` → `SocketManager.emit_signal()`:
+```json
+{
+  "event": "OPEN | CLOSE",
+  "master_ticket": 123456,
+  "symbol": "XAUUSD",
+  "action": "BUY | SELL | CLOSE",
+  "volume": 0.1,
+  "pnl": 0.0,
+  "masterPrice": 2418.40,
+  "trace_id": "uuid-string"
+}
+```
 
----
+`trade_execution_ack` — emitted by `SlaveController._emit_execution_ack()` → `SocketManager.emit_event()` after each OPEN attempt:
+```json
+{
+  "master_ticket": 123456,
+  "slave_ticket": 555,
+  "symbol": "XAUUSD.m",
+  "status": "EXECUTED | BLOCKED_SLIPPAGE | FAILED",
+  "masterPrice": 2418.40,
+  "copierPrice": 2418.55,
+  "slippagePointsConfigured": 20.0,
+  "slippagePointsActual": 1.5,
+  "slippageBlocked": false,
+  "trace_id": "uuid-string"
+}
+```
 
-## 13) Method & Function Index (Quick Reference)
+**Received by client:**
 
-## Core execution functions
+`node_registered` — handled by `SocketManager.on_node_registered()`:
+```json
+{ "success": true | false, "role": "...", "room": "...", "timestamp": "...", "error": "..." }
+```
 
-- `MT5Adapter.connect`
-- `MT5Adapter.execute_trade`
-- `MT5Adapter.close_trade`
-- `MasterRecorder.start_monitoring`
-- `MasterRecorder.broadcast_event`
-- `SlaveController.on_trade_signal`
+`trade_execution` — handled by `SlaveController.on_trade_signal()`:
+```json
+{
+  "event": "OPEN | CLOSE",
+  "master_ticket": 123456,
+  "symbol": "XAUUSD",
+  "action": "BUY | SELL | CLOSE",
+  "volume": 0.1,
+  "pnl": 0.0,
+  "trace_id": "uuid-string",
+  "signalId": 101,
+  "server_ts": 1748000000000
+}
+```
 
-## Lifecycle and orchestration
+Slave reads: `event`, `master_ticket`, `symbol`, `action`, `volume`, `pnl` (for daily tracking), `trace_id` (for structured logs). `signalId` and `server_ts` are ignored.
 
-- `MasterController.login_mt5`
-- `MasterController.connect_cloud`
-- `MasterController.fetch_subscribers`
-- `MasterController.revoke_subscriber`
-- `MasterController.toggle_broadcasting`
-- `SlaveController.login_mt5`
-- `SlaveController.connect_cloud`
-- `SlaveController.toggle_listening`
-
-## UI state sync helpers
-
-- `MasterWindow.update_ui`
-- `SlaveWindow.update_ui`
-- `AppState.add_log`
-
----
-
-## 14) Current Constraints and Known Risks
-
-1. **Legacy file drift:** `main.py` is outdated relative to current adapter/controller signatures.
-2. **Hardcoded backend URL:** controllers and socket manager use `http://localhost:3000` directly.
-3. **Status code mismatch risk:** master login expects `201`; slave accepts `200/201`.
-4. **Symbol mapping behavior:** once any map exists, unmapped symbols are intentionally ignored.
-5. **No formal retry/backoff strategy:** transient socket/HTTP errors only logged.
-
-These are current behavior realities; preserve unless intentionally refactoring.
-
----
-
-## 15) AI-Safe Extension Rules (Do-Not-Break Contracts)
-
-When adding code with AI tools, enforce these rules:
-
-1. Keep `register_node`, `test_signal`, and `trade_execution` event names unchanged unless backend is updated in lockstep.
-2. Preserve signal payload keys consumed by slave (`event`, `master_ticket`, `symbol`, `action`, `volume`).
-3. Preserve role identity semantics:
-	- MASTER uses license key
-	- SLAVE uses registered email
-4. Maintain ticket-map logic (`master_ticket -> slave_ticket`) for close symmetry.
-5. Preserve risk multiplier + minimum lot guard (`>= 0.01`) unless explicitly changing risk policy.
-6. Do not remove `magic=234000` filtering without understanding loop-prevention impact.
-7. Keep `ORDER_TIME_GTC` and `ORDER_FILLING_IOC` close/open request policy unless broker-specific changes are validated.
-8. Any backend response contract change must update both client controllers and frontend docs.
+`subscriber_update` — handled by `MasterController.connect_cloud` inline handler:
+```json
+{ "slaveEmail": "string", "online": true | false, "timestamp": "ISO string" }
+```
 
 ---
 
-## 16) Suggested Non-Breaking Improvement Roadmap
+## 15) Log Categorization Reference
 
-1. Move backend URL and broker paths to environment/config files.
-2. Normalize HTTP success handling (`200/201`) across master/slave controllers.
-3. Add structured response/error DTO handling around cloud requests.
-4. Add graceful reconnect and heartbeat in `SocketManager`.
-5. Add unit/integration tests for signal transformation and ticket mapping.
-6. Update/remove `main.py` legacy path to avoid accidental usage.
-7. Pin complete dependency set in `requirements.txt`.
+### Master EventLog filter categories
+
+| Category | Trigger |
+|---|---|
+| `SIGNAL` | OPEN, CLOSE, SIGNAL in log line |
+| `SESSION` | SOCKET, CONNECTED, DISCONNECTED in log line |
+| `MT5` | [RISK] in log line |
+| `ERR` | ERROR, FAILED, REJECTED in log line |
+| `INFO` | All other lines |
+
+### Slave EventLog filter categories
+
+| Category | Trigger |
+|---|---|
+| `COPY` | OPEN SUCCESS, [COPY], Copying, CLOSE SUCCESS, SOCKET |
+| `SESSION` | [SESSION] |
+| `MT5` | [RISK], MT5 Error, MT5 login |
+| `ERR` | DAILY LOSS, FAILED, CLOUD REJECTED, CLOUD ERROR |
+| `INFO` | All other lines |
 
 ---
 
-## 17) Launch and Operation Notes
+## 16) Current Constraints and Known Risks
+
+1. **Hardcoded backend URL**: All controllers and SocketManager use `http://localhost:3000` directly.
+2. **`close_trade` deviation hardcoded**: `MT5Adapter.close_trade` uses `deviation=20` regardless of `state.slippage_points`. Note: the `max_slippage_points` drift guard (Guard 4) applies to OPEN only, not CLOSE. `state.slippage_points` is now a fixed default `10` (its COPY-tab control was removed) and is still passed as `deviation` on `execute_trade` (OPEN).
+3. **`node_registered` log gap**: `SocketManager.on_node_registered` calls `self.state.add_log(msg)` but `self.state` is never set by controllers (always `None`); only terminal output is produced.
+4. **~~Test FakeMT5 gap~~ (resolved)**: `FakeMT5.execute_trade` now accepts `deviation=10` and exposes `get_symbol_point`/`get_execution_price`, matching the real adapter used by Guard 4.
+5. **`master_name` in `AppState`**: `CopyView.sync_from_state()` reads `state.master_name` but this field is not defined in any state class. It always evaluates falsy; the slave UI shows the fallback text.
+10. **Slippage ACK multi-slave fidelity**: `trade_execution_ack` updates the shared master OPEN `TradeLog` row, so copier-side diagnostics are exact for single-slave rooms and best-effort (last writer) otherwise — same limitation as backend `slaveId`.
+6. **`_resolve_master_user_id` unused**: Fallback method present in `MasterController` but not called in normal flow since verify-node now returns `id`.
+7. **`SubscribersView` "Active · 5 seats" chip**: Static placeholder — not derived from actual seat count.
+8. **Exness missing `US100`**: `BROKER_PRESETS["Exness"]` has no `US100` mapping. Preset loader for Exness will skip it.
+9. **Legacy files**: `main.py`, `views/master_ui.py`, `views/slave_ui.py` are stale and will cause import errors if run.
+
+---
+
+## 17) AI-Safe Extension Rules (Do-Not-Break Contracts)
+
+1. Keep `register_node`, `test_signal`, `trade_execution`, `node_registered`, `subscriber_update`, `trade_execution_ack` event names unchanged.
+2. Preserve signal payload keys consumed by slave: `event`, `master_ticket`, `symbol`, `action`, `volume`, `pnl`. `masterPrice` is optional — the slippage guard skips and copies when it is absent (older masters).
+3. Preserve role identity semantics: MASTER uses license key; SLAVE uses registered email.
+4. Maintain `ticket_map` logic (`master_ticket → slave_ticket`) for close symmetry.
+5. Preserve `magic=234000` filtering in `MasterRecorder.start_monitoring()` — loop prevention.
+6. Keep `ORDER_TIME_GTC` and `ORDER_FILLING_IOC` in both `execute_trade` and `close_trade`.
+7. `SocketManager.on_connect` must auto-emit `register_node` — this drives auto re-registration on reconnect.
+8. `MasterSignalTrackingSocket.emit_signal` must increment `state.signals_sent` and append to `state.recent_signals` (ring buffer cap 50).
+9. Risk guards in `on_trade_signal` must fire in order: Guard -1 (equity) → Guard 0 (daily loss) → Guard 1 (concurrent) → symbol mapping → Guard 2 (whitelist) → Guard 3 (lot cap inline during OPEN) → Guard 4 (strict slippage drift, right before `execute_trade`). Guard 4 skips when `masterPrice`, point, or copier price is unavailable.
+10. `AppState` inherits `BaseState + MasterState + SlaveState` — preserve this composition; do not merge classes.
+11. Any backend response contract change must update both client controllers and this README.
+
+---
+
+## 18) Launch and Operation Notes
 
 Typical usage:
 
-1. Start backend (`trade-sync-backend`) so `/auth/verify-node` and socket server are available.
-2. Launch master via `main_master.py` and login with MT5 + license key.
-3. Launch slave via `main_slave.py` and login with MT5 + registered email.
-4. On slave dashboard, configure risk/mapping, then start listening.
-5. On master dashboard, start broadcasting.
+1. Start backend (`trade-sync-backend`) so `/auth/verify-node` and socket server are available
+2. Launch master: `python main_master.py` from `trade-sync-client/`
+3. Enter MT5 credentials + license key → LOG IN
+4. Dashboard loads; SUBSCRIBERS tab fetches roster after 1s; PERFORMANCE tab fetches profile stats
+5. Launch slave: `python main_slave.py` from a separate terminal
+6. Enter registered email + MT5 credentials → LOG IN
+7. On slave: SYMBOLS tab to configure mapping, RISK tab to set guards, COPY tab to set mode/multiplier
+8. Slave: START LISTENING → joining master room for signal execution
+9. Master: START BROADCASTING → recorder thread monitoring MT5 positions
 
 Expected runtime indicators:
-
-- Cloud verification logs in both UIs
-- socket connect message and room registration
-- master broadcast logs on OPEN/CLOSE
-- slave open/close success logs with mapped ticket IDs
-- master controller lifecycle events mirrored in terminal output
-- slave controller signal-processing events mirrored in terminal output
+- Cloud verification logs with trace IDs
+- `[SOCKET] Registered as MASTER in room: room_master_<id>` confirmation
+- Master: OPEN/CLOSE broadcast logs + signal count increment
+- Slave: OPEN SUCCESS / CLOSE SUCCESS with ticket numbers
+- `subscriber_update` in master UI when slave connects/disconnects
 
 ---
 
-## 18) Canonical Contract Pointer
+## 19) Canonical Contract Pointer
 
 For cross-system integration contracts across backend/frontend/client, use:
 
@@ -888,4 +1180,4 @@ If node verification, socket event names, payload keys, role identity semantics,
 
 ---
 
-Treat this document as the source-of-truth for the Python client implementation and cross-system communication boundaries.
+Treat this document as the source of truth for the Python client implementation and cross-system communication boundaries.

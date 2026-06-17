@@ -22,6 +22,9 @@ from views.qt.primitives import (
 )
 from views.qt.theme import TEXT3
 
+# UI exposes the drift threshold in pips; internal state stores points.
+POINTS_PER_PIP = 100
+
 
 class CopyView(QWidget):
     """Slave COPY stack page: binds to ``SlaveController.state`` fields (no controller edits)."""
@@ -92,17 +95,17 @@ class CopyView(QWidget):
         fixed_v.addWidget(self.fixed_spin)
         fields_row.addWidget(self.fixed_col, 1)
 
-        slip_wrap = QWidget()
-        slip_v = QVBoxLayout(slip_wrap)
-        slip_v.setContentsMargins(0, 0, 0, 0)
-        slip_v.setSpacing(6)
-        slip_v.addWidget(FieldLabel("Slippage (points)"))
-        self.slippage_spin = DarkSpinbox(0.0, 50.0, 1.0)
-        self.slippage_spin.setDecimals(0)
-        self.slippage_spin.setMinimumWidth(120)
-        self.slippage_spin.valueChanged.connect(self._on_slippage_changed)
-        slip_v.addWidget(self.slippage_spin)
-        fields_row.addWidget(slip_wrap, 1)
+        max_slip_wrap = QWidget()
+        max_slip_v = QVBoxLayout(max_slip_wrap)
+        max_slip_v.setContentsMargins(0, 0, 0, 0)
+        max_slip_v.setSpacing(6)
+        max_slip_v.addWidget(FieldLabel("Max Slippage Drift (pips, 0=off)"))
+        self.max_slippage_spin = DarkSpinbox(0.0, 500.0, 1.0)
+        self.max_slippage_spin.setDecimals(0)
+        self.max_slippage_spin.setMinimumWidth(120)
+        self.max_slippage_spin.valueChanged.connect(self._on_max_slippage_changed)
+        max_slip_v.addWidget(self.max_slippage_spin)
+        fields_row.addWidget(max_slip_wrap, 1)
 
         rev_wrap = QWidget()
         rev_v = QVBoxLayout(rev_wrap)
@@ -182,11 +185,11 @@ class CopyView(QWidget):
             self.fixed_spin.setValue(fl)
             self.fixed_spin.blockSignals(False)
 
-        sp = float(int(getattr(state, "slippage_points", 10)))
-        if abs(self.slippage_spin.value() - sp) > 1e-9:
-            self.slippage_spin.blockSignals(True)
-            self.slippage_spin.setValue(sp)
-            self.slippage_spin.blockSignals(False)
+        msp_pips = float(getattr(state, "max_slippage_points", 0.0)) / POINTS_PER_PIP
+        if abs(self.max_slippage_spin.value() - msp_pips) > 1e-9:
+            self.max_slippage_spin.blockSignals(True)
+            self.max_slippage_spin.setValue(msp_pips)
+            self.max_slippage_spin.blockSignals(False)
 
         rev = bool(getattr(state, "reverse_copy", False))
         if self.reverse_chk.isChecked() != rev:
@@ -219,10 +222,10 @@ class CopyView(QWidget):
             return
         self._state().fixed_lot_size = float(val)
 
-    def _on_slippage_changed(self, val: float) -> None:
+    def _on_max_slippage_changed(self, val: float) -> None:
         if self._syncing_ui:
             return
-        self._state().slippage_points = int(round(val))
+        self._state().max_slippage_points = float(val) * POINTS_PER_PIP
 
     def _on_reverse_toggled(self, checked: bool) -> None:
         if self._syncing_ui:

@@ -41,22 +41,26 @@ class MasterRecorder:
                 
                 # --- NEW: PnL CAPTURE LOGIC ---
                 pnl = 0.0
+                close_price = None
                 # Fetch the history of deals associated with this specific ticket
                 deals = mt5.history_deals_get(position=t)
                 if deals:
                     for deal in deals:
                         # deal.profit contains actual profit/loss including commissions
                         pnl += deal.profit
+                        # Capture the closing-side reference price (last deal price)
+                        if getattr(deal, 'price', None):
+                            close_price = deal.price
                 # ------------------------------
 
-                # Pass the calculated PnL to the broadcast event
-                self.broadcast_event("CLOSE", ticket=t, symbol=symbol, pnl=pnl)
+                # Pass the calculated PnL and close reference price to the broadcast event
+                self.broadcast_event("CLOSE", ticket=t, symbol=symbol, pnl=pnl, master_price=close_price)
                 del self.tracked_tickets[t]
 
             time.sleep(0.5)
 
-    # Updated to accept pnl (defaulting to 0.0 for OPEN events)
-    def broadcast_event(self, event_type, pos=None, ticket=None, symbol=None, pnl=0.0):
+    # Updated to accept pnl (defaulting to 0.0 for OPEN events) and master_price
+    def broadcast_event(self, event_type, pos=None, ticket=None, symbol=None, pnl=0.0, master_price=None):
         trace_id = str(uuid4())
         data = {
             "event": event_type,
@@ -67,6 +71,12 @@ class MasterRecorder:
             "pnl": round(pnl, 2), # NEW: Include PnL in the WebSocket payload
             "trace_id": trace_id,
         }
+
+        # NEW: master-side reference price for the slippage guard (additive, optional).
+        # OPEN uses the position open price; CLOSE uses the captured closing deal price.
+        resolved_price = pos.price_open if pos else master_price
+        if resolved_price is not None:
+            data["masterPrice"] = float(resolved_price)
         
         # Log it to the terminal so you can verify it's working
         if event_type == "CLOSE":
