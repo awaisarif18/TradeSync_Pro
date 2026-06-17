@@ -1,0 +1,29 @@
+---
+title: Risk Controls & Copy Modes
+description: The guardrails that protect your account, and how volume is calculated.
+section: For Copiers
+order: 7
+---
+
+# Risk Controls & Copy Modes
+
+This is the most important page for protecting your account. Configure these in the **Copy** and **Risk** tabs before you start listening.
+
+## Copy modes (how your trade size is decided)
+
+- **Multiplier** — your volume = the provider's volume × your multiplier. A multiplier of `1.0` copies their size; `0.5` copies half; `2.0` doubles it.
+- **Fixed Lot** — every copied trade uses the same fixed lot size, regardless of the provider's size.
+- **Reverse copy** — flips BUY into SELL and vice versa. Advanced; only use it if you understand the consequences.
+
+## Risk guards
+
+Each guard is optional (setting it to 0 disables it). When you have several enabled, they're checked in order on every new trade:
+
+- **Equity floor** — blocks new trades if your account equity falls below a minimum you set.
+- **Daily loss limit** — automatically pauses copying for the day once your losses reach a threshold. You resume manually.
+- **Max concurrent trades** — caps how many copied positions can be open at once.
+- **Symbol whitelist** — if set, only the symbols on your list will be copied; everything else is skipped.
+- **Max lot cap** — clamps any single copied trade to a maximum size, no matter what the provider or your multiplier produces.
+- **Max slippage drift** — measured in pips. If the price has moved too far between the provider's fill and yours, the trade is blocked rather than filled at a bad price. Set to 0 to disable.
+
+> Start conservative. A small multiplier (or small fixed lot) plus a daily loss limit is a sensible first setup. You can always loosen limits once you trust a provider.

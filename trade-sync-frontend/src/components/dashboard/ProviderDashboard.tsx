@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Activity,
   BarChart2,
@@ -11,6 +11,7 @@ import {
   Download,
   Users,
 } from "lucide-react";
+import { PROVIDER_WINDOWS_DOWNLOAD_URL } from "@/lib/downloads";
 import { useSelector } from "react-redux";
 import { toast } from "sonner";
 import { KpiCard } from "../common/KpiCard";
@@ -266,6 +267,42 @@ function LicenseKeyBlock({ licenseKey }: { licenseKey?: string | null }) {
   );
 }
 
+function ProviderDesktopAppCard() {
+  return (
+    <Card>
+      <CardBody>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 text-[10px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
+              DESKTOP APP
+            </div>
+            <div className="text-lg font-semibold tracking-[-0.015em]">
+              Provider app
+            </div>
+            <div className="mt-1 text-sm text-[var(--color-text-2)]">
+              Download the desktop broadcaster for MetaTrader 5.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={PROVIDER_WINDOWS_DOWNLOAD_URL}
+              download
+              style={{ textDecoration: "none" }}
+            >
+              <Button leftIcon={<Download size={15} />}>
+                Download Provider app
+              </Button>
+            </a>
+            <Link href="/downloads" style={{ textDecoration: "none" }}>
+              <Button variant="ghost">All downloads</Button>
+            </Link>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
+
 function ProviderKpiStrip({ data }: { data: MasterDashboardData }) {
   const winRate = data.profile.winRate;
   const winRateValueColor: "default" | "mint" | "danger" | "violet" =
@@ -512,8 +549,6 @@ function BroadcastTowerSvg() {
 }
 
 function FirstTimeProviderHero({ onSetup }: { onSetup: () => void }) {
-  const router = useRouter();
-
   return (
     <Card>
       <EmptyState
@@ -523,15 +558,15 @@ function FirstTimeProviderHero({ onSetup }: { onSetup: () => void }) {
         description="Run the TradeSync desktop client, sign in with your license key, and click START BROADCASTING. Your first signal will appear here within seconds."
         action={
           <div className="flex flex-wrap justify-center gap-3">
-            <Button
-              leftIcon={<Download size={15} />}
-              onClick={() => {
-                // TODO: replace decorative downloads route when desktop packaging is ready.
-                router.push("/downloads");
-              }}
+            <a
+              href={PROVIDER_WINDOWS_DOWNLOAD_URL}
+              download
+              style={{ textDecoration: "none" }}
             >
-              Download desktop client
-            </Button>
+              <Button leftIcon={<Download size={15} />}>
+                Download desktop client
+              </Button>
+            </a>
             <Button variant="ghost" onClick={onSetup}>
               Set up your profile
             </Button>
@@ -892,6 +927,7 @@ export default function ProviderDashboard() {
       {activeTab === "overview" ? (
         <div className="space-y-6">
           <LicenseKeyBlock licenseKey={user.licenseKey} />
+          <ProviderDesktopAppCard />
           <ProviderKpiStrip data={dashboardData} />
 
           {firstTime ? (

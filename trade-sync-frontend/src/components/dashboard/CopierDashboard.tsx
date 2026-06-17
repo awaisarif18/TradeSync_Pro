@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Activity,
@@ -9,11 +10,13 @@ import {
   BadgeCheck,
   Check,
   Copy,
+  Download,
   LineChart,
   Radio,
   ShieldAlert,
   Zap,
 } from "lucide-react";
+import { COPIER_WINDOWS_DOWNLOAD_URL } from "@/lib/downloads";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import TraderCard, {
@@ -50,6 +53,42 @@ interface MasterUser {
 }
 
 type DashboardStatus = "listening" | "idle" | "not-subscribed" | "disconnected";
+
+function CopierDesktopAppCard() {
+  return (
+    <Card>
+      <CardBody>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="mb-2 text-[10px] uppercase tracking-[0.06em] text-[var(--color-text-3)]">
+              DESKTOP APP
+            </div>
+            <div className="text-lg font-semibold tracking-[-0.015em]">
+              Copier app
+            </div>
+            <div className="mt-1 text-sm text-[var(--color-text-2)]">
+              Download the desktop copier for MetaTrader 5.
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <a
+              href={COPIER_WINDOWS_DOWNLOAD_URL}
+              download
+              style={{ textDecoration: "none" }}
+            >
+              <Button leftIcon={<Download size={15} />}>
+                Download Copier app
+              </Button>
+            </a>
+            <Link href="/downloads" style={{ textDecoration: "none" }}>
+              <Button variant="ghost">All downloads</Button>
+            </Link>
+          </div>
+        </div>
+      </CardBody>
+    </Card>
+  );
+}
 
 function normalizeRisk(riskLevel: string | null): TraderCardData["riskLevel"] {
   if (riskLevel === "LOW" || riskLevel === "HIGH") return riskLevel;
@@ -731,6 +770,7 @@ export default function CopierDashboard() {
   return (
     <div className="mx-auto max-w-[1240px] space-y-6 px-8 pb-20">
       <PageHeader status={dashboardStatus} />
+      <CopierDesktopAppCard />
 
       {!isSubscribed ? (
         <CopierKpiStrip
@@ -796,12 +836,23 @@ export default function CopierDashboard() {
               title="Pick a provider to start mirroring."
               description="You're connected to TradeSync. Browse verified providers, subscribe to one, and your desktop client will start mirroring within seconds."
               action={
-                <Button
-                  rightIcon={<ArrowRight size={15} />}
-                  onClick={() => router.push("/traders")}
-                >
-                  Browse providers
-                </Button>
+                <div className="flex flex-wrap justify-center gap-3">
+                  <Button
+                    rightIcon={<ArrowRight size={15} />}
+                    onClick={() => router.push("/traders")}
+                  >
+                    Browse providers
+                  </Button>
+                  <a
+                    href={COPIER_WINDOWS_DOWNLOAD_URL}
+                    download
+                    style={{ textDecoration: "none" }}
+                  >
+                    <Button variant="ghost" leftIcon={<Download size={15} />}>
+                      Download Copier app
+                    </Button>
+                  </a>
+                </div>
               }
             />
           </Card>

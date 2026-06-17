@@ -1,0 +1,27 @@
+---
+title: Symbol Mapping
+description: Match the provider's symbols to your broker's symbol names.
+section: For Copiers
+order: 6
+---
+
+# Symbol Mapping
+
+Different brokers name the same instrument differently — one broker's `XAUUSD` is another's `XAUUSDm`. Symbol mapping tells the Copier app how to translate the provider's symbols into yours.
+
+## How it works
+
+- Open the **Symbols** tab.
+- **Add a mapping**: type the provider's symbol (e.g. `XAUUSD`) and your broker's equivalent (e.g. `XAUUSDm`), then add it.
+- **Broker presets**: pick the provider's broker and your broker, then load a preset to auto-fill common mappings.
+
+## Unmapped symbols
+
+Choose what happens when a signal arrives for a symbol you haven't mapped:
+
+- **Ignore (skip trade)** — safest; the app skips anything not explicitly mapped.
+- **Copy as-is** — uses the provider's symbol name directly (only works if your broker uses the same name).
+
+## If a mapping is missing
+
+If a symbol isn't mapped and you've chosen **Ignore**, that trade simply won't copy. If you want to copy everything, either map each symbol or leave the map empty (which copies all symbols using the provider's names — make sure your broker uses matching names).

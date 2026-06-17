@@ -1,0 +1,29 @@
+---
+title: Troubleshooting & FAQ
+description: Quick fixes for the most common issues.
+section: Reference
+order: 2
+---
+
+# Troubleshooting & FAQ
+
+**My verification / reset email never arrived.**
+Check spam first. Wait the 30-second cooldown, then press Resend (which issues a fresh code and invalidates the old one). Make sure you typed the right email.
+
+**Login sends me to the verification page instead of the dashboard.**
+Your account isn't verified yet. Enter the new code that was just emailed; you'll then reach the dashboard. (Accounts created before email verification existed are unaffected.)
+
+**The desktop app won't connect to MT5.**
+Confirm you can log into MT5 manually with the same ID, password, and server. The server name is the most common error — copy it exactly as MT5 shows it. The MT5 terminal must be installed on the same machine.
+
+**I subscribed but nothing is copying.**
+Subscribing only links your account. The Copier app must be installed, connected to MT5, and **listening**. Also check that the provider is live and that your symbol mapping and risk guards aren't skipping the trades.
+
+**Some trades are skipped.**
+This is usually intentional: an unmapped symbol (with "Ignore" selected), a symbol not on your whitelist, a blocked slippage drift, or a paused daily loss limit. Check the app's log and your Risk tab.
+
+**My fills don't match the provider's exactly.**
+Expected. Spread, broker, leverage, and timing differ. The slippage guard limits how far off a fill can be.
+
+**Can I copy more than one provider at once?**
+No — one provider at a time. Subscribing to a new one replaces the previous subscription.

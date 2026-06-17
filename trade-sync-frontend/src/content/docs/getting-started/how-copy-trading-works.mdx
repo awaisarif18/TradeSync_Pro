@@ -1,0 +1,22 @@
+---
+title: How Copy Trading Works
+description: The signal flow from a provider's trade to your account.
+section: Getting Started
+order: 2
+---
+
+# How Copy Trading Works
+
+Copy trading on TradeSync Pro follows a simple, one-directional flow:
+
+1. **A provider trades** on their own MT5 account as they normally would.
+2. **The Provider desktop app detects the change** (a new position opening, or an existing one closing) and sends a signal to TradeSync Pro.
+3. **TradeSync Pro fans the signal out** to every copier subscribed to that provider.
+4. **The Copier desktop app receives the signal** and, after applying your risk rules and symbol mapping, places the matching trade on your MT5 account.
+
+A few things worth understanding up front:
+
+- **You only ever copy one provider at a time.** Subscribing to a new provider replaces your previous subscription.
+- **Copying is local to your machine.** The Copier app must be running and connected for trades to mirror. If it's closed, you won't copy anything during that time.
+- **Your settings always win.** Volume, symbol names, and risk limits are decided by *your* Copier app, not the provider. A provider can never place a trade larger than your limits allow.
+- **Closes are matched to opens.** When a provider closes a position, the app finds the trade it opened for you from that signal and closes it too.

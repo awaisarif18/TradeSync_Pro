@@ -65,7 +65,8 @@ export default function Navbar() {
   const publicLinks: NavLink[] = [
     { name: 'Discover', href: '/traders', active: pathname.startsWith('/traders') },
     { name: 'How it works', href: pathname === '/' ? '#how' : '/#how' },
-    { name: 'Docs', href: '#docs' },
+    { name: 'Docs', href: '/docs', active: pathname.startsWith('/docs') },
+    { name: 'Downloads', href: '/downloads', active: pathname.startsWith('/downloads') },
   ];
 
   const authLinks: NavLink[] = [
@@ -76,6 +77,8 @@ export default function Navbar() {
       ? [{ name: 'Dashboard', href: '/dashboard', active: dashboardActive }]
       : []),
     ...(role === 'ADMIN' ? [{ name: 'Admin', href: '/admin', active: adminActive }] : []),
+    { name: 'Docs', href: '/docs', active: pathname.startsWith('/docs') },
+    { name: 'Downloads', href: '/downloads', active: pathname.startsWith('/downloads') },
   ];
 
   const centerLinks = isAuthenticated ? authLinks : publicLinks;

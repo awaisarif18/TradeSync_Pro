@@ -73,6 +73,11 @@ trade-sync-frontend/
     │   ├── traders/
     │   │   ├── page.tsx                   # Provider marketplace grid at /traders
     │   │   └── [id]/page.tsx              # Public provider detail page at /traders/:id
+    │   ├── docs/
+    │   │   ├── layout.tsx                 # Docs shell wrapper (.docs-root breakout)
+    │   │   └── [[...slug]]/page.tsx       # SSG catch-all MDX docs renderer; /docs redirects to introduction
+    │   ├── downloads/
+    │   │   └── page.tsx                   # Public Provider + Copier desktop download cards
     │   └── test-ui/
     │       └── page.tsx                   # Internal UI sandbox (no auth guard; dev only)
     ├── components/
@@ -110,6 +115,14 @@ trade-sync-frontend/
     │   │   ├── LoginForm.tsx              # Legacy login form component (not used by /login page; retained)
     │   │   ├── RegisterMasterForm.tsx     # Legacy MASTER registration form (not used by /register; retained)
     │   │   └── RegisterSlaveForm.tsx      # Legacy SLAVE registration form (not used by /register; retained)
+    │   ├── docs/
+    │   │   ├── Sidebar.tsx                # Generated nav grouped by section; mobile drawer
+    │   │   ├── TableOfContents.tsx        # Right-rail h2/h3 anchor links
+    │   │   ├── Breadcrumb.tsx             # Docs › section › page
+    │   │   ├── PrevNext.tsx               # Footer prev/next from sidebar order
+    │   │   └── MdxComponents.tsx          # MDX element overrides (internal Link, code blocks)
+    │   ├── downloads/
+    │   │   └── DownloadCard.tsx           # Provider/Copier download card (reused on /downloads)
     │   ├── landing/
     │   │   └── TopTradersSection.tsx      # Public landing trader showcase
     │   ├── marketing/
@@ -139,6 +152,8 @@ trade-sync-frontend/
     │   │   └── MasterProfileSetup.tsx       # Deprecated standalone profile form (kept for older imports)
     │   └── master/
     │       └── TradeHistoryModal.tsx        # Re-export of dashboard/TradeHistoryModal (canonical import path)
+    ├── content/
+    │   └── docs/                            # 26 MDX doc pages (source: _docs-source/TradeSyncPro-Docs-Content.md)
     ├── hooks/
     │   └── useIncomingSignals.ts            # Socket: connect → register_node(SLAVE) → trade_execution
     ├── redux/
@@ -149,6 +164,8 @@ trade-sync-frontend/
     │   └── api.ts                           # Axios instance + 4 service objects + TypeScript interfaces
     └── lib/
         ├── cn.ts                            # clsx + tailwind-merge utility
+        ├── docs.ts                          # Read MDX content, build nav tree, TOC headings, prev/next
+        ├── downloads.ts                     # Provider/Copier Windows download URL constants (placeholders)
         ├── generatePassword.ts              # Crypto-random alphanumeric password generator (≥5 chars) for reset flow
         ├── format.ts                        # formatCurrency, formatPercent, formatVolume, formatDate, formatDateTime, formatTime
         ├── role-display.ts                  # Role → display label and color mapping
@@ -194,6 +211,24 @@ Key client components:
 ## 4. Routes — complete behavior map
 
 Auth routes (`/login`, `/register`, `/verify-email`, `/forgot-password`) do not render an in-page `Logo`; branding comes from the global `Navbar` in the root layout only.
+
+### `/docs` — Documentation site
+
+**Type:** SSG server components (`src/app/docs/[[...slug]]/page.tsx`)
+
+- `/docs` redirects to `/docs/getting-started/introduction`.
+- Content lives in `src/content/docs/**/*.mdx` (parsed with `gray-matter`, rendered with `next-mdx-remote/rsc`).
+- Three-column layout: generated sidebar (by `section` + `order`), MDX article in `.docs-prose`, right-rail TOC from `h2`/`h3`.
+- Navbar **Docs** link points to `/docs` (public and authenticated).
+- No client-side content fetching; all pages pre-rendered via `generateStaticParams`.
+
+### `/downloads` — Desktop app downloads
+
+**Type:** server component (`src/app/downloads/page.tsx`)
+
+- Public page with two cards: **Provider app** and **Copier app**.
+- Download URLs read from `src/lib/downloads.ts` (`PROVIDER_WINDOWS_DOWNLOAD_URL`, `COPIER_WINDOWS_DOWNLOAD_URL` — placeholders to fill in).
+- Role-aware dashboard CTAs: Provider dashboard links to the provider installer; Copier dashboard empty state includes a Copier download button.
 
 ### `/` — Marketing landing
 
@@ -833,6 +868,10 @@ No `tailwind.config.ts`. Configured via:
 
 `font-mono-tnum` — applies JetBrains Mono with tabular numbers. Used on all numeric displays (prices, KPIs, ticket numbers).
 
+### Docs prose (`.docs-prose`)
+
+Scoped documentation typography in `globals.css`, built from `@theme` tokens (mint links, dark code blocks, JetBrains Mono inline code). Layout utilities: `.docs-layout`, `.docs-sidebar`, `.docs-toc`, `.docs-prev-next`.
+
 ---
 
 ## 15. Dependencies
@@ -853,6 +892,11 @@ No `tailwind.config.ts`. Configured via:
 | `sonner` | ^2.0.7 | Toast notifications |
 | `clsx` | ^2.1.1 | Conditional class names |
 | `tailwind-merge` | ^3.4.0 | Tailwind class deduplication |
+| `next-mdx-remote` | ^5.x | Server-side MDX rendering for `/docs` |
+| `gray-matter` | ^4.x | YAML frontmatter parsing for doc pages |
+| `remark-gfm` | ^4.x | GFM tables/lists in docs |
+| `rehype-slug` | ^6.x | Heading `id` anchors in docs |
+| `rehype-autolink-headings` | ^7.x | Clickable heading anchors in docs |
 
 ### Dev
 
