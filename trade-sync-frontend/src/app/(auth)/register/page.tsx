@@ -109,15 +109,15 @@ export default function RegisterPage() {
     setFieldErrors({});
 
     try {
-      await authService.register({
+      const registered = await authService.register({
         fullName: formData.fullName.trim(),
         email: formData.email.trim(),
         password: formData.password,
         role,
       });
 
-      toast.success("Account created. Sign in to continue");
-      router.push("/login");
+      toast.success("Account created. Check your email for a code");
+      router.push(`/verify-email?email=${encodeURIComponent(registered.email)}`);
     } catch (error: unknown) {
       console.error("Registration Error:", error);
       const message = authErrorMessage(error, "Registration failed");

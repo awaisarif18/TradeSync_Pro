@@ -11,7 +11,14 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
-import { UpdateMasterProfileDto } from './dto/auth.dto';
+import {
+  ConfirmPasswordResetDto,
+  RequestPasswordResetDto,
+  ResendOtpDto,
+  UpdateMasterProfileDto,
+  VerifyResetOtpDto,
+  VerifySignupOtpDto,
+} from './dto/auth.dto';
 import { TradeGateway } from '../trade/trade.gateway';
 import { Public } from './decorators/public.decorator';
 import type { JwtUser } from './types/jwt-user';
@@ -29,8 +36,7 @@ export class AuthController {
   @Post('register')
   async register(@Body() body: Record<string, unknown>) {
     try {
-      const saved = await this.authService.register(body as never);
-      return await this.authService.buildAuthResponse(saved);
+      return await this.authService.register(body as never);
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       throw new BadRequestException(`Registration Failed: ${message}`);
@@ -41,6 +47,39 @@ export class AuthController {
   @Post('login')
   async login(@Body() body: { email?: string; password?: string }) {
     return await this.authService.login(body.email ?? '', body.password ?? '');
+  }
+
+  @Public()
+  @Post('otp/verify-signup')
+  async verifySignupOtp(@Body() body: VerifySignupOtpDto) {
+    return await this.authService.verifySignupOtp(body.email, body.code);
+  }
+
+  @Public()
+  @Post('otp/resend')
+  async resendOtp(@Body() body: ResendOtpDto) {
+    return await this.authService.resendOtp(body.email, body.purpose);
+  }
+
+  @Public()
+  @Post('password-reset/request')
+  async requestPasswordReset(@Body() body: RequestPasswordResetDto) {
+    return await this.authService.requestPasswordReset(body.email);
+  }
+
+  @Public()
+  @Post('password-reset/verify')
+  async verifyResetOtp(@Body() body: VerifyResetOtpDto) {
+    return await this.authService.verifyResetOtp(body.email, body.code);
+  }
+
+  @Public()
+  @Post('password-reset/confirm')
+  async confirmPasswordReset(@Body() body: ConfirmPasswordResetDto) {
+    return await this.authService.confirmPasswordReset(
+      body.resetToken,
+      body.newPassword,
+    );
   }
 
   @Get('users')

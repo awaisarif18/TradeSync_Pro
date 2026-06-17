@@ -35,7 +35,10 @@ api.interceptors.response.use(
     const url = axiosError.config?.url ?? "";
     if (status === 401) {
       const isAuthEntry =
-        url.includes("/auth/login") || url.includes("/auth/register");
+        url.includes("/auth/login") ||
+        url.includes("/auth/register") ||
+        url.includes("/auth/otp/") ||
+        url.includes("/auth/password-reset/");
       if (!isAuthEntry) {
         store.dispatch(logout());
       }
@@ -105,6 +108,23 @@ export interface AuthSessionResponse {
   user: AuthSessionUser;
 }
 
+export type OtpPurpose = "SIGNUP" | "PASSWORD_RESET";
+
+/** New shape returned by POST /auth/register (no token until OTP verified). */
+export interface RegisterResponse {
+  message: string;
+  email: string;
+  requiresOtp: true;
+}
+
+export interface GenericMessageResponse {
+  message: string;
+}
+
+export interface VerifyResetOtpResponse {
+  resetToken: string;
+}
+
 export interface MasterProfileUpdateResult {
   id: string;
   fullName: string;
@@ -151,10 +171,64 @@ export const authService = {
 
   register: async (
     userData: RegisterUserData,
-  ): Promise<AuthSessionResponse> => {
-    const response = await api.post<AuthSessionResponse>(
+  ): Promise<RegisterResponse> => {
+    const response = await api.post<RegisterResponse>(
       "/auth/register",
       userData,
+    );
+    return response.data;
+  },
+
+  verifySignupOtp: async (
+    email: string,
+    code: string,
+  ): Promise<AuthSessionResponse> => {
+    const response = await api.post<AuthSessionResponse>(
+      "/auth/otp/verify-signup",
+      { email, code },
+    );
+    return response.data;
+  },
+
+  resendOtp: async (
+    email: string,
+    purpose: OtpPurpose,
+  ): Promise<GenericMessageResponse> => {
+    const response = await api.post<GenericMessageResponse>("/auth/otp/resend", {
+      email,
+      purpose,
+    });
+    return response.data;
+  },
+
+  requestPasswordReset: async (
+    email: string,
+  ): Promise<GenericMessageResponse> => {
+    const response = await api.post<GenericMessageResponse>(
+      "/auth/password-reset/request",
+      { email },
+    );
+    return response.data;
+  },
+
+  verifyResetOtp: async (
+    email: string,
+    code: string,
+  ): Promise<VerifyResetOtpResponse> => {
+    const response = await api.post<VerifyResetOtpResponse>(
+      "/auth/password-reset/verify",
+      { email, code },
+    );
+    return response.data;
+  },
+
+  confirmPasswordReset: async (
+    resetToken: string,
+    newPassword: string,
+  ): Promise<GenericMessageResponse> => {
+    const response = await api.post<GenericMessageResponse>(
+      "/auth/password-reset/confirm",
+      { resetToken, newPassword },
     );
     return response.data;
   },

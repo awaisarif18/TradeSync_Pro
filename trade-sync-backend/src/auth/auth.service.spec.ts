@@ -11,12 +11,22 @@ describe('AuthService.verifyNode', () => {
     const jwtService = {
       signAsync: jest.fn().mockResolvedValue('mock.jwt.token'),
     };
+    const otpService = {
+      issueOtp: jest.fn(),
+      verifyOtp: jest.fn(),
+      invalidateOtps: jest.fn(),
+    };
+    const configService = {
+      get: jest.fn(),
+    };
 
     const service = new AuthService(
       userRepository,
       tradeLogRepository as any,
       tradeGateway as any,
       jwtService as any,
+      otpService as any,
+      configService as any,
     );
     return { service, userRepository };
   };

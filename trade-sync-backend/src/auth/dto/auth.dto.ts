@@ -51,6 +51,48 @@ export interface SubscriberSummary {
   totalPnL: number;
 }
 
+// --- OTP / PASSWORD RESET DTOs ---
+
+export type OtpPurposeDto = 'SIGNUP' | 'PASSWORD_RESET';
+
+export class RegisterResponseDto {
+  message: string;
+  email: string;
+  requiresOtp: true;
+}
+
+export class VerifySignupOtpDto {
+  email: string;
+  code: string;
+}
+
+export class ResendOtpDto {
+  email: string;
+  purpose: OtpPurposeDto;
+}
+
+export class RequestPasswordResetDto {
+  email: string;
+}
+
+export class VerifyResetOtpDto {
+  email: string;
+  code: string;
+}
+
+export class VerifyResetOtpResponseDto {
+  resetToken: string;
+}
+
+export class ConfirmPasswordResetDto {
+  resetToken: string;
+  newPassword: string;
+}
+
+export class GenericMessageDto {
+  message: string;
+}
+
 // DTO for updating master profile
 export class UpdateMasterProfileDto {
   bio?: string;

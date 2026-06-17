@@ -66,7 +66,9 @@ Rules:
 
 ### JWT (HTTP web API)
 
-- `POST /auth/login` and `POST /auth/register` return `{ access_token: string, user: UserPublic }` (password is never returned). Passwords are stored with bcrypt; legacy plaintext rows in `Users.password` are re-hashed on the next successful login.
+- `POST /auth/login` returns `{ access_token: string, user: UserPublic }` (password is never returned). `POST /auth/register` now returns `{ message, email, requiresOtp: true }` and emails a SIGNUP OTP; the access token is issued by `POST /auth/otp/verify-signup` after the user confirms the code. Passwords are stored with bcrypt; legacy plaintext rows in `Users.password` are re-hashed on the next successful login.
+- Email verification gate: `register` sets `Users.isEmailVerified = false`; `login` returns **403 `{ requiresOtp: true, email }`** only when the value is explicitly `false`. Existing rows default to `true` (DB-level default), so they are never gated.
+- Password reset tokens are signed by the existing `JwtService` with a `purpose: 'PASSWORD_RESET'` claim and TTL `PASSWORD_RESET_TOKEN_TTL`. `JwtStrategy.validate` rejects any token carrying a `purpose` claim, so reset tokens cannot be replayed as access tokens.
 - Set env `JWT_SECRET` (required) and optional `JWT_EXPIRES_IN` (default `7d`) on the backend.
 - Global `JwtAuthGuard` applies to all routes except those marked `@Public()` in code. Protected routes expect header `Authorization: Bearer <access_token>`.
 - **401** when the token is missing, invalid, or expired; **403** when the token is valid but the caller is not allowed (e.g. non-admin calling admin routes, or wrong user id on subscribe/profile/dashboard).
@@ -84,8 +86,13 @@ JWT enforcement contract for web REST:
 
 | Route | Method | Backend Handler | Called By | Request Body | Success Response (shape) | Notes |
 |---|---|---|---|---|---|---|
-| /auth/register | POST | AuthController.register | Frontend register forms | { fullName, email, password, role, licenseKey? } | { access_token, user } | Public. Password hashed at rest. Role is MASTER or SLAVE from frontend forms |
-| /auth/login | POST | AuthController.login | Frontend LoginForm | { email, password } | { access_token, user } | Public. Used to populate Redux auth user + `tsp_access_token` |
+| /auth/register | POST | AuthController.register | Frontend register forms | { fullName, email, password, role, licenseKey? } | { message, email, requiresOtp: true } | Public. Creates user with `isEmailVerified=false` and emails a 6-digit SIGNUP OTP. **No `access_token` returned** until OTP is verified. Role is MASTER or SLAVE from frontend forms |
+| /auth/login | POST | AuthController.login | Frontend LoginForm | { email, password } | { access_token, user } | Public. Populates Redux auth user + `tsp_access_token`. **403 `{ message, requiresOtp: true, email }`** when `isEmailVerified === false` (only new unverified accounts); frontend redirects to `/verify-email` and resends a SIGNUP OTP |
+| /auth/otp/verify-signup | POST | AuthController.verifySignupOtp | Frontend `/verify-email` | { email, code } | { access_token, user } | Public. Verifies the SIGNUP OTP, sets `isEmailVerified=true`, returns the old register session shape (auto-login). Bad/expired code → 400/401 |
+| /auth/otp/resend | POST | AuthController.resendOtp | Frontend `/verify-email`, `/forgot-password`, login gate | { email, purpose: 'SIGNUP' \| 'PASSWORD_RESET' } | { message } | Public. Server-side 30s resend throttle; invalidates prior unconsumed codes; sends a new one. Generic message (no existence leak) for PASSWORD_RESET |
+| /auth/password-reset/request | POST | AuthController.requestPasswordReset | Frontend `/forgot-password` | { email } | { message } | Public. **Always** returns a generic message; emails a PASSWORD_RESET OTP only when an active user exists |
+| /auth/password-reset/verify | POST | AuthController.verifyResetOtp | Frontend `/forgot-password` | { email, code } | { resetToken } | Public. Verifies the PASSWORD_RESET OTP and returns a short-lived single-use JWT carrying `purpose: 'PASSWORD_RESET'` (TTL `PASSWORD_RESET_TOKEN_TTL`) |
+| /auth/password-reset/confirm | POST | AuthController.confirmPasswordReset | Frontend `/forgot-password` | { resetToken, newPassword } | { message } | Public. Validates the reset token (must carry `purpose: 'PASSWORD_RESET'`), writes a new bcrypt hash, invalidates related OTPs. Reset tokens are rejected as Bearer access tokens by `JwtStrategy` |
 | /auth/users | GET | AuthController.getAllUsers | Frontend admin page | none | user[] (id, fullName, email, role, isActive, licenseKey, createdAt, subscribedToId) | **JWT required.** Role ADMIN only. `subscribedToId` supports admin **Active Subscriptions** KPI (copiers with a non-null master id). |
 | /auth/users/:id/license | POST | AuthController.generateLicense | Frontend admin page | none | { message, licenseKey } | **JWT required.** Role ADMIN only |
 | /auth/users/:id/toggle-status | PATCH | AuthController.toggleStatus | Frontend admin page | none | { message, isActive } | **JWT required.** Role ADMIN only |
@@ -112,8 +119,10 @@ JWT enforcement contract for web REST:
 
 | Contract | Backend Current Behavior | Frontend Expectation | Client Expectation | Risk |
 |---|---|---|---|---|
-| /auth/login | standard Nest success | expects success, no strict code check | not used | low |
-| /auth/register | standard Nest success | expects success, no strict code check | not used | low |
+| /auth/login | standard Nest success; **403** for unverified email | success → session; 403 `requiresOtp` → redirect to `/verify-email` | not used | low |
+| /auth/register | standard Nest success; returns `{ message, email, requiresOtp }` | redirects to `/verify-email?email=...` | not used | low |
+| /auth/otp/* | 200/201 success; 400/401/429 on bad/expired/throttled code | toast error, keep user on OTP screen | not used | low |
+| /auth/password-reset/* | 200/201 success; 400/401 on bad/expired code or token | toast error, stay on current reset step | not used | low |
 | /auth/verify-node | Nest success (commonly 200/201 in current flow) | not used | Master and Slave accept 200 or 201 | low |
 
 Compatibility recommendation:
@@ -284,6 +293,8 @@ Breaking impact warning:
 | Master License | Users.licenseKey | admin generated/displayed | MASTER verify identifier |
 | Slave Subscription | Users.subscribedToId | Redux and marketplace UI state | backend uses it for room join |
 | Active Status | Users.isActive | admin toggle UI | verify-node gate blocks disabled nodes |
+| Email Verified | Users.isEmailVerified | drives `/verify-email` flow; login 403 `requiresOtp` gate | not used (verify-node still gates only on `isActive`/role) |
+| Email OTP | EmailOtps (email, codeHash, purpose, expiresAt, consumedAt, attempts) | never read directly; consumed via `/auth/otp/*` and `/auth/password-reset/*` | not used |
 | Trade Ticket (master) | master_ticket | live table display | ticket_map key for copy/close symmetry |
 | Slave Trade ID | TradeLogs.slaveId | not used | recorded by TradeGateway on slave copy confirmation |
 | Trade Volume | volume | live table display | risk multiplier input for execution |
@@ -349,6 +360,7 @@ If any contract changes, update all rows below before merging:
 | Socket payload fields | [ ] | [ ] | [ ] | [ ] |
 | Role/identity logic | [ ] | [ ] | [ ] | [ ] |
 | Room routing rule | [ ] | [ ] | [ ] | [ ] |
+| Email OTP signup + password reset (`/auth/otp/*`, `/auth/password-reset/*`, `Users.isEmailVerified`, `EmailOtps`) | [x] | [x] | [x] n/a | [x] |
 
 ---
 

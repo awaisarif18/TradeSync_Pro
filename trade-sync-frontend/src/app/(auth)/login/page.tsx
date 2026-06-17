@@ -106,6 +106,30 @@ export default function LoginPage() {
       router.push("/dashboard");
     } catch (error: unknown) {
       console.error("Login Failed:", error);
+
+      const response = (
+        error as {
+          response?: {
+            status?: number;
+            data?: { requiresOtp?: boolean; email?: string };
+          };
+        }
+      ).response;
+
+      if (response?.status === 403 && response.data?.requiresOtp) {
+        const unverifiedEmail = response.data.email ?? formData.email.trim();
+        try {
+          await authService.resendOtp(unverifiedEmail, "SIGNUP");
+        } catch (resendError) {
+          console.error("Resend on login gate failed:", resendError);
+        }
+        toast.message("Verify your email to continue");
+        router.push(
+          `/verify-email?email=${encodeURIComponent(unverifiedEmail)}`,
+        );
+        return;
+      }
+
       const message = authErrorMessage(error, "Invalid credentials");
       setFieldErrors({ password: message });
       toast.error(message);
@@ -143,7 +167,7 @@ export default function LoginPage() {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                 <span style={{ fontSize: 13, color: "var(--color-text-2)" }}>Password</span>
-                <Link href="#" style={{ fontSize: 12, color: "var(--color-mint)", textDecoration: "none" }}>
+                <Link href="/forgot-password" style={{ fontSize: 12, color: "var(--color-mint)", textDecoration: "none" }}>
                   Forgot?
                 </Link>
               </div>

@@ -50,6 +50,11 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  // DB-level default true so existing rows backfill as verified under synchronize.
+  // Login gate only blocks explicit false, which only new register rows receive.
+  @Column({ type: 'bit', default: true })
+  isEmailVerified: boolean;
+
   // FIX: Explicitly defining type: 'varchar' tells TypeORM exactly what to build in MSSQL,
   // preventing it from getting confused by the 'string | null' TypeScript union.
   @Column({ type: 'varchar', nullable: true })

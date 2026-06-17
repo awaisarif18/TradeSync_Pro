@@ -23,7 +23,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: string }): Promise<JwtUser> {
+  async validate(payload: {
+    sub: string;
+    purpose?: string;
+  }): Promise<JwtUser> {
+    // Reset tokens carry a `purpose` claim and must never act as access tokens.
+    if (payload.purpose) {
+      throw new UnauthorizedException();
+    }
+
     const user = await this.userRepository.findOne({
       where: { id: payload.sub },
     });

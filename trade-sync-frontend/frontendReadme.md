@@ -61,8 +61,10 @@ trade-sync-frontend/
     │   ├── global-error.tsx               # Root error boundary (imports globals.css for tokens)
     │   ├── (auth)/
     │   │   ├── layout.tsx                 # Thin wrapper: min-h-screen + dark bg for auth routes
-    │   │   ├── login/page.tsx             # Split-screen login at /login
-    │   │   └── register/page.tsx          # Split-screen registration at /register
+    │   │   ├── login/page.tsx             # Split-screen login at /login (handles 403 requiresOtp gate)
+    │   │   ├── register/page.tsx          # Split-screen registration at /register (redirects to /verify-email)
+    │   │   ├── verify-email/page.tsx      # Signup OTP entry at /verify-email; auto-login on success
+    │   │   └── forgot-password/page.tsx   # 3-step password reset at /forgot-password
     │   ├── dashboard/
     │   │   └── page.tsx                   # Auth gate + role switch → ProviderDashboard or CopierDashboard
     │   ├── admin/
@@ -104,6 +106,7 @@ trade-sync-frontend/
     │   │   ├── MarketTicker.tsx           # Live crypto+FX prices; CoinGecko + Frankfurter; 60s refresh
     │   │   └── TradeRow.tsx               # Typed trade row for decorative rails in Hero/login
     │   ├── auth/
+    │   │   ├── OtpInput.tsx               # 6-box numeric OTP input (auto-advance, paste, backspace); used by verify-email + forgot-password
     │   │   ├── LoginForm.tsx              # Legacy login form component (not used by /login page; retained)
     │   │   ├── RegisterMasterForm.tsx     # Legacy MASTER registration form (not used by /register; retained)
     │   │   └── RegisterSlaveForm.tsx      # Legacy SLAVE registration form (not used by /register; retained)
@@ -146,6 +149,7 @@ trade-sync-frontend/
     │   └── api.ts                           # Axios instance + 4 service objects + TypeScript interfaces
     └── lib/
         ├── cn.ts                            # clsx + tailwind-merge utility
+        ├── generatePassword.ts              # Crypto-random alphanumeric password generator (≥5 chars) for reset flow
         ├── format.ts                        # formatCurrency, formatPercent, formatVolume, formatDate, formatDateTime, formatTime
         ├── role-display.ts                  # Role → display label and color mapping
         ├── avatar-color.ts                  # Deterministic hue from name string
@@ -218,9 +222,10 @@ Key client components:
 2. Submit is disabled while validation errors exist or loading is true
 3. `authService.login(email, password)` → `POST /auth/login`
 4. On success: `dispatch(loginSuccess({ user: session.user, accessToken: session.access_token }))` → `router.push('/dashboard')` + Sonner success toast
-5. On failure: Sonner error toast + inline password field error
+5. On **403 `{ requiresOtp: true, email }`** (unverified account): resends a SIGNUP OTP and redirects to `/verify-email?email=...`
+6. On other failures: Sonner error toast + inline password field error
 
-**No auto-registration redirect after register.** Registration flow directs to `/login` separately.
+**"Forgot?"** links to `/forgot-password`.
 
 ---
 
@@ -235,8 +240,32 @@ Key client components:
 **Flow:**
 1. Client-side validation (full name required, email regex, password ≥ 5 chars)
 2. `authService.register({ fullName, email, password, role })` → `POST /auth/register`
-3. On success: Sonner toast "Account created. Sign in to continue" → `router.push('/login')`
-4. No auto-login. User must sign in after registering.
+3. Response is `{ message, email, requiresOtp: true }` (no token yet). Sonner toast → `router.push('/verify-email?email=...')`
+4. Auto-login happens after the OTP is verified on `/verify-email`.
+
+---
+
+### `/verify-email` — Signup OTP entry
+
+**Type:** `'use client'` (`src/app/(auth)/verify-email/page.tsx`), wrapped in `Suspense` for `useSearchParams`.
+
+**Flow:**
+1. Reads `email` from the query string.
+2. `OtpInput` collects the 6-digit code; `onComplete` (or the button) calls `authService.verifySignupOtp(email, code)` → `POST /auth/otp/verify-signup`.
+3. On success: `dispatch(loginSuccess({ user, accessToken }))` → `router.push('/dashboard')` (auto-login).
+4. **Resend** is gated by a 30s countdown and calls `authService.resendOtp(email, 'SIGNUP')`.
+
+---
+
+### `/forgot-password` — Password reset (single-page, 3 steps)
+
+**Type:** `'use client'` (`src/app/(auth)/forgot-password/page.tsx`)
+
+**Flow (state machine):**
+1. **email** → `authService.requestPasswordReset(email)` → `POST /auth/password-reset/request` (always generic response).
+2. **code** → `OtpInput` → `authService.verifyResetOtp(email, code)` → `POST /auth/password-reset/verify` → stores `resetToken`. Resend gated by 30s countdown.
+3. **password** → two fields with match + `≥5` rule and a **Generate strong password** button (`generatePassword`) → `authService.confirmPasswordReset(resetToken, newPassword)` → `POST /auth/password-reset/confirm`.
+4. **done** → animated success tick (`a-tick` / `a-tick-pop` keyframes), then redirect to `/login`.
 
 ---
 
@@ -399,6 +428,10 @@ UpdateMasterProfileDto { bio?, tradingPlatform?, instruments?, strategyDescripti
 RegisterUserData { fullName, email, password, role: 'MASTER' | 'SLAVE' }
 AuthSessionUser { id, email, fullName?, role, licenseKey?, subscribedToId? }
 AuthSessionResponse { access_token, user: AuthSessionUser }
+RegisterResponse { message, email, requiresOtp: true }   // new register shape (no token)
+GenericMessageResponse { message }
+VerifyResetOtpResponse { resetToken }
+OtpPurpose = 'SIGNUP' | 'PASSWORD_RESET'
 MasterDashboardData { profile: MasterProfile, recentTrades: TradeHistoryEntry[], subscriberCount, openTrades, totalSignalsSent }
 TopMaster extends MasterProfile { openTrades }
 TradeHistoryEntry { id, symbol, action, volume, status: 'OPEN'|'CLOSED', pnl: number|null, createdAt, closedAt: string|null }
@@ -409,8 +442,13 @@ TradeHistoryEntry { id, symbol, action, volume, status: 'OPEN'|'CLOSED', pnl: nu
 **`authService`**
 | Method | HTTP call |
 |--------|-----------|
-| `login(email, password)` | `POST /auth/login` → `AuthSessionResponse` |
-| `register(userData)` | `POST /auth/register` → `AuthSessionResponse` |
+| `login(email, password)` | `POST /auth/login` → `AuthSessionResponse` (403 `requiresOtp` when unverified) |
+| `register(userData)` | `POST /auth/register` → `RegisterResponse` (no token; emails SIGNUP OTP) |
+| `verifySignupOtp(email, code)` | `POST /auth/otp/verify-signup` → `AuthSessionResponse` (auto-login) |
+| `resendOtp(email, purpose)` | `POST /auth/otp/resend` → `GenericMessageResponse` |
+| `requestPasswordReset(email)` | `POST /auth/password-reset/request` → `GenericMessageResponse` |
+| `verifyResetOtp(email, code)` | `POST /auth/password-reset/verify` → `VerifyResetOtpResponse` |
+| `confirmPasswordReset(resetToken, newPassword)` | `POST /auth/password-reset/confirm` → `GenericMessageResponse` |
 
 **`adminService`** (all require ADMIN JWT)
 | Method | HTTP call |

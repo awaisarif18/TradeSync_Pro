@@ -6,16 +6,20 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
+import { OtpService } from './otp.service';
 import { User } from '../database/user.entity';
 import { TradeLog } from '../database/tradelog.entity';
+import { EmailOtp } from '../database/otp.entity';
 import { TradeModule } from '../trade/trade.module';
+import { MailModule } from '../mail/mail.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { resolveJwtSecret } from './jwt-secret.util';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, TradeLog]),
+    TypeOrmModule.forFeature([User, TradeLog, EmailOtp]),
+    MailModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -35,6 +39,7 @@ import { resolveJwtSecret } from './jwt-secret.util';
   ],
   providers: [
     AuthService,
+    OtpService,
     JwtStrategy,
     {
       provide: APP_GUARD,

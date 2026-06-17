@@ -7,7 +7,8 @@ import {
   NotFoundException,
   forwardRef,
 } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
+import { JwtService, type JwtSignOptions } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -16,6 +17,7 @@ import { User } from '../database/user.entity';
 import { TradeLog } from '../database/tradelog.entity';
 import type { MasterHistoryEntry } from '../trade/trade.service';
 import { TradeGateway } from '../trade/trade.gateway';
+import { OtpService } from './otp.service';
 import type {
   MasterProfileResponse,
   SubscriberSummary,
@@ -56,6 +58,8 @@ export class AuthService {
     @Inject(forwardRef(() => TradeGateway))
     private readonly tradeGateway: TradeGateway,
     private readonly jwtService: JwtService,
+    private readonly otpService: OtpService,
+    private readonly configService: ConfigService,
   ) {}
 
   private isBcryptHash(value: string): boolean {
@@ -121,6 +125,7 @@ export class AuthService {
       const newUser = this.userRepository.create({
         ...userData,
         password: hashed,
+        isEmailVerified: false,
       });
       console.log('[AuthService] register user instance created');
 
@@ -131,11 +136,126 @@ export class AuthService {
         role: savedUser?.role,
       });
 
-      return savedUser;
+      await this.otpService.issueOtp(savedUser.email, 'SIGNUP');
+
+      return {
+        message: 'Account created. Check your email for a verification code.',
+        email: savedUser.email,
+        requiresOtp: true as const,
+      };
     } catch (error) {
       console.error('[AuthService] register failed', error);
       throw error;
     }
+  }
+
+  /** Verify the signup OTP, mark the user verified, and return an auth session. */
+  async verifySignupOtp(email: string, code: string): Promise<LoginResponse> {
+    await this.otpService.verifyOtp(email, 'SIGNUP', code);
+
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.isEmailVerified = true;
+    await this.userRepository.save(user);
+
+    const fresh = await this.userRepository.findOne({ where: { email } });
+    if (!fresh) {
+      throw new NotFoundException('User not found');
+    }
+    return this.buildAuthResponse(fresh);
+  }
+
+  /** Resend an OTP for signup or password reset. Generic by design. */
+  async resendOtp(
+    email: string,
+    purpose: 'SIGNUP' | 'PASSWORD_RESET',
+  ): Promise<{ message: string }> {
+    if (purpose === 'PASSWORD_RESET') {
+      const user = await this.userRepository.findOne({ where: { email } });
+      if (user && user.isActive) {
+        await this.otpService.issueOtp(email, 'PASSWORD_RESET');
+      }
+      return { message: 'If an account exists, a new code was sent.' };
+    }
+
+    await this.otpService.issueOtp(email, 'SIGNUP');
+    return { message: 'A new verification code was sent.' };
+  }
+
+  /** Always returns a generic message; emails a code only if a user exists. */
+  async requestPasswordReset(email: string): Promise<{ message: string }> {
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (user && user.isActive) {
+      await this.otpService.issueOtp(email, 'PASSWORD_RESET');
+    }
+    return {
+      message: 'If an account exists for that email, a reset code was sent.',
+    };
+  }
+
+  /** Verify the reset OTP and issue a short-lived single-use reset token. */
+  async verifyResetOtp(
+    email: string,
+    code: string,
+  ): Promise<{ resetToken: string }> {
+    await this.otpService.verifyOtp(email, 'PASSWORD_RESET', code);
+
+    const user = await this.userRepository.findOne({ where: { email } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const resetTokenTtl =
+      this.configService.get<string>('PASSWORD_RESET_TOKEN_TTL') ?? '10m';
+
+    const resetToken = await this.jwtService.signAsync(
+      { sub: user.id, email: user.email, purpose: 'PASSWORD_RESET' },
+      {
+        // expiresIn is typed as ms.StringValue; env is a plain string — assert at sign boundary (same as auth.module.ts).
+        expiresIn: resetTokenTtl,
+      } as JwtSignOptions,
+    );
+
+    return { resetToken };
+  }
+
+  /** Validate the reset token and write a new bcrypt password hash. */
+  async confirmPasswordReset(
+    resetToken: string,
+    newPassword: string,
+  ): Promise<{ message: string }> {
+    if (typeof newPassword !== 'string' || newPassword.length < 5) {
+      throw new BadRequestException(
+        'Password must be at least 5 characters.',
+      );
+    }
+
+    let payload: { sub: string; email: string; purpose?: string };
+    try {
+      payload = await this.jwtService.verifyAsync(resetToken);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired reset token.');
+    }
+
+    if (payload.purpose !== 'PASSWORD_RESET') {
+      throw new UnauthorizedException('Invalid reset token.');
+    }
+
+    const user = await this.userRepository.findOne({
+      where: { id: payload.sub },
+    });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    user.password = await this.hashPassword(newPassword);
+    await this.userRepository.save(user);
+    await this.otpService.invalidateOtps(user.email, 'PASSWORD_RESET');
+
+    return { message: 'Password updated. You can sign in now.' };
   }
 
   async login(email: string, pass: string): Promise<LoginResponse> {
@@ -165,6 +285,19 @@ export class AuthService {
       const fresh = await this.userRepository.findOne({ where: { email } });
       if (!fresh) {
         throw new UnauthorizedException('User not found');
+      }
+
+      // Gate only blocks accounts explicitly marked unverified (new registrations).
+      // Existing users (true/null/undefined) pass through unaffected.
+      if (fresh.isEmailVerified === false) {
+        console.warn('[AuthService] login blocked: email not verified', {
+          email,
+        });
+        throw new ForbiddenException({
+          message: 'Email not verified. Enter the code we sent you.',
+          requiresOtp: true,
+          email,
+        });
       }
 
       console.log('[AuthService] login success', {

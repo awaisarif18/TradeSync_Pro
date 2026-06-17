@@ -75,21 +75,25 @@ trade-sync-backend/
 │  ├─ auth/
 │  │  ├─ auth.module.ts                    # Auth module: JWT, Passport, global JwtAuthGuard, forwardRef TradeModule
 │  │  ├─ auth.controller.ts               # REST routes under /auth; injects TradeGateway for /masters/live
-│  │  ├─ auth.service.ts                  # Auth business logic + admin + marketplace + analytics wiring
+│  │  ├─ auth.service.ts                  # Auth business logic + admin + marketplace + analytics + OTP/reset flows
 │  │  ├─ auth.service.spec.ts             # Co-located unit tests for AuthService.verifyNode
+│  │  ├─ otp.service.ts                   # Email OTP issue/verify/invalidate (bcrypt-hashed, TTL, attempt cap, resend throttle)
 │  │  ├─ jwt-secret.util.ts               # Resolves JWT secret with non-production dev fallback
 │  │  ├─ master-analytics.util.ts         # computeRiskMetrics, computeEquitySparkline, computeActiveHours, buildAnalytics, computeMasterAnalytics
 │  │  ├─ master-analytics.util.spec.ts    # Co-located unit tests for analytics util functions
 │  │  ├─ decorators/
 │  │  │  └─ public.decorator.ts           # @Public() — marks routes as JWT-exempt
 │  │  ├─ dto/
-│  │  │  └─ auth.dto.ts                   # VerifyNodeResponse, MasterProfileResponse, SubscriberSummary, MasterRiskMetricsDto, UpdateMasterProfileDto
+│  │  │  └─ auth.dto.ts                   # VerifyNodeResponse, MasterProfileResponse, SubscriberSummary, MasterRiskMetricsDto, UpdateMasterProfileDto, OTP/password-reset DTOs
 │  │  ├─ guards/
 │  │  │  └─ jwt-auth.guard.ts             # Global JwtAuthGuard — skips when @Public() present
 │  │  ├─ strategies/
 │  │  │  └─ jwt.strategy.ts               # passport-jwt strategy; validates sub, rejects inactive users
 │  │  └─ types/
 │  │     └─ jwt-user.ts                   # JwtUser = Omit<User, 'password'>; attached to req.user by JwtStrategy
+│  ├─ mail/
+│  │  ├─ mail.module.ts                   # Provides + exports MailService
+│  │  └─ mail.service.ts                  # nodemailer SMTP transport; sendOtpEmail(to, code, purpose)
 │  ├─ trade/
 │  │  ├─ trade.module.ts                  # Trade module: forwardRef AuthModule, exports TradeGateway + TradeService
 │  │  ├─ trade.controller.ts              # REST routes under /trades (all @Public())
@@ -98,7 +102,8 @@ trade-sync-backend/
 │  │  └─ trade.gateway.spec.ts            # Co-located unit tests for register_node and test_signal flows
 │  └─ database/
 │     ├─ database.module.ts               # Global TypeORM MSSQL connection
-│     ├─ user.entity.ts                   # Users table entity
+│     ├─ user.entity.ts                   # Users table entity (now includes isEmailVerified)
+│     ├─ otp.entity.ts                    # EmailOtps table entity (signup + password-reset codes)
 │     └─ tradelog.entity.ts               # TradeLogs table entity
 └─ test/
    ├─ app.e2e-spec.ts                     # E2E scaffold test (stale — expects GET / to return "Hello World!")
@@ -183,6 +188,16 @@ Boot process:
 | `JWT_SECRET` | Yes (production) | Dev fallback string | JWT signing secret (min 32 chars recommended) |
 | `JWT_EXPIRES_IN` | No | `7d` | JWT expiry duration string |
 | `NODE_ENV` | No | — | Set to `production` to require `JWT_SECRET` strictly |
+| `SMTP_HOST` | Yes (for email) | — | SMTP server host (e.g. `smtp.gmail.com`) |
+| `SMTP_PORT` | No | `587` | SMTP port; `465` uses implicit TLS, otherwise STARTTLS |
+| `SMTP_SECURE` | No | derived | Informational; transport derives `secure` from port `465` |
+| `SMTP_USER` | Yes (for email) | — | SMTP auth username |
+| `SMTP_PASS` | Yes (for email) | — | SMTP auth password / app password |
+| `MAIL_FROM` | No | `SMTP_USER` | From header; Gmail rewrites mismatched addresses (warns on boot) |
+| `OTP_TTL_MINUTES` | No | `10` | OTP validity window in minutes |
+| `OTP_RESEND_SECONDS` | No | `30` | Minimum seconds between OTP resends (server-enforced) |
+| `OTP_MAX_ATTEMPTS` | No | `5` | Failed verify attempts before an OTP is locked |
+| `PASSWORD_RESET_TOKEN_TTL` | No | `10m` | `expiresIn` for the signed password-reset token |
 
 ### `src/auth/jwt-secret.util.ts`
 
@@ -236,8 +251,24 @@ Maps to table: `Users`
 | `riskLevel` | `string \| null` | `varchar` | Nullable, default `'MEDIUM'` |
 | `typicalHoldTime` | `string \| null` | `nvarchar` | Nullable |
 | `isActive` | `boolean` | `bit` | Default `true` |
+| `isEmailVerified` | `boolean` | `bit` | Default `true` (DB-level). New `register` rows set `false`; login gate blocks only explicit `false`, so existing rows stay verified. |
 | `subscribedToId` | `string \| null` | `varchar` | Nullable (explicit type prevents MSSQL TypeORM confusion) |
 | `createdAt` | `Date` | `datetime2` | Auto timestamp |
+
+### Entity: `EmailOtp` (`src/database/otp.entity.ts`)
+
+Maps to table: `EmailOtps`. Stores one-time codes for signup verification and password reset. Codes are bcrypt-hashed at rest; only the newest unconsumed, non-expired row for an `(email, purpose)` pair is valid.
+
+| Column | TypeScript Type | DB Type | Constraints |
+|---|---|---|---|
+| `id` | `string` | `uuid` | PK, auto-generated |
+| `email` | `string` | `varchar` | Indexed |
+| `codeHash` | `string` | `varchar` | bcrypt hash of the 6-digit code |
+| `purpose` | `'SIGNUP' \| 'PASSWORD_RESET'` | `varchar` | Flow selector |
+| `expiresAt` | `Date` | `datetime2` | `now + OTP_TTL_MINUTES` |
+| `consumedAt` | `Date \| null` | `datetime2` | Set when verified, invalidated, or locked |
+| `attempts` | `number` | `int` | Default `0`; locked at `OTP_MAX_ATTEMPTS` |
+| `createdAt` | `Date` | `datetime2` | Auto timestamp; drives resend throttle |
 
 ### Entity: `TradeLog` (`src/database/tradelog.entity.ts`)
 
@@ -296,10 +327,24 @@ Extends `AuthGuard('jwt')`. In `canActivate`, reads `IS_PUBLIC_KEY` from handler
 - Extends `PassportStrategy(Strategy)` from `passport-jwt`
 - Extracts token from `Authorization: Bearer <token>` header
 - `ignoreExpiration: false` — expired tokens are rejected
-- `validate(payload: { sub: string }): Promise<JwtUser>`:
+- `validate(payload: { sub: string; purpose?: string }): Promise<JwtUser>`:
+  - Rejects with `UnauthorizedException` when the token carries a `purpose` claim (password-reset tokens cannot act as access tokens)
   - Loads `User` by `payload.sub` from the DB
   - Throws `UnauthorizedException` if user not found or `isActive === false`
   - Strips `password` before returning; result is attached to `req.user` as `JwtUser`
+
+### File: `src/auth/otp.service.ts`
+
+`OtpService` injects `Repository<EmailOtp>`, `MailService`, and `ConfigService`.
+
+- `generateCode()` — 6-digit numeric, `crypto.randomInt`, zero-padded.
+- `issueOtp(email, purpose)` — enforces the `OTP_RESEND_SECONDS` throttle against the newest unconsumed row, invalidates prior unconsumed codes, bcrypt-hashes and persists the new code, then emails it.
+- `verifyOtp(email, purpose, code)` — loads the newest unconsumed, non-expired row; rejects on miss/expiry; increments `attempts` and locks at `OTP_MAX_ATTEMPTS`; on bcrypt match, sets `consumedAt`.
+- `invalidateOtps(email, purpose)` — marks all unconsumed rows consumed.
+
+### File: `src/mail/mail.service.ts`
+
+`MailService` builds one `nodemailer` SMTP transport from `SMTP_*` + `MAIL_FROM`. `secure` is derived from port `465`. On boot it warns when `MAIL_FROM` does not contain `SMTP_USER` (Gmail rewrites mismatched From). `sendOtpEmail(to, code, purpose)` sends a branded inline-HTML email with copy that differs per purpose. Provider-agnostic: switching to Resend/SES/Brevo is an env-only change.
 
 ### File: `src/auth/types/jwt-user.ts`
 
@@ -321,8 +366,13 @@ All protected routes extract `req.user: JwtUser` using the `RequestWithJwtUser` 
 
 | # | Route | Method | Auth | Role Guard | Notes |
 |---|---|---|---|---|---|
-| 1 | `/auth/register` | POST | `@Public()` | — | Body: `Record<string, unknown>`. Calls `authService.register()` then `buildAuthResponse()`. Returns `{ access_token, user }`. |
-| 2 | `/auth/login` | POST | `@Public()` | — | Body: `{ email?, password? }`. Returns `{ access_token, user }`. |
+| 1 | `/auth/register` | POST | `@Public()` | — | Body: `Record<string, unknown>`. Calls `authService.register()`. Creates `isEmailVerified=false` and emails a SIGNUP OTP. Returns `{ message, email, requiresOtp: true }` (no token yet). |
+| 2 | `/auth/login` | POST | `@Public()` | — | Body: `{ email?, password? }`. Returns `{ access_token, user }`. Throws `403 { message, requiresOtp: true, email }` when `isEmailVerified === false`. |
+| 1a | `/auth/otp/verify-signup` | POST | `@Public()` | — | Body: `{ email, code }`. Verifies SIGNUP OTP, sets `isEmailVerified=true`, returns `{ access_token, user }`. |
+| 1b | `/auth/otp/resend` | POST | `@Public()` | — | Body: `{ email, purpose }`. Resends an OTP with a 30s server-side throttle. Generic message. |
+| 1c | `/auth/password-reset/request` | POST | `@Public()` | — | Body: `{ email }`. Always returns a generic message; emails a reset OTP only when an active user exists. |
+| 1d | `/auth/password-reset/verify` | POST | `@Public()` | — | Body: `{ email, code }`. Returns `{ resetToken }` (short-lived JWT with `purpose: 'PASSWORD_RESET'`). |
+| 1e | `/auth/password-reset/confirm` | POST | `@Public()` | — | Body: `{ resetToken, newPassword }`. Validates token, writes a new bcrypt hash, invalidates OTPs. Returns `{ message }`. |
 | 3 | `/auth/users` | GET | JWT required | `ADMIN` only | Returns user array (no passwords). |
 | 4 | `/auth/users/:id/license` | POST | JWT required | `ADMIN` only | Generates `TSP-XXXX-XXXX` license key. |
 | 5 | `/auth/users/:id/toggle-status` | PATCH | JWT required | `ADMIN` only | Flips `isActive`. Cannot disable `ADMIN` users. |
