@@ -1,8 +1,8 @@
 ﻿export const PROVIDER_WINDOWS_DOWNLOAD_URL =
-  "https://github.com/YOUR_ORG/YOUR_REPO/releases/latest/download/TradeSyncPro-Provider-Setup.exe";
+  "/downloads/TradeSyncPro-Provider.exe";
 
 export const COPIER_WINDOWS_DOWNLOAD_URL =
-  "https://github.com/YOUR_ORG/YOUR_REPO/releases/latest/download/TradeSyncPro-Copier-Setup.exe";
+  "/downloads/TradeSyncPro-Copier.exe";
 
 export type DesktopAppDownload = {
   id: "provider" | "copier";
