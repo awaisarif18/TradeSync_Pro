@@ -33,6 +33,8 @@ export interface MasterProfileResponse {
   typicalHoldTime: string | null;
   subscriberCount: number;
   isLive: boolean;
+  /** Public path with optional ?v= cache-bust query, e.g. /uploads/avatars/{id}.png?v=... */
+  avatarUrl?: string | null;
   /** Present when capped closed-trade sample is non-empty. */
   riskMetrics?: MasterRiskMetricsDto;
   /** Cumulative PnL curve (downsampled) for sparkline UI. */

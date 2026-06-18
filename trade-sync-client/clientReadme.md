@@ -93,6 +93,7 @@ trade-sync-client/
       ├─ primitives.py                          # Styled atoms (Card, Btn, inputs, chips, spinboxes)
       ├─ custom_widgets.py                      # Custom paint widgets: PulseDot, EquitySparkline,
       │                                         #   ActiveHoursHistogram, SweepBand
+      ├─ avatar_label.py                        # Async circular avatar (background fetch, URL cache, initials fallback)
       ├─ shell.py                               # TitleBar, Sidebar, WindowShell, KPI strips,
       │                                         #   HeaderStripMaster/Slave, FooterStrip, EventLog
       ├─ ui_bridge.py                           # Thread-safe QObject signal bridge
@@ -260,6 +261,7 @@ Master-only fields:
 | `subscribers` | `list` | `[]` | List of dicts from `GET /auth/masters/:id/subscribers`: `{ id, fullName, email, isActive, totalCopied, totalPnL }` |
 | `subscriber_online_status` | `dict` | `{}` | `{ email: bool }` — `True` = currently connected socket. Updated by `subscriber_update` events |
 | `master_user_id` | `str` | `""` | UUID set from `verify-node` response `id` field. Used for subscriber API calls and `GET .../profile` |
+| `own_avatar_url` | `str \| None` | `None` | Master's own `avatarUrl` from `GET /auth/masters/:id/profile` (set in `MasterWindow.load_performance_stats`); used by master header `AvatarLabel` only. Not the same as slave `master_avatar_url` (subscribed provider) |
 | `signals_sent` | `int` | `0` | Incremented by `MasterSignalTrackingSocket.emit_signal` on every `test_signal` emit |
 | `session_start_time_master` | `str` | `""` | `HH:MM:SS` timestamp set when broadcasting starts |
 | `recent_signals` | `list` | `[]` | Ring buffer of last 50 broadcast signal dicts. Each dict is a full copy of the signal payload plus `time: HH:MM:SS` |
@@ -292,6 +294,7 @@ Slave-only fields:
 | `open_trades` | `list` | `[]` | Active copied positions: `{ master_ticket, slave_ticket, symbol, action, volume, open_time }` |
 | `closed_trades` | `list` | `[]` | Session history: adds `pnl`, `close_time`. Capped at 50 entries |
 | `master_name` | `str \| None` | `None` | Subscribed provider display name for slave header / COPY tab; set after successful `node_registered` + `GET /auth/masters/:id/profile`; cleared on failed registration or socket `DISCONNECTED` |
+| `master_avatar_url` | `str \| None` | `None` | Subscribed **provider** avatar from profile fetch; slave **header only** (`HeaderStripSlave` / `AvatarLabel`); cleared with `master_name` on disconnect or failed registration. Distinct from master `own_avatar_url` |
 
 **`reset_daily_stats()`**: Sets `daily_pnl = 0.0`, `copying_paused_by_loss = False`, logs `[RISK] Daily stats reset.`
 
@@ -599,7 +602,7 @@ Note: SLAVE does not set `state.master_user_id` — the master ID is handled by 
 
 #### `SlaveController._on_health_change(health_state)`
 
-Sets `state.health_state`, updates `state.socket_connected` (`True` only when `CONNECTED`). Clears `state.master_name` when `health_state == "DISCONNECTED"`. Adds log, calls `update_ui()`.
+Sets `state.health_state`, updates `state.socket_connected` (`True` only when `CONNECTED`). Clears `state.master_name` and `state.master_avatar_url` when `health_state == "DISCONNECTED"`. Adds log, calls `update_ui()`.
 
 #### `SlaveController.connect_cloud(identifier)`
 
@@ -611,9 +614,9 @@ Sets `state.health_state`, updates `state.socket_connected` (`True` only when `C
 
 #### `SlaveController._on_node_registered(data)` (display only)
 
-On `success: true`: parses master id from `room` (`room_master_<id>`), fetches `GET /auth/masters/:id/profile`, sets `state.master_name` to `fullName` (falls back to master id if profile fetch fails), calls `update_ui()`.
+On `success: true`: parses master id from `room` (`room_master_<id>`), fetches `GET /auth/masters/:id/profile` via `_fetch_master_profile`, sets `state.master_name` to `fullName` (falls back to master id if profile fetch fails) and `state.master_avatar_url` from `avatarUrl`, calls `update_ui()`.
 
-On `success: false`: clears `state.master_name`, calls `update_ui()`.
+On `success: false`: clears `state.master_name` and `state.master_avatar_url`, calls `update_ui()`.
 
 Does not alter socket routing or trade execution.
 
@@ -727,6 +730,14 @@ Passed to controllers as `update_callback`. Controllers call it after state muta
 
 ---
 
+### `views/qt/avatar_label.py` — `AvatarLabel`
+
+Circular provider photo for desktop headers (master self-avatar and slave subscribed-provider avatar). Downloads image bytes on a background thread (`requests`, 5s timeout), delivers `QPixmap` via Qt signal on the main thread. Module-level URL cache avoids re-fetch when the same `?v=` URL is set again on an existing `AvatarLabel`. Relative backend paths resolve to `http://localhost:3000`. Renders as a HiDPI circular clip via `QPainter` (center-crop cover). On failure or missing URL, falls back to mint initials circle. **Master:** `HeaderStripMaster` uses `MasterState.own_avatar_url`. **Slave:** `HeaderStripSlave` uses `SlaveState.master_avatar_url`. COPY tab master card stays text-only on slave.
+
+**Header strips (`shell.py`):** `HeaderStripMaster.sync_state()` and `HeaderStripSlave.sync_state()` update identity, status pill, and session timer in place; they retain the same `AvatarLabel` instance. Windows dedupe on `(name, variant, avatar_url)` only — the master session clock is excluded from the signature so broadcasting does not tear down the strip every second. Slave structural rebuild (empty ↔ subscribed identity) happens only inside `sync_state` on mode transition.
+
+---
+
 ### `views/qt/master_window.py` — `MasterWindow`
 
 **Login card:** `MasterLoginCard` (fixed 400px width)
@@ -757,6 +768,7 @@ Passed to controllers as `update_callback`. Controllers call it after state muta
 - Uses `state.master_user_id`; skips if not set
 - `GET http://localhost:3000/auth/masters/{master_id}/profile` (timeout 5s)
 - Stores `response.json()` in `self.performance_data`
+- Sets `state.own_avatar_url` from `avatarUrl` in the same response (no extra fetch)
 - Calls `refresh_performance(self.performance_data)`
 
 `refresh_performance(stats: dict)`:
@@ -765,7 +777,7 @@ Passed to controllers as `update_callback`. Controllers call it after state muta
 `update_ui()` (500ms slot):
 1. Guard: skip if dashboard widget not visible
 2. Update footer connection indicator
-3. `_master_sync_header_strip()` — rebuild `HeaderStripMaster` if variant/name/elapsed changed
+3. `_master_sync_header_strip()` — calls `HeaderStripMaster.sync_state()` in place; dedupes on `(name, variant, own_avatar_url)` only (session elapsed updates the timer label without recreating the strip); `[AVATAR] master header sync` logs only when that signature changes
 4. `_apply_master_header_profile()` — populate handle, instruments, risk, ROI proxy (uses `winRate`)
 5. Update shell KPI strip: `signals_sent`, `subscriber count`, `win_rate`, `total_pnl`, `avg_volume`
 6. Tail new log lines into `shell.event_log` (cursor-based, avoids re-rendering old lines)
@@ -818,7 +830,7 @@ Passed to controllers as `update_callback`. Controllers call it after state muta
 `update_ui()`:
 1. Guard: skip if dashboard not visible
 2. Footer connection indicator
-3. `_slave_sync_header_strip()` — rebuild `HeaderStripSlave` if variant/name changed
+3. `_slave_sync_header_strip()` — calls `HeaderStripSlave.sync_state()` in place when `(name, master_avatar_url, variant)` changes; `[AVATAR] slave header sync` logs only on that signature change
 4. Shell KPI update: `session_pnl`, `open_trades` count, `closed_trades` count
 5. Tail log lines into EventLog
 6. `copy_view.sync_from_state()`

@@ -380,6 +380,25 @@ class StatusPill(QLabel):
             """
         )
 
+    def set_variant(self, variant: str, label: str = "") -> None:
+        color, dot = self.VARIANTS.get(variant, (TEXT3, "○"))
+        display = (label or variant).upper()
+        self.setText(f"{dot}  {display}")
+        self.setStyleSheet(
+            f"""
+            StatusPill {{
+                color: {color};
+                border: 1px solid {color};
+                border-radius: 999px;
+                padding: 4px 10px;
+                font-family: {FONT_MONO};
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.6px;
+            }}
+            """
+        )
+
 
 class TradeChip(QLabel):
     """BUY / SELL colored chip."""

@@ -75,6 +75,7 @@ trade-sync-backend/
 │  ├─ auth/
 │  │  ├─ auth.module.ts                    # Auth module: JWT, Passport, global JwtAuthGuard, forwardRef TradeModule
 │  │  ├─ auth.controller.ts               # REST routes under /auth; injects TradeGateway for /masters/live
+│  │  ├─ avatar-storage.util.ts           # MIME→ext map, disk paths, upload validation for provider avatars
 │  │  ├─ auth.service.ts                  # Auth business logic + admin + marketplace + analytics + OTP/reset flows
 │  │  ├─ auth.service.spec.ts             # Co-located unit tests for AuthService.verifyNode
 │  │  ├─ otp.service.ts                   # Email OTP issue/verify/invalidate (bcrypt-hashed, TTL, attempt cap, resend throttle)
@@ -167,12 +168,15 @@ Both use `forwardRef()` + `@Inject(forwardRef(() => ...))` to resolve this at ru
 
 Boot process:
 
-1. Creates Nest app with `AppModule`
-2. Enables CORS:
+1. Creates Nest app as `NestExpressApplication` with `AppModule`
+2. Registers static files: `useStaticAssets(join(process.cwd(), 'uploads'), { prefix: '/uploads/' })` — public avatar reads bypass JWT guards
+3. Enables CORS:
    - `origin: 'http://localhost:3001'`
    - `methods: 'GET,HEAD,PUT,PATCH,POST,DELETE'`
    - `credentials: true`
 3. Listens on `process.env.PORT ?? 3000`
+
+Runtime avatar files live under `./uploads/avatars/` (gitignored). TypeORM `synchronize: true` adds nullable `Users.avatarUrl`.
 
 ### `src/app.module.ts`
 
@@ -250,6 +254,7 @@ Maps to table: `Users`
 | `strategyDescription` | `string \| null` | `nvarchar` | Nullable |
 | `riskLevel` | `string \| null` | `varchar` | Nullable, default `'MEDIUM'` |
 | `typicalHoldTime` | `string \| null` | `nvarchar` | Nullable |
+| `avatarUrl` | `string \| null` | `nvarchar` | Nullable. Public path with optional `?v=` cache bust, e.g. `/uploads/avatars/{id}.png?v=...` |
 | `isActive` | `boolean` | `bit` | Default `true` |
 | `isEmailVerified` | `boolean` | `bit` | Default `true` (DB-level). New `register` rows set `false`; login gate blocks only explicit `false`, so existing rows stay verified. |
 | `subscribedToId` | `string \| null` | `varchar` | Nullable (explicit type prevents MSSQL TypeORM confusion) |
@@ -383,6 +388,7 @@ All protected routes extract `req.user: JwtUser` using the `RequestWithJwtUser` 
 | 10 | `/auth/masters/:id/profile` | GET | `@Public()` | — | Returns full profile + analytics. See §6 AuthService for shape. |
 | 11 | `/auth/masters/:masterId/subscribers` | GET | `@Public()` | — | Returns per-subscriber `TradeLogs`-derived stats. |
 | 12 | `/auth/masters/:id/profile` | PATCH | JWT required | ADMIN or self | Body: `UpdateMasterProfileDto`. Updates public identity fields. |
+| 12a | `/auth/masters/:id/avatar` | POST | JWT required | ADMIN or self | Multipart field `file` (JPEG/PNG/WebP, max 3 MB). Saves avatar to disk, returns `{ avatarUrl }` with `?v=` cache bust. |
 | 13 | `/auth/masters/:id/dashboard` | GET | JWT required | ADMIN or self | Returns `MasterDashboardData`. |
 | 14 | `/auth/top-masters` | GET | `@Public()` | — | Returns top 3 active masters by total trades. |
 | 15 | `/auth/users/:id/subscribe` | PATCH | JWT required | ADMIN or self | Body: `{ masterId: string \| null }`. Subscribe or unsubscribe slave. |
@@ -460,26 +466,31 @@ All protected routes extract `req.user: JwtUser` using the `RequestWithJwtUser` 
 - Loads up to `MASTER_ANALYTICS_CLOSED_CAP` (2000) newest CLOSED rows ordered by `COALESCE(closedAt, createdAt) DESC`
 - Reverses to chronological order and calls `buildAnalytics()`
 - Calls `tradeGateway.isMasterConnected(master.id)` for `isLive`
-- Returns `MasterProfileResponse` including optional `riskMetrics`, `equitySparkline`, `activeHoursSummary`
+- Returns `MasterProfileResponse` including optional `avatarUrl`, `riskMetrics`, `equitySparkline`, `activeHoursSummary`
 
-**13. `getMasterSubscribers(masterId): Promise<SubscriberSummary[]>`**
+**13. `uploadMasterAvatar(masterId, file): Promise<{ avatarUrl: string }>`**
+- JWT-protected via controller; validates MIME (JPEG/PNG/WebP) and 3 MB max via `avatar-storage.util`
+- Writes `uploads/avatars/{masterId}.{ext}` (ext from MIME); deletes prior file when extension changes
+- Sets `Users.avatarUrl` to `/uploads/avatars/{masterId}.{ext}?v={timestamp}` and returns `{ avatarUrl }`
+
+**14. `getMasterSubscribers(masterId): Promise<SubscriberSummary[]>`**
 - Finds all slaves with `subscribedToId === masterId`
 - For each subscriber, joins `TradeLogs` by `slaveId` to compute `totalCopied` and `totalPnL` (CLOSED rows only)
 - Returns `{ id, fullName, email, isActive, totalCopied, totalPnL }[]`
 
-**14. `updateMasterProfile(masterId, dto: UpdateMasterProfileDto): Promise<Omit<User, 'password'>>`**
+**15. `updateMasterProfile(masterId, dto: UpdateMasterProfileDto): Promise<Omit<User, 'password'>>`**
 - Validates master exists; partially updates only fields present in dto (bio, tradingPlatform, instruments, strategyDescription, riskLevel, typicalHoldTime)
 - Returns saved master without password
 
-**15. `getMasterDashboard(masterId): Promise<MasterDashboardData>`**
+**16. `getMasterDashboard(masterId): Promise<MasterDashboardData>`**
 - Calls `getMasterProfile` + fetches last 10 trades + counts open trades
 - Returns `{ profile, recentTrades, subscriberCount, openTrades, totalSignalsSent }`
 
-**16. `getTopMasters(): Promise<TopMasterProfile[]>`**
+**17. `getTopMasters(): Promise<TopMasterProfile[]>`**
 - Fetches all active masters; calls `getMasterProfile` for each; adds `openTrades` count
 - Sorts descending by `totalTrades`; returns top 3
 
-**17. `updateSubscription(slaveId, masterId: string | null)`**
+**18. `updateSubscription(slaveId, masterId: string | null)`**
 - Validates slave user exists; sets `subscribedToId`; returns `{ message, subscribedToId }`
 
 #### Exported Interfaces (from `auth.service.ts`)
@@ -778,6 +789,7 @@ interface MasterProfileResponse {
   typicalHoldTime: string | null;
   subscriberCount: number;
   isLive: boolean;
+  avatarUrl?: string | null;                    // optional public avatar path + ?v= query
   riskMetrics?: MasterRiskMetricsDto;           // present when closed sample non-empty
   equitySparkline?: number[];                   // omitted when < 2 closed trades
   activeHoursSummary?: string | null;           // null if insufficient data

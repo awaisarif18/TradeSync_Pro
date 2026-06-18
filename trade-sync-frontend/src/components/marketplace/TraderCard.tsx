@@ -1,4 +1,5 @@
 import { BadgeCheck } from 'lucide-react';
+import { resolveMediaUrl } from "@/lib/media-url";
 import EquityCurve from '../charts/EquityCurve';
 import { Avatar, Button, Card, CardBody, Pill, StatusPill } from '../ui';
 
@@ -19,6 +20,7 @@ export interface TraderCardData {
   strategyDescription?: string | null;
   bio?: string | null;
   equitySparkline?: number[];
+  avatarUrl?: string | null;
 }
 
 type TraderCardProps = {
@@ -129,7 +131,11 @@ export default function TraderCard({
           }}
         >
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <Avatar name={trader.fullName} size={38} />
+            <Avatar
+              name={trader.fullName}
+              size={38}
+              src={resolveMediaUrl(trader.avatarUrl)}
+            />
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <div

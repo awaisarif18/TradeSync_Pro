@@ -1,4 +1,5 @@
 import { BadgeCheck, ShieldCheck } from "lucide-react";
+import { resolveMediaUrl } from "@/lib/media-url";
 import { Avatar, Pill, StatusPill } from "../ui";
 import type { MasterProfile } from "../../services/api";
 
@@ -24,7 +25,11 @@ export default function ProviderHeroBand({
   return (
     <div>
         <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 14 }}>
-          <Avatar name={profile.fullName} size={64} />
+          <Avatar
+            name={profile.fullName}
+            size={64}
+            src={resolveMediaUrl(profile.avatarUrl)}
+          />
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <h1

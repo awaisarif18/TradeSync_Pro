@@ -145,6 +145,13 @@ def _slave_master_display(state):
     return None
 
 
+def _slave_master_avatar(state):
+    url = getattr(state, "master_avatar_url", None)
+    if url:
+        return str(url).strip()
+    return None
+
+
 class SlaveWindow(QMainWindow):
     def __init__(self):
         super().__init__()
@@ -159,7 +166,7 @@ class SlaveWindow(QMainWindow):
         self.controller = SlaveController(self.bridge.request_update)
 
         self._slave_log_emit_cursor = 0
-        self._slave_header_signature = None  # tuple (master_name_or_none, variant)
+        self._slave_header_signature = None  # tuple (master_name, avatar_url, variant)
         self.copy_view: Optional[CopyView] = None
         self.symbols_view: Optional[SymbolsView] = None
         self.risk_view: Optional[RiskView] = None
@@ -256,27 +263,23 @@ class SlaveWindow(QMainWindow):
         state = self.controller.state
         variant = _slave_header_variant(state)
         name = _slave_master_display(state)
-        sig = (name, variant)
+        avatar_url = _slave_master_avatar(state)
+        sig = (name, avatar_url, variant)
         if getattr(self, "_slave_header_signature", None) == sig:
             return
+
+        print(
+            f"[AVATAR] slave header sync name={name!r} master_avatar_url={avatar_url!r} "
+            f"variant={variant!r}"
+        )
         self._slave_header_signature = sig
 
-        old_header = shell.header
-        container = old_header.parentWidget()
-        laid = container.layout()
-        if laid is None:
-            return
-
-        ix = laid.indexOf(old_header)
-        if ix < 0:
-            ix = 0
-
-        laid.removeWidget(old_header)
-        old_header.deleteLater()
-
-        new_header = HeaderStripSlave(master_name=name, status=variant, latency=None)
-        laid.insertWidget(ix, new_header)
-        shell.header = new_header
+        shell.header.sync_state(
+            master_name=name,
+            master_avatar_url=avatar_url,
+            status=variant,
+            latency=None,
+        )
 
     def _update_session_clock(self) -> str:
         state = self.controller.state

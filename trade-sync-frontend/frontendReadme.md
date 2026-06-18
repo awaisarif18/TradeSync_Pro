@@ -83,7 +83,7 @@ trade-sync-frontend/
     ├── components/
     │   ├── ui/                            # Design system primitives (canonical import via index.ts)
     │   │   ├── index.ts                   # Barrel export for all ui/ primitives
-    │   │   ├── Avatar.tsx                 # Initials-based avatar with deterministic color from avatar-color.ts
+    │   │   ├── Avatar.tsx                 # Initials-based avatar with optional src; deterministic color from avatar-color.ts
     │   │   ├── Button.tsx                 # Primary/ghost/ghost-mint/ghost-danger/primary variants; loading; sizes sm/md
     │   │   ├── Card.tsx                   # Container with Card, CardBody, CardHeader; variant="role-violet"|"role-danger"
     │   │   ├── EmptyState.tsx             # Centered empty state: icon, title, description, action slot
@@ -170,6 +170,7 @@ trade-sync-frontend/
         ├── format.ts                        # formatCurrency, formatPercent, formatVolume, formatDate, formatDateTime, formatTime
         ├── role-display.ts                  # Role → display label and color mapping
         ├── avatar-color.ts                  # Deterministic hue from name string
+        ├── media-url.ts                     # resolveMediaUrl — prepends exported API_URL for relative avatar paths
         └── mapMasterToTraderCard.ts         # MasterProfile/TopMaster → TraderCardData + proxyRoi30dFromTotals
 ```
 
@@ -509,6 +510,7 @@ TradeHistoryEntry { id, symbol, action, volume, status: 'OPEN'|'CLOSED', pnl: nu
 | `getMasterProfile(masterId)` | `GET /auth/masters/:id/profile` → `MasterProfile` |
 | `getMasterHistory(masterId)` | `GET /trades/master/:masterId/history` → `TradeHistoryEntry[]` |
 | `updateMasterProfile(masterId, dto)` | `PATCH /auth/masters/:id/profile` → `MasterProfileUpdateResult` |
+| `uploadMasterAvatar(masterId, file)` | `POST /auth/masters/:id/avatar` (multipart) → `{ avatarUrl }` |
 | `getMasterDashboard(masterId)` | `GET /auth/masters/:id/dashboard` → `MasterDashboardData` |
 | `getTopMasters()` | `GET /auth/top-masters` → `TopMaster[]` |
 
@@ -593,6 +595,7 @@ The hook emits `register_node` as `SLAVE` (not as a desktop client). This is pur
 **Profile Setup tab:**
 
 `ProviderProfileForm` — tracks a `baseline` state (loaded profile) and `form` state (current edits). On submit, `changedProfileFields(baseline, form)` computes a diff and sends only changed keys to `PATCH /auth/masters/:id/profile`. Fields:
+- profile photo (hidden file input; `profileService.uploadMasterAvatar`; JPEG/PNG/WebP under 3 MB; preview via `Avatar` + `resolveMediaUrl`)
 - bio (textarea, 300 char limit, char counter turns danger at 270)
 - tradingPlatform (text input)
 - typicalHoldTime (custom `HoldTimeSelect` dropdown: Seconds/Minutes/Hours/Days/Weeks)
@@ -765,7 +768,7 @@ Full-width input with optional `label`, `leftIcon`, `rightIcon`, `error` string 
 
 ### `Avatar`
 
-Initials display using `avatar-color.ts` for deterministic hue from name. Props: `name: string`, `size: number` (pixel size).
+Initials display using `avatar-color.ts` for deterministic hue from name. Optional `src` renders a photo when present (marketplace cards, provider hero, copier KPI/subscription, provider profile upload preview). Props: `name: string`, `size: number` (pixel size), `src?: string`.
 
 ### `EmptyState`
 
@@ -817,7 +820,11 @@ formatTime(d) → en-GB 24h time string
 
 `proxyRoi30dFromTotals(totalPnL, closedTrades)` — see section 9.
 
-`mapMasterProfileToTraderCardData(master, profile, liveIds)` — merges list row + profile + live status check into `TraderCardData`. `isLive` is `true` if master.id is in `liveIds` OR `profile.isLive === true`.
+`mapMasterProfileToTraderCardData(master, profile, liveIds)` — merges list row + profile + live status check into `TraderCardData`. Maps optional `avatarUrl`. `isLive` is `true` if master.id is in `liveIds` OR `profile.isLive === true`.
+
+### `media-url.ts`
+
+`resolveMediaUrl(avatarUrl)` — returns `undefined` for empty values; passes through absolute URLs; prepends exported `API_URL` from `services/api.ts` for relative paths (preserves `?v=` cache-bust query).
 
 ### `avatar-color.ts`
 

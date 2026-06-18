@@ -75,6 +75,9 @@ class SlaveState:
         self.master_name = None
         # Display name of subscribed provider; set after node_registered + profile fetch.
 
+        self.master_avatar_url = None
+        # Optional provider avatar URL (absolute or backend-relative with ?v= cache bust).
+
     def reset_daily_stats(self):
         """Reset daily PnL counter and unpause copying."""
         self.daily_pnl = 0.0

@@ -41,5 +41,6 @@ export function mapMasterProfileToTraderCardData(
       profile?.equitySparkline && profile.equitySparkline.length > 0
         ? profile.equitySparkline
         : undefined,
+    avatarUrl: profile?.avatarUrl ?? null,
   };
 }

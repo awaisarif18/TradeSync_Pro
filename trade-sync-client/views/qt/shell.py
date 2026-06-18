@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from views.qt.avatar_label import AvatarLabel
 from views.qt.custom_widgets import PulseDot
 from views.qt.primitives import MicroLabel, StatusPill
 from views.qt.theme import (
@@ -343,7 +344,7 @@ class FooterStrip(QWidget):
 class HeaderStripSlave(QWidget):
     """Slave strip: master identity or empty state, optional latency, StatusPill."""
 
-    def __init__(self, master_name=None, status="idle", latency=None, parent=None):
+    def __init__(self, parent=None, **_legacy_kwargs):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(HEADER_H)
@@ -356,61 +357,109 @@ class HeaderStripSlave(QWidget):
             }}
             """
         )
-        row = QHBoxLayout(self)
-        row.setContentsMargins(16, 0, 16, 0)
-        row.setSpacing(12)
+        self._row = QHBoxLayout(self)
+        self._row.setContentsMargins(16, 0, 16, 0)
+        self._row.setSpacing(12)
 
-        if master_name:
-            av = QLabel(master_name[0].upper())
-            av.setFixedSize(28, 28)
-            av.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            av.setStyleSheet(
-                f"""
-                background: {ACCENT_SOFT};
-                color: {ACCENT};
-                border-radius: 14px;
-                font-weight: 700; font-size: 12px;
-                """
-            )
-            row.addWidget(av)
+        self._leading = QWidget()
+        self._leading_layout = QHBoxLayout(self._leading)
+        self._leading_layout.setContentsMargins(0, 0, 0, 0)
+        self._leading_layout.setSpacing(12)
+        self._row.addWidget(self._leading)
 
-            name_col = QVBoxLayout()
-            name_col.setSpacing(1)
-            name_lbl = QLabel(master_name)
-            name_lbl.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT};")
-            role_lbl = QLabel("Signal Provider")
-            role_lbl.setStyleSheet(f"font-size: 11px; color: {TEXT3};")
-            name_col.addWidget(name_lbl)
-            name_col.addWidget(role_lbl)
-            row.addLayout(name_col)
-        else:
-            placeholder = QLabel("No master selected")
-            placeholder.setStyleSheet(f"color: {TEXT3}; font-size: 13px;")
-            row.addWidget(placeholder)
+        self._row.addStretch()
 
-        row.addStretch()
+        self._latency_lbl = QLabel()
+        self._latency_lbl.setStyleSheet(
+            f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
+        )
+        self._latency_lbl.hide()
+        self._row.addWidget(self._latency_lbl)
+
+        self.status_pill = StatusPill(variant="idle", label="IDLE")
+        self._row.addWidget(self.status_pill)
+
+        self.avatar_label: AvatarLabel | None = None
+        self._name_lbl: QLabel | None = None
+        self._has_identity = False
+        self._last_identity_sig: tuple[str | None, str | None] | None = None
+        self._show_empty_leading()
+
+    def _clear_leading(self) -> None:
+        while self._leading_layout.count():
+            item = self._leading_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+
+    def _show_empty_leading(self) -> None:
+        self._clear_leading()
+        placeholder = QLabel("No master selected")
+        placeholder.setStyleSheet(f"color: {TEXT3}; font-size: 13px;")
+        self._leading_layout.addWidget(placeholder)
+        self.avatar_label = None
+        self._name_lbl = None
+        self._has_identity = False
+        self._last_identity_sig = None
+
+    def _build_identity_leading(self, master_name: str, master_avatar_url) -> None:
+        self._clear_leading()
+        self.avatar_label = AvatarLabel(
+            name=master_name,
+            avatar_url=master_avatar_url,
+            size=28,
+        )
+        self._leading_layout.addWidget(self.avatar_label)
+
+        name_col = QVBoxLayout()
+        name_col.setSpacing(1)
+        self._name_lbl = QLabel(master_name)
+        self._name_lbl.setStyleSheet(
+            f"font-weight: 600; font-size: 13px; color: {TEXT};"
+        )
+        role_lbl = QLabel("Signal Provider")
+        role_lbl.setStyleSheet(f"font-size: 11px; color: {TEXT3};")
+        name_col.addWidget(self._name_lbl)
+        name_col.addWidget(role_lbl)
+        self._leading_layout.addLayout(name_col)
+        self._has_identity = True
+        self._last_identity_sig = (master_name, master_avatar_url)
+
+    def sync_state(
+        self,
+        master_name=None,
+        master_avatar_url=None,
+        status="idle",
+        latency=None,
+    ) -> None:
+        name = str(master_name).strip() if master_name else None
+
+        if name and not self._has_identity:
+            self._build_identity_leading(name, master_avatar_url)
+        elif not name and self._has_identity:
+            self._show_empty_leading()
+        elif name and self._has_identity and self.avatar_label is not None:
+            identity_sig = (name, master_avatar_url)
+            if identity_sig != self._last_identity_sig:
+                self._last_identity_sig = identity_sig
+                self.avatar_label.set_identity(name, master_avatar_url)
+                if self._name_lbl is not None:
+                    self._name_lbl.setText(name)
 
         if latency is not None:
-            lat = QLabel(f"{latency}ms")
-            lat.setStyleSheet(
-                f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
-            )
-            row.addWidget(lat)
+            self._latency_lbl.setText(f"{latency}ms")
+            self._latency_lbl.show()
+        else:
+            self._latency_lbl.hide()
 
-        pill = StatusPill(variant=status, label=status.upper())
-        row.addWidget(pill)
+        self.status_pill.set_variant(status, status.upper())
 
 
 class HeaderStripMaster(QWidget):
     """Master strip: account identity, tick, profile details, session timer, StatusPill."""
 
-    def __init__(
-        self,
-        name=None,
-        status="idle",
-        session_elapsed=None,
-        parent=None,
-    ):
+    def __init__(self, parent=None, **_legacy_kwargs):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.setFixedHeight(HEADER_H)
@@ -418,102 +467,160 @@ class HeaderStripMaster(QWidget):
         self.setStyleSheet(
             f"{_cn} {{ background: {SURFACE}; border-bottom: 1px solid {LINE}; }}"
         )
-        row = QHBoxLayout(self)
-        row.setContentsMargins(16, 0, 16, 0)
-        row.setSpacing(12)
+        self._row = QHBoxLayout(self)
+        self._row.setContentsMargins(16, 0, 16, 0)
+        self._row.setSpacing(12)
 
-        if name:
-            av = QLabel(name[0].upper())
-            av.setFixedSize(28, 28)
-            av.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            av.setStyleSheet(
-                f"""
-                background: {ACCENT_SOFT}; color: {ACCENT};
-                border-radius: 14px; font-weight: 700; font-size: 12px;
-                """
-            )
-            row.addWidget(av)
+        self._leading = QWidget()
+        self._leading_layout = QHBoxLayout(self._leading)
+        self._leading_layout.setContentsMargins(0, 0, 0, 0)
+        self._leading_layout.setSpacing(12)
+        self._row.addWidget(self._leading)
 
-            name_col = QVBoxLayout()
-            name_col.setSpacing(2)
+        self._row.addStretch()
 
-            name_row = QHBoxLayout()
-            name_row.setContentsMargins(0, 0, 0, 0)
-            name_row.setSpacing(6)
+        self.session_lbl = QLabel()
+        self.session_lbl.setStyleSheet(
+            f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
+        )
+        self.session_lbl.hide()
+        self._row.addWidget(self.session_lbl)
 
-            self.lbl_name = QLabel(name)
-            self.lbl_name.setStyleSheet(f"font-weight: 600; font-size: 13px; color: {TEXT};")
-            name_row.addWidget(self.lbl_name)
+        self.status_pill = StatusPill(variant="idle", label="IDLE")
+        self._row.addWidget(self.status_pill)
 
-            tick = QLabel("✓")
-            tick.setStyleSheet(f"color: {ACCENT}; font-size: 12px; font-weight: bold;")
-            name_row.addWidget(tick)
+        self.avatar_label: AvatarLabel | None = None
+        self.lbl_name: QLabel | None = None
+        self.lbl_handle: QLabel | None = None
+        self.lbl_instruments: QLabel | None = None
+        self.lbl_risk: QLabel | None = None
+        self.lbl_roi: QLabel | None = None
+        self._has_identity = False
+        self._last_identity_sig: tuple[str | None, str | None] | None = None
 
-            master_badge = QLabel("MASTER")
-            master_badge.setStyleSheet(
-                f"""
-                font-family: {FONT_SANS}; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
-                color: {ACCENT}; background: {ACCENT_SOFT};
-                padding: 1px 7px; border-radius: 4px;
-                """
-            )
-            name_row.addWidget(master_badge)
-            name_row.addStretch()
-            name_col.addLayout(name_row)
+    def _clear_leading(self) -> None:
+        while self._leading_layout.count():
+            item = self._leading_layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.setParent(None)
+                widget.deleteLater()
+            else:
+                layout = item.layout()
+                if layout is not None:
+                    while layout.count():
+                        sub = layout.takeAt(0)
+                        sub_widget = sub.widget()
+                        if sub_widget is not None:
+                            sub_widget.setParent(None)
+                            sub_widget.deleteLater()
 
-            details_row = QHBoxLayout()
-            details_row.setContentsMargins(0, 0, 0, 0)
-            details_row.setSpacing(8)
+    def _build_identity_leading(self, name: str, avatar_url) -> None:
+        self._clear_leading()
+        self.avatar_label = AvatarLabel(name=name, avatar_url=avatar_url, size=28)
+        self._leading_layout.addWidget(self.avatar_label)
 
-            default_handle = f"@{name.split()[0].lower()}_fx" if name else "@master"
-            self.lbl_handle = QLabel(default_handle)
-            self.lbl_handle.setStyleSheet(f"font-family: {FONT_MONO}; font-size: 12px; color: {TEXT2};")
-            details_row.addWidget(self.lbl_handle)
+        name_col = QVBoxLayout()
+        name_col.setSpacing(2)
 
-            sep1 = QLabel("·")
-            sep1.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
-            details_row.addWidget(sep1)
+        name_row = QHBoxLayout()
+        name_row.setContentsMargins(0, 0, 0, 0)
+        name_row.setSpacing(6)
 
-            self.lbl_instruments = QLabel("Forex / Gold")
-            self.lbl_instruments.setStyleSheet(f"font-size: 12px; color: {TEXT3};")
-            details_row.addWidget(self.lbl_instruments)
+        self.lbl_name = QLabel(name)
+        self.lbl_name.setStyleSheet(
+            f"font-weight: 600; font-size: 13px; color: {TEXT};"
+        )
+        name_row.addWidget(self.lbl_name)
 
-            sep2 = QLabel("·")
-            sep2.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
-            details_row.addWidget(sep2)
+        tick = QLabel("✓")
+        tick.setStyleSheet(f"color: {ACCENT}; font-size: 12px; font-weight: bold;")
+        name_row.addWidget(tick)
 
-            self.lbl_risk = QLabel("Med risk")
-            self.lbl_risk.setStyleSheet(f"font-size: 12px; color: {WARN};")
-            details_row.addWidget(self.lbl_risk)
+        master_badge = QLabel("MASTER")
+        master_badge.setStyleSheet(
+            f"""
+            font-family: {FONT_SANS}; font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+            color: {ACCENT}; background: {ACCENT_SOFT};
+            padding: 1px 7px; border-radius: 4px;
+            """
+        )
+        name_row.addWidget(master_badge)
+        name_row.addStretch()
+        name_col.addLayout(name_row)
 
-            sep3 = QLabel("·")
-            sep3.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
-            details_row.addWidget(sep3)
+        details_row = QHBoxLayout()
+        details_row.setContentsMargins(0, 0, 0, 0)
+        details_row.setSpacing(8)
 
-            self.lbl_roi = QLabel()
-            self.lbl_roi.setTextFormat(Qt.TextFormat.RichText)
-            self.lbl_roi.setText(
-                f"30d ROI <span style='color: {ACCENT}; font-family: JetBrains Mono, monospace'>+0.0%</span>"
-            )
-            self.lbl_roi.setStyleSheet(f"font-size: 12px; color: {TEXT3};")
-            details_row.addWidget(self.lbl_roi)
+        default_handle = f"@{name.split()[0].lower()}_fx" if name else "@master"
+        self.lbl_handle = QLabel(default_handle)
+        self.lbl_handle.setStyleSheet(
+            f"font-family: {FONT_MONO}; font-size: 12px; color: {TEXT2};"
+        )
+        details_row.addWidget(self.lbl_handle)
 
-            details_row.addStretch()
-            name_col.addLayout(details_row)
+        sep1 = QLabel("·")
+        sep1.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
+        details_row.addWidget(sep1)
 
-            row.addLayout(name_col)
+        self.lbl_instruments = QLabel("Forex / Gold")
+        self.lbl_instruments.setStyleSheet(f"font-size: 12px; color: {TEXT3};")
+        details_row.addWidget(self.lbl_instruments)
 
-        row.addStretch()
+        sep2 = QLabel("·")
+        sep2.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
+        details_row.addWidget(sep2)
+
+        self.lbl_risk = QLabel("Med risk")
+        self.lbl_risk.setStyleSheet(f"font-size: 12px; color: {WARN};")
+        details_row.addWidget(self.lbl_risk)
+
+        sep3 = QLabel("·")
+        sep3.setStyleSheet(f"color: {TEXT3}; font-size: 12px;")
+        details_row.addWidget(sep3)
+
+        self.lbl_roi = QLabel()
+        self.lbl_roi.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_roi.setText(
+            f"30d ROI <span style='color: {ACCENT}; font-family: JetBrains Mono, monospace'>+0.0%</span>"
+        )
+        self.lbl_roi.setStyleSheet(f"font-size: 12px; color: {TEXT3};")
+        details_row.addWidget(self.lbl_roi)
+
+        details_row.addStretch()
+        name_col.addLayout(details_row)
+
+        self._leading_layout.addLayout(name_col)
+        self._has_identity = True
+        self._last_identity_sig = (name, avatar_url)
+
+    def sync_state(
+        self,
+        name=None,
+        avatar_url=None,
+        status="idle",
+        session_elapsed=None,
+    ) -> None:
+        display_name = str(name).strip() if name else None
+
+        if display_name and not self._has_identity:
+            self._build_identity_leading(display_name, avatar_url)
+        elif display_name and self._has_identity and self.avatar_label is not None:
+            identity_sig = (display_name, avatar_url)
+            if identity_sig != self._last_identity_sig:
+                self._last_identity_sig = identity_sig
+                self.avatar_label.set_identity(display_name, avatar_url)
+                if self.lbl_name is not None:
+                    self.lbl_name.setText(display_name)
 
         if session_elapsed:
-            timer = QLabel(session_elapsed)
-            timer.setStyleSheet(
-                f"font-family: {FONT_MONO}; font-size: 11px; color: {TEXT3};"
-            )
-            row.addWidget(timer)
+            self.session_lbl.setText(session_elapsed)
+            self.session_lbl.show()
+        else:
+            self.session_lbl.hide()
 
-        pill = StatusPill(variant=status, label=status.upper())
-        row.addWidget(pill)
+        self.status_pill.set_variant(status, status.upper())
 
     def set_profile_data(self, handle: str, instruments: str, risk: str, roi_pct: float):
         """Updates the bottom row with backend profile data (GET /auth/masters/:id/profile)."""

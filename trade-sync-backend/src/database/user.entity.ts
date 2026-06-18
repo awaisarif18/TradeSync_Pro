@@ -47,6 +47,9 @@ export class User {
   @Column({ type: 'nvarchar', nullable: true })
   typicalHoldTime: string | null;
 
+  @Column({ type: 'nvarchar', nullable: true })
+  avatarUrl: string | null;
+
   @Column({ default: true })
   isActive: boolean;
 

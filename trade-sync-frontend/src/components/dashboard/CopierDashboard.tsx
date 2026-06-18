@@ -17,6 +17,7 @@ import {
   Zap,
 } from "lucide-react";
 import { COPIER_WINDOWS_DOWNLOAD_URL } from "@/lib/downloads";
+import { resolveMediaUrl } from "@/lib/media-url";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "sonner";
 import TraderCard, {
@@ -137,6 +138,7 @@ function toTraderCardData(
     typicalHoldTime: profile?.typicalHoldTime ?? null,
     strategyDescription: profile?.strategyDescription ?? null,
     bio: profile?.bio ?? null,
+    avatarUrl: profile?.avatarUrl ?? null,
   };
 }
 
@@ -217,6 +219,7 @@ function CopierKpiStrip({
                   <Avatar
                     name={activeProfile?.fullName ?? activeMaster?.fullName ?? "Provider"}
                     size={24}
+                    src={resolveMediaUrl(activeProfile?.avatarUrl)}
                   />
                   <div className="truncate text-[22px] font-semibold tracking-[-0.015em]">
                     {activeProfile?.fullName ?? activeMaster?.fullName ?? "Loading provider"}
@@ -316,7 +319,11 @@ function ActiveSubscriptionCard({
         <div className="grid gap-6 lg:grid-cols-[1fr_auto]">
           <div className="min-w-0">
             <div className="mb-5 flex flex-wrap items-center gap-3">
-              <Avatar name={name} size={36} />
+              <Avatar
+                name={name}
+                size={36}
+                src={resolveMediaUrl(profile?.avatarUrl)}
+              />
               <div className="text-lg font-semibold">{name}</div>
               <BadgeCheck size={15} strokeWidth={2.6} style={{ color: "var(--color-mint)" }} />
               <span className="text-sm text-[var(--color-text-3)]">

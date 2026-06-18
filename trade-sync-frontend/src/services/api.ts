@@ -8,6 +8,8 @@ import { store } from "../redux/slices/store";
 
 const API_URL = "http://localhost:3000";
 
+export { API_URL };
+
 export const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
@@ -73,6 +75,7 @@ export interface MasterProfile {
   typicalHoldTime: string | null;
   subscriberCount: number;
   isLive: boolean;
+  avatarUrl?: string | null;
   riskMetrics?: MasterRiskMetrics;
   equitySparkline?: number[];
   activeHoursSummary?: string | null;
@@ -311,6 +314,20 @@ export const profileService = {
 
   getMasterHistory: async (masterId: string): Promise<TradeHistoryEntry[]> => {
     const response = await api.get(`/trades/master/${masterId}/history`);
+    return response.data;
+  },
+
+  uploadMasterAvatar: async (
+    masterId: string,
+    file: File,
+  ): Promise<{ avatarUrl: string }> => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const response = await api.post<{ avatarUrl: string }>(
+      `/auth/masters/${masterId}/avatar`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
+    );
     return response.data;
   },
 };

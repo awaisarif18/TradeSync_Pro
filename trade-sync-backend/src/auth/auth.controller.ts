@@ -8,7 +8,10 @@ import {
   BadRequestException,
   ForbiddenException,
   Req,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import {
@@ -22,6 +25,8 @@ import {
 import { TradeGateway } from '../trade/trade.gateway';
 import { Public } from './decorators/public.decorator';
 import type { JwtUser } from './types/jwt-user';
+import { AVATAR_MAX_BYTES } from './avatar-storage.util';
+import type { AvatarUploadFile } from './avatar-storage.util';
 
 type RequestWithJwtUser = Request & { user: JwtUser };
 
@@ -169,6 +174,21 @@ export class AuthController {
       throw new ForbiddenException();
     }
     return await this.authService.updateMasterProfile(id, body);
+  }
+
+  @Post('masters/:id/avatar')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: AVATAR_MAX_BYTES } }),
+  )
+  async uploadMasterAvatar(
+    @Param('id') id: string,
+    @UploadedFile() file: AvatarUploadFile | undefined,
+    @Req() req: RequestWithJwtUser,
+  ) {
+    if (req.user.role !== 'ADMIN' && req.user.id !== id) {
+      throw new ForbiddenException();
+    }
+    return await this.authService.uploadMasterAvatar(id, file);
   }
 
   @Get('masters/:id/dashboard')

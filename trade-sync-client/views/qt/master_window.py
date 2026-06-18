@@ -398,7 +398,12 @@ class MasterWindow(QMainWindow):
     def load_performance_stats(self):
         master_id = self.controller.state.master_user_id
         if not master_id:
+            print(
+                "[AVATAR] load_performance_stats early_return reason=no_master_user_id "
+                "(avatar block not reached)"
+            )
             self.performance_data = {}
+            self.controller.state.own_avatar_url = None
             self._render_performance_stats()
             return
 
@@ -410,9 +415,37 @@ class MasterWindow(QMainWindow):
             if response.status_code == 200:
                 self.performance_data = response.json()
             else:
+                print(
+                    f"[AVATAR] load_performance_stats early_return reason=profile_http_"
+                    f"{response.status_code} (avatar block not reached)"
+                )
                 self.performance_data = {}
-        except requests.exceptions.RequestException:
+                self.controller.state.own_avatar_url = None
+        except requests.exceptions.RequestException as e:
+            print(
+                f"[AVATAR] load_performance_stats early_return reason=profile_request_"
+                f"error {e!r} (avatar block not reached)"
+            )
             self.performance_data = {}
+            self.controller.state.own_avatar_url = None
+        else:
+            if self.performance_data:
+                avatar = self.performance_data.get("avatarUrl")
+                self.controller.state.own_avatar_url = (
+                    str(avatar).strip()
+                    if avatar and str(avatar).strip()
+                    else None
+                )
+                print(
+                    f"[AVATAR] master profile avatarUrl raw={avatar!r} "
+                    f"stored own_avatar_url={self.controller.state.own_avatar_url!r}"
+                )
+            else:
+                print(
+                    "[AVATAR] load_performance_stats avatar block ran but profile empty; "
+                    "stored own_avatar_url=None"
+                )
+                self.controller.state.own_avatar_url = None
 
         self.refresh_performance(self.performance_data)
 
@@ -458,29 +491,22 @@ class MasterWindow(QMainWindow):
         variant = self._master_header_variant(state)
         elapsed = self._update_session_clock()
         elapsed_val = elapsed if elapsed != "--:--:--" else None
-        sig = (name, variant, elapsed_val)
-        if getattr(self, "_master_header_signature", None) == sig:
-            return
-        self._master_header_signature = sig
+        avatar_url = getattr(state, "own_avatar_url", None)
 
-        old_header = shell.header
-        container = old_header.parentWidget()
-        laid = container.layout()
-        if laid is None:
-            return
-        ix = laid.indexOf(old_header)
-        if ix < 0:
-            ix = 0
-        laid.removeWidget(old_header)
-        old_header.deleteLater()
+        sig = (name, variant, avatar_url)
+        if getattr(self, "_master_header_signature", None) != sig:
+            print(
+                f"[AVATAR] master header sync name={name!r} own_avatar_url={avatar_url!r} "
+                f"variant={variant!r}"
+            )
+            self._master_header_signature = sig
 
-        new_header = HeaderStripMaster(
+        shell.header.sync_state(
             name=name,
+            avatar_url=avatar_url,
             status=variant,
             session_elapsed=elapsed_val,
         )
-        laid.insertWidget(ix, new_header)
-        shell.header = new_header
 
     def _apply_master_header_profile(self) -> None:
         shell = getattr(self, "shell", None)

@@ -1,3 +1,6 @@
+# Runtime uploads (provider avatars)
+/uploads
+
 # compiled output
 /dist
 /node_modules

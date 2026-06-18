@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import { PROVIDER_WINDOWS_DOWNLOAD_URL } from "@/lib/downloads";
+import { resolveMediaUrl } from "@/lib/media-url";
 import { useSelector } from "react-redux";
 import { toast } from "sonner";
 import { KpiCard } from "../common/KpiCard";
@@ -26,6 +27,7 @@ import {
   SectionEyebrow,
   Skeleton,
   StatusPill,
+  Avatar,
 } from "../ui";
 import {
   MasterDashboardData,
@@ -151,6 +153,7 @@ function toTraderCardData(profile: MasterProfile): TraderCardData {
     typicalHoldTime: profile.typicalHoldTime,
     strategyDescription: profile.strategyDescription,
     bio: profile.bio,
+    avatarUrl: profile.avatarUrl ?? null,
   };
 }
 
@@ -665,6 +668,8 @@ function ProviderProfileForm({
   );
   const [form, setForm] = useState<ProfileFormState>(() => profileToForm(profile));
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const next = profileToForm(profile);
@@ -702,6 +707,24 @@ function ProviderProfileForm({
     }
   };
 
+  const handleAvatarSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    try {
+      await profileService.uploadMasterAvatar(profile.id, file);
+      toast.success("Profile photo updated");
+      await onSaved();
+    } catch (error) {
+      console.error("Failed to upload profile photo", error);
+      toast.error("Failed to upload photo. Use JPEG, PNG, or WebP under 3 MB.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   return (
     <Card>
       <form onSubmit={handleSubmit}>
@@ -715,6 +738,36 @@ function ProviderProfileForm({
           </p>
 
           <div className="mt-7 space-y-6">
+            <div className="flex flex-wrap items-center gap-5">
+              <Avatar
+                name={profile.fullName}
+                size={64}
+                src={resolveMediaUrl(profile.avatarUrl)}
+              />
+              <div className="space-y-2">
+                <FieldLabel>Profile Photo</FieldLabel>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={handleAvatarSelect}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  disabled={uploadingAvatar}
+                  onClick={() => avatarInputRef.current?.click()}
+                >
+                  {profile.avatarUrl ? "Replace photo" : "Upload photo"}
+                </Button>
+                <p className="text-xs text-[var(--color-text-3)]">
+                  JPEG, PNG, or WebP. Max 3 MB.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <FieldLabel>About Your Trading</FieldLabel>
               <div className="relative">

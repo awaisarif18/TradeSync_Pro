@@ -13,6 +13,10 @@ class MasterState:
         self.master_user_id: str = ''
         # Set after successful verify-node, used for subscriber API calls
 
+        self.own_avatar_url = None
+        # Master's own avatar from GET /auth/masters/:id/profile (avatarUrl); master header only.
+        # Distinct from SlaveState.master_avatar_url (subscribed provider on copier header).
+
         # Master Session Stats
         self.signals_sent: int = 0
         # Incremented each time a test_signal is emitted

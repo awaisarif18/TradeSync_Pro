@@ -28,6 +28,15 @@ import {
   buildAnalytics,
   MASTER_ANALYTICS_CLOSED_CAP,
 } from './master-analytics.util';
+import {
+  buildAvatarUrl,
+  deleteAvatarFileIfExists,
+  extensionForMime,
+  parseAvatarPathFromUrl,
+  validateAvatarUpload,
+  writeAvatarFile,
+  type AvatarUploadFile,
+} from './avatar-storage.util';
 
 export interface MasterDashboardData {
   profile: MasterProfileResponse;
@@ -566,6 +575,7 @@ export class AuthService {
         'strategyDescription',
         'riskLevel',
         'typicalHoldTime',
+        'avatarUrl',
       ],
     });
 
@@ -633,6 +643,7 @@ export class AuthService {
       strategyDescription: master.strategyDescription ?? null,
       riskLevel: master.riskLevel ?? null,
       typicalHoldTime: master.typicalHoldTime ?? null,
+      avatarUrl: master.avatarUrl ?? null,
       subscriberCount,
       isLive: this.tradeGateway.isMasterConnected(master.id),
       riskMetrics: analytics?.riskMetrics,
@@ -709,6 +720,35 @@ export class AuthService {
     const { password, ...publicMaster } = savedMaster;
     void password;
     return publicMaster;
+  }
+
+  async uploadMasterAvatar(
+    masterId: string,
+    file: AvatarUploadFile | undefined,
+  ): Promise<{ avatarUrl: string }> {
+    const master = await this.userRepository.findOne({
+      where: { id: masterId, role: 'MASTER' },
+    });
+
+    if (!master) {
+      throw new NotFoundException('Master not found');
+    }
+
+    const validated = validateAvatarUpload(file);
+    const ext = extensionForMime(validated.mimetype);
+    const previous = parseAvatarPathFromUrl(master.avatarUrl);
+
+    writeAvatarFile(masterId, ext, validated.buffer);
+
+    if (previous && previous.ext !== ext) {
+      deleteAvatarFileIfExists(previous.masterId, previous.ext);
+    }
+
+    const avatarUrl = buildAvatarUrl(masterId, ext);
+    master.avatarUrl = avatarUrl;
+    await this.userRepository.save(master);
+
+    return { avatarUrl };
   }
 
   async getMasterDashboard(masterId: string): Promise<MasterDashboardData> {

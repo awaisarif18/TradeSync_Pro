@@ -43,6 +43,7 @@ class SlaveController:
         self.state.socket_connected = health_state == "CONNECTED"
         if health_state == "DISCONNECTED":
             self.state.master_name = None
+            self.state.master_avatar_url = None
         self.state.add_log(f"Socket Health: {health_state}")
         self._structured_log("socket_health_update", health_state=health_state)
         self.update_ui()
@@ -54,7 +55,8 @@ class SlaveController:
         master_id = str(room)[len(prefix):].strip()
         return master_id or None
 
-    def _fetch_master_display_name(self, master_id):
+    def _fetch_master_profile(self, master_id):
+        """Returns { fullName, avatarUrl } from public master profile."""
         try:
             res = requests.get(
                 f"http://localhost:3000/auth/masters/{master_id}/profile",
@@ -67,9 +69,18 @@ class SlaveController:
                 return None
             profile = res.json()
             full_name = profile.get("fullName")
-            if full_name and str(full_name).strip():
-                return str(full_name).strip()
-            return None
+            name = str(full_name).strip() if full_name and str(full_name).strip() else None
+            avatar_url = profile.get("avatarUrl")
+            resolved_avatar = (
+                str(avatar_url).strip()
+                if avatar_url and str(avatar_url).strip()
+                else None
+            )
+            self._terminal_log(
+                f"[AVATAR] profile avatarUrl raw={avatar_url!r} "
+                f"normalized={resolved_avatar!r}"
+            )
+            return {"fullName": name, "avatarUrl": resolved_avatar}
         except requests.exceptions.RequestException as e:
             self._terminal_log(f"Master profile fetch error: {e}")
             return None
@@ -78,6 +89,7 @@ class SlaveController:
         success = data.get("success", False)
         if not success:
             self.state.master_name = None
+            self.state.master_avatar_url = None
             self.update_ui()
             return
 
@@ -86,11 +98,20 @@ class SlaveController:
         if not master_id:
             self._terminal_log(f"Could not parse master id from room: {room}")
             self.state.master_name = None
+            self.state.master_avatar_url = None
             self.update_ui()
             return
 
-        display_name = self._fetch_master_display_name(master_id)
-        self.state.master_name = display_name or master_id
+        profile = self._fetch_master_profile(master_id)
+        if profile:
+            self.state.master_name = profile.get("fullName") or master_id
+            self.state.master_avatar_url = profile.get("avatarUrl")
+        else:
+            self.state.master_name = master_id
+            self.state.master_avatar_url = None
+        self._terminal_log(
+            f"[AVATAR] stored master_avatar_url={self.state.master_avatar_url!r}"
+        )
         self._terminal_log(f"Subscribed master display: {self.state.master_name}")
         self.update_ui()
 
