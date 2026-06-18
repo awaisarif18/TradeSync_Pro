@@ -72,6 +72,9 @@ class SlaveState:
         #   open_time, close_time }
         # Capped at 50 entries (drop oldest when full)
 
+        self.master_name = None
+        # Display name of subscribed provider; set after node_registered + profile fetch.
+
     def reset_daily_stats(self):
         """Reset daily PnL counter and unpause copying."""
         self.daily_pnl = 0.0

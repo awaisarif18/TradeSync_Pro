@@ -291,6 +291,7 @@ Slave-only fields:
 | `session_pnl` | `float` | `0.0` | PnL accumulated since listening started |
 | `open_trades` | `list` | `[]` | Active copied positions: `{ master_ticket, slave_ticket, symbol, action, volume, open_time }` |
 | `closed_trades` | `list` | `[]` | Session history: adds `pnl`, `close_time`. Capped at 50 entries |
+| `master_name` | `str \| None` | `None` | Subscribed provider display name for slave header / COPY tab; set after successful `node_registered` + `GET /auth/masters/:id/profile`; cleared on failed registration or socket `DISCONNECTED` |
 
 **`reset_daily_stats()`**: Sets `daily_pnl = 0.0`, `copying_paused_by_loss = False`, logs `[RISK] Daily stats reset.`
 
@@ -388,7 +389,7 @@ File: `controllers/socket_manager.py`
 ### Constructor
 
 ```python
-SocketManager(server_url, mt5_adapter, node_role=None, node_identifier=None, health_callback=None)
+SocketManager(server_url, mt5_adapter, node_role=None, node_identifier=None, health_callback=None, registration_callback=None)
 ```
 
 - `socketio.Client(reconnection=True, reconnection_attempts=0, reconnection_delay=1, reconnection_delay_max=8)` — infinite reconnection with 1–8s exponential backoff
@@ -423,9 +424,10 @@ SocketManager(server_url, mt5_adapter, node_role=None, node_identifier=None, hea
 **`on_node_registered(data)`**:
 - `data.success == True`: prints `[SOCKET] Registered as {role} in room: {room}` in cyan
 - `data.success == False`: prints `[SOCKET] Registration FAILED: {error}` in red
-- If `self.state` is set, also calls `self.state.add_log(msg)`
+- If `self.state` is set, also calls `self.state.add_log(msg)` (slave sets `socket.state` in `connect_cloud`)
+- If `registration_callback` is set, invokes it with `data` (slave uses this to resolve `master_name`)
 
-Note: `self.state` is declared as `None` in `__init__` and is not set by current controllers. The log-to-AppState path for `node_registered` is currently a no-op; only terminal output is produced.
+Note: Master controller does not set `socket.state` or `registration_callback`; slave does both.
 
 ---
 
@@ -595,12 +597,25 @@ Sets `state.health_state`, updates `state.socket_connected`, adds log, calls `up
 
 Note: SLAVE does not set `state.master_user_id` — the master ID is handled by the backend room routing. SLAVE only needs its registered email.
 
+#### `SlaveController._on_health_change(health_state)`
+
+Sets `state.health_state`, updates `state.socket_connected` (`True` only when `CONNECTED`). Clears `state.master_name` when `health_state == "DISCONNECTED"`. Adds log, calls `update_ui()`.
+
 #### `SlaveController.connect_cloud(identifier)`
 
-1. Creates `SocketManager` with `node_role="SLAVE"`, `node_identifier=identifier`, `health_callback=self._on_health_change`
+1. Creates `SocketManager` with `node_role="SLAVE"`, `node_identifier=identifier`, `health_callback=self._on_health_change`, `registration_callback=self._on_node_registered`
 2. Calls `socket.set_node_context("SLAVE", identifier)`
-3. Registers `trade_execution` handler: `socket.register_handler('trade_execution', self.on_trade_signal)`
-4. Calls `socket.connect()` — on connect, auto-emits `register_node { role: 'SLAVE', identifier: email }`
+3. Sets `socket.state = self.state` so `node_registered` logs appear in the event panel
+4. Registers `trade_execution` handler: `socket.register_handler('trade_execution', self.on_trade_signal)`
+5. Calls `socket.connect()` — on connect, auto-emits `register_node { role: 'SLAVE', identifier: email }`
+
+#### `SlaveController._on_node_registered(data)` (display only)
+
+On `success: true`: parses master id from `room` (`room_master_<id>`), fetches `GET /auth/masters/:id/profile`, sets `state.master_name` to `fullName` (falls back to master id if profile fetch fails), calls `update_ui()`.
+
+On `success: false`: clears `state.master_name`, calls `update_ui()`.
+
+Does not alter socket routing or trade execution.
 
 #### `SlaveController.toggle_listening()`
 
@@ -1120,9 +1135,8 @@ Slave reads: `event`, `master_ticket`, `symbol`, `action`, `volume`, `pnl` (for 
 
 1. **Hardcoded backend URL**: All controllers and SocketManager use `http://localhost:3000` directly.
 2. **`close_trade` deviation hardcoded**: `MT5Adapter.close_trade` uses `deviation=20` regardless of `state.slippage_points`. Note: the `max_slippage_points` drift guard (Guard 4) applies to OPEN only, not CLOSE. `state.slippage_points` is now a fixed default `10` (its COPY-tab control was removed) and is still passed as `deviation` on `execute_trade` (OPEN).
-3. **`node_registered` log gap**: `SocketManager.on_node_registered` calls `self.state.add_log(msg)` but `self.state` is never set by controllers (always `None`); only terminal output is produced.
+3. **`node_registered` log gap (master only)**: `SocketManager.on_node_registered` can write to `AppState.logs` when `socket.state` is set; slave sets this in `connect_cloud`. Master controller still does not wire `socket.state`.
 4. **~~Test FakeMT5 gap~~ (resolved)**: `FakeMT5.execute_trade` now accepts `deviation=10` and exposes `get_symbol_point`/`get_execution_price`, matching the real adapter used by Guard 4.
-5. **`master_name` in `AppState`**: `CopyView.sync_from_state()` reads `state.master_name` but this field is not defined in any state class. It always evaluates falsy; the slave UI shows the fallback text.
 10. **Slippage ACK multi-slave fidelity**: `trade_execution_ack` updates the shared master OPEN `TradeLog` row, so copier-side diagnostics are exact for single-slave rooms and best-effort (last writer) otherwise — same limitation as backend `slaveId`.
 6. **`_resolve_master_user_id` unused**: Fallback method present in `MasterController` but not called in normal flow since verify-node now returns `id`.
 7. **`SubscribersView` "Active · 5 seats" chip**: Static placeholder — not derived from actual seat count.

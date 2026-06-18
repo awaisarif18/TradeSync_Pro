@@ -3,7 +3,15 @@ from colorama import Fore, Style
 from uuid import uuid4
 
 class SocketManager:
-    def __init__(self, server_url, mt5_adapter, node_role=None, node_identifier=None, health_callback=None):
+    def __init__(
+        self,
+        server_url,
+        mt5_adapter,
+        node_role=None,
+        node_identifier=None,
+        health_callback=None,
+        registration_callback=None,
+    ):
         self.sio = socketio.Client(
             reconnection=True,
             reconnection_attempts=0,
@@ -15,6 +23,7 @@ class SocketManager:
         self.node_role = node_role
         self.node_identifier = node_identifier
         self.health_callback = health_callback
+        self.registration_callback = registration_callback
         self.state = None
         self.is_connected = False
         self._registered_events = set()
@@ -99,6 +108,12 @@ class SocketManager:
 
         if self.state:
             self.state.add_log(msg)
+
+        if self.registration_callback:
+            try:
+                self.registration_callback(data)
+            except Exception as e:
+                self._log("registration_callback_error", error=str(e))
 
     def emit_signal(self, signal_dict):
         signal_dict = {

@@ -41,8 +41,57 @@ class SlaveController:
     def _on_health_change(self, health_state):
         self.state.health_state = health_state
         self.state.socket_connected = health_state == "CONNECTED"
+        if health_state == "DISCONNECTED":
+            self.state.master_name = None
         self.state.add_log(f"Socket Health: {health_state}")
         self._structured_log("socket_health_update", health_state=health_state)
+        self.update_ui()
+
+    def _parse_master_id_from_room(self, room):
+        prefix = "room_master_"
+        if not room or not str(room).startswith(prefix):
+            return None
+        master_id = str(room)[len(prefix):].strip()
+        return master_id or None
+
+    def _fetch_master_display_name(self, master_id):
+        try:
+            res = requests.get(
+                f"http://localhost:3000/auth/masters/{master_id}/profile",
+                timeout=5,
+            )
+            if res.status_code not in (200, 201):
+                self._terminal_log(
+                    f"Master profile fetch failed: HTTP {res.status_code}"
+                )
+                return None
+            profile = res.json()
+            full_name = profile.get("fullName")
+            if full_name and str(full_name).strip():
+                return str(full_name).strip()
+            return None
+        except requests.exceptions.RequestException as e:
+            self._terminal_log(f"Master profile fetch error: {e}")
+            return None
+
+    def _on_node_registered(self, data):
+        success = data.get("success", False)
+        if not success:
+            self.state.master_name = None
+            self.update_ui()
+            return
+
+        room = data.get("room", "")
+        master_id = self._parse_master_id_from_room(room)
+        if not master_id:
+            self._terminal_log(f"Could not parse master id from room: {room}")
+            self.state.master_name = None
+            self.update_ui()
+            return
+
+        display_name = self._fetch_master_display_name(master_id)
+        self.state.master_name = display_name or master_id
+        self._terminal_log(f"Subscribed master display: {self.state.master_name}")
         self.update_ui()
 
     def login_mt5(self, broker, login, password, server, email_identifier):
@@ -116,8 +165,10 @@ class SlaveController:
                 node_role="SLAVE",
                 node_identifier=identifier,
                 health_callback=self._on_health_change,
+                registration_callback=self._on_node_registered,
             )
             self.socket.set_node_context("SLAVE", identifier)
+            self.socket.state = self.state
             self.socket.register_handler('trade_execution', self.on_trade_signal)
 
             self.socket.connect()
